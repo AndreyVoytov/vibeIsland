@@ -15,11 +15,11 @@
 
 <script>
 /* ------------------------------------------------------------------ */
-/* 1. Генерируем карту: квадрат 96×96 клеток по центру сетки 192×108  */
+/* 1. Логическая сетка 20 × 36 и квадратный остров ~90 % ширины        */
 /* ------------------------------------------------------------------ */
-const GRID_W = 192;
-const GRID_H = 108;
-const ISLAND_CELLS = 96;                 // размер острова в клетках
+const GRID_W = 20;
+const GRID_H = 36;
+const ISLAND_CELLS = Math.floor(GRID_W * 0.9);   // 18×18
 
 function buildMap(){
   const map = Array.from({length: GRID_H}, () => new Uint8Array(GRID_W));
@@ -34,7 +34,7 @@ function buildMap(){
   localStorage.setItem('map', JSON.stringify(map));
   return map;
 }
-const map = buildMap();                  // хранится один раз
+const map = buildMap();
 
 /* ------------------------------------------------------------------ */
 /* 2. Отрисовка                                                        */
@@ -52,11 +52,11 @@ function drawIsland(ctx, w, h){
   ctx.fillRect(0,0,w,h);
 
   /* 2.2 – параметры клеток */
-  const cell = w / GRID_W;               // Квадратные клетки! — опираемся на ширину
-  const radius = cell * 0.15;            // скругление углов 15 % клетки
-  const shadowShift = cell * 0.25;       // тень смещаем вниз на четверть клетки
+  const cell = w / GRID_W;               // квадратные клетки
+  const radius = cell * 0.15;            // скругление углов
+  const shadowShift = cell * 0.25;       // тень вниз
 
-  /* 2.3 – тень: рисуем те же клетки, но чуть ниже и темнее */
+  /* 2.3 – тень */
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   for (let y = 0; y < GRID_H; y++){
     for (let x = 0; x < GRID_W; x++){
@@ -70,7 +70,7 @@ function drawIsland(ctx, w, h){
     }
   }
 
-  /* 2.4 – основная земля */
+  /* 2.4 – земля */
   ctx.fillStyle = '#2fb84b';
   for (let y = 0; y < GRID_H; y++){
     for (let x = 0; x < GRID_W; x++){

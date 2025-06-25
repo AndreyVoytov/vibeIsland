@@ -15,8 +15,8 @@
 
 <script>
 /* ---------- логическая сетка ---------- */
-const GRID_W = 192;
-const GRID_H = 108;
+const GRID_W = 20;
+const GRID_H = 36;
 
 /* ---------- процентные константы ---------- */
 const SPEED_PCT   = 0.4;    // %W за кадр
@@ -32,9 +32,9 @@ let cw,ch,cell,joyR,charR;
 
 const pct2px = p => p * cw / 100;     // %W → px
 
-/* позиция героя в %W (центр острова) */
-let charXPct = 50;                     // по X всегда середина
-let charYPct = (GRID_H/2) / GRID_W * 100;   // 108/2 /192 ≈ 28.125 %W
+/* позиция героя в центре нового острова */
+let charXPct = 50;                               // середина по X
+let charYPct = (GRID_H / 2) / GRID_W * 100;      // середина по Y в %W
 let vxPct = 0, vyPct = 0;
 
 /* ---------- джойстик ---------- */
@@ -85,7 +85,7 @@ function update(){
   const gx = Math.floor(xPx/cell);
   const gy = Math.floor(yPx/cell);
 
-  if(gx<0||gy<0||gx>=GRID_W||gy>=GRID_H||!map[gy][gx]){
+  if(gx<0||gy<0||gx>=GRID_W||gy>=GRID_H||!map[gy]?.[gx]){
     charXPct = ox; charYPct = oy;     // блок
   }
 }
