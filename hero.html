@@ -14,51 +14,133 @@
 <canvas id="heroCanvas"></canvas>
 
 <script>
-/* ——— карта и размеры сетки ——— */
-const map = JSON.parse(localStorage.getItem('map') || '[]');
+/* ——— карта и сетка ——— */
+const map  = JSON.parse(localStorage.getItem('map') || '[]');
 const GRID_H = map.length;
 const GRID_W = map[0] ? map[0].length : 0;
 
-/* ——— канвас ——— */
+/* ——— canvas ——— */
 const canvas = document.getElementById('heroCanvas');
 const ctx    = canvas.getContext('2d');
 
-/* %W → px */
+/* ——— масштабные функции ——— */
 let cw,ch,cell,pct2px = p=>p*cw/100;
 
-/* ——— константы ——— */
-const CHAR_R_PCT = 6;   // радиус героя (в %W)
-
-let charXPct = 50;                              // центр острова
+/* ——— параметры героя ——— */
+const CHAR_R_PCT = 6;            // радиус «головы» в % ширины
+let charXPct = 50;
 let charYPct = (GRID_H/2)/GRID_W*100;
 let charR;
 
-/* ——— helpers ——— */
+/* ——— вспомогательные функции ——— */
 function readController(){
-  try{
-    return JSON.parse(localStorage.getItem('controller') || '{}');
-  }catch(e){ return {}; }
+  try{ return JSON.parse(localStorage.getItem('controller') || '{}'); }
+  catch(e){ return {}; }
 }
-function update(){
-  const ctrl = readController();
-  const vxPct = ctrl.vxPct || 0;
-  const vyPct = ctrl.vyPct || 0;
 
-  /* X-шаг */
-  if(vxPct!==0){
+/* ------------------------------------------------------------------ */
+/*                    О Т Р И С О В К А   Г Е Р О Я                   */
+/* ------------------------------------------------------------------ */
+function drawCap(){
+  ctx.fillStyle = '#ff5151';                 // красная кепка
+  ctx.beginPath();
+  ctx.arc(0, -charR*0.9, charR*1.05, Math.PI, 0); // верхняя полусфера
+  ctx.fill();
+  ctx.fillRect(-charR*1.05, -charR*0.9, charR*2.1, charR*0.25); // козырёк
+}
+
+function drawBody(){
+  /* рюкзак (дальняя рука + тень) */
+  ctx.fillStyle = '#4e5327';
+  ctx.beginPath();
+  ctx.roundRect(-charR*0.8, -charR*0.2, charR*1.6, charR*1.8, charR*0.3);
+  ctx.fill();
+
+  /* тело */
+  ctx.fillStyle = '#ffd15c';
+  ctx.beginPath();
+  ctx.arc(0, 0, charR, 0, Math.PI*2);        // голова
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(-charR*0.7, charR*0.2, charR*1.4, charR*1.6, charR*0.3);
+  ctx.fill();
+}
+
+function drawEyes(){
+  ctx.fillStyle = '#000';
+  const eyeR = charR*0.15;
+  ctx.beginPath(); ctx.arc(-charR*0.35, -charR*0.2, eyeR, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( charR*0.35, -charR*0.2, eyeR, 0, Math.PI*2); ctx.fill();
+}
+
+function drawFrontArm(){
+  /* рука */
+  ctx.fillStyle = '#ffd15c';
+  ctx.save();
+  ctx.translate(charR*0.8, charR*0.5);
+  ctx.rotate(25*Math.PI/180);
+  ctx.fillRect(0, -charR*0.15, charR*0.8, charR*0.3);
+  ctx.restore();
+
+  /* топор */
+  ctx.save();
+  ctx.translate(charR*1.6, charR*0.65);
+  ctx.rotate(25*Math.PI/180);
+  /* рукоять */
+  ctx.fillStyle = '#8b5a2b';
+  ctx.fillRect(0, -charR*0.06, charR*0.9, charR*0.12);
+  /* лезвие */
+  ctx.fillStyle = '#cfd8dc';
+  ctx.beginPath();
+  ctx.moveTo(charR*0.9, -charR*0.4);
+  ctx.lineTo(charR*1.25, 0);
+  ctx.lineTo(charR*0.9,  charR*0.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawLegs(){
+  ctx.fillStyle = '#464a4d';
+  const legW = charR*0.25, legH = charR*0.9;
+  ctx.fillRect(-charR*0.45 - legW/2, charR*1.8, legW, legH); // дальняя нога
+  ctx.fillRect( charR*0.45 - legW/2, charR*1.8, legW, legH); // ближняя нога
+}
+
+/* собираем персонажа */
+function drawHero(){
+  ctx.save();
+  ctx.translate(pct2px(charXPct), pct2px(charYPct));
+
+  drawLegs();
+  drawBody();
+  drawEyes();
+  drawFrontArm();
+  drawCap();
+
+  ctx.restore();
+}
+/* ------------------------------------------------------------------ */
+
+function update(){
+  const c = readController();
+  const vxPct = c.vxPct || 0;
+  const vyPct = c.vyPct || 0;
+
+  if(vxPct){
     const nx = charXPct + vxPct;
     const gx = Math.floor(pct2px(nx)/cell);
     const gy = Math.floor(pct2px(charYPct)/cell);
     if(gx>=0&&gx<GRID_W&&gy>=0&&gy<GRID_H&&map[gy]?.[gx]) charXPct = nx;
   }
-  /* Y-шаг */
-  if(vyPct!==0){
+  if(vyPct){
     const ny = charYPct + vyPct;
     const gx = Math.floor(pct2px(charXPct)/cell);
     const gy = Math.floor(pct2px(ny)/cell);
     if(gx>=0&&gx<GRID_W&&gy>=0&&gy<GRID_H&&map[gy]?.[gx]) charYPct = ny;
   }
 }
+
 function drawDebug(){
   ctx.save();
   ctx.fillStyle='rgba(0,255,0,0.15)';
@@ -69,22 +151,16 @@ function drawDebug(){
   }
   ctx.restore();
 }
+
 function render(){
   ctx.clearRect(0,0,cw,ch);
   drawDebug();
-
-  const x = pct2px(charXPct), y = pct2px(charYPct);
-  ctx.fillStyle='#ffdc00';
-  ctx.beginPath(); ctx.arc(x,y,charR,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#000';
-  ctx.beginPath();
-  ctx.arc(x-charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
-  ctx.arc(x+charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
-  ctx.fill();
+  drawHero();
 }
+
 function loop(){ update(); render(); requestAnimationFrame(loop); }
 
-/* ——— resize —— */
+/* ——— resize ——— */
 function resize(){
   cw = canvas.width  = innerWidth;
   ch = canvas.height = innerHeight;
