@@ -1,4 +1,3 @@
-<!-- index.html (обновлённый) -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -7,17 +6,16 @@
         content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Mini-Game</title>
   <style>
-    :root{ --game-width:100vw; }                /* значение пересчитывается скриптом */
+    :root{ --game-width:100vw; }
     html,body{ margin:0; height:100%; overflow:hidden; background:#000; }
 
-    /* обёртка, в которой живут оба слоя игры */
     #gameWrapper{
       position:absolute;
       top:0; left:50%;
       transform:translateX(-50%);
-      width:var(--game-width);      /* фиксируем ширину здесь */
+      width:var(--game-width);
       height:100%;
-      overflow:hidden;              /* «режем» всё, что выходит за пределы игры */
+      overflow:hidden;
     }
 
     .layer{
@@ -26,44 +24,38 @@
       width:100%; height:100%;
       border:0;
     }
+    /* порядок наложения */
+    #mapLayer   { z-index:0; display:none; }   /* «невидимый» */
     #layoutLayer{ z-index:1; }
     #charLayer  { z-index:2; background:transparent; }
   </style>
 </head>
 <body>
   <div id="gameWrapper">
-    <iframe id="layoutLayer" class="layer" src="layout.html"></iframe>
-    <iframe id="charLayer"   class="layer" src="character.html"></iframe>
+    <iframe id="mapLayer"   class="layer"></iframe>
+    <iframe id="layoutLayer" class="layer"></iframe>
+    <iframe id="charLayer"   class="layer"></iframe>
   </div>
 
   <script>
-    /*  Делает «портретное окно» с чёрными полосами по бокам,
-        если устройство повернули в ландшафт.                    */
-    (function resizeGame(){
+    /* ——— портретная рамка ——— */
+    function setGameWidth(){
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const portraitRatio = 9 / 16;          // желаемое W/H в портретном режиме
+      const portrait = 9/16;
+      const gameW = (vw>vh) ? Math.floor(vh*portrait) : vw;
+      document.documentElement.style.setProperty('--game-width',`${gameW}px`);
+    }
+    setGameWidth();
+    addEventListener('resize', setGameWidth);
 
-      let gameW;
-      if (vw > vh) {                         // ландшафт
-        gameW = Math.floor(vh * portraitRatio);
-      } else {                               // портрет
-        gameW = vw;
-      }
-
-      document.documentElement
-              .style.setProperty('--game-width', `${gameW}px`);
-    })();
-
-    window.addEventListener('resize', () => {
-      /* debounce не нужен: пересчёт лёгкий */
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const portraitRatio = 9 / 16;
-      const gameW = (vw > vh) ? Math.floor(vh * portraitRatio) : vw;
-      document.documentElement
-              .style.setProperty('--game-width', `${gameW}px`);
-    });
+    /* ——— загрузить map.html, а после него — слои игры ——— */
+    const mapFrame = document.getElementById('mapLayer');
+    mapFrame.src = 'map.html';
+    mapFrame.onload = () => {
+      document.getElementById('layoutLayer').src = 'layout.html';
+      document.getElementById('charLayer').src   = 'character.html';
+    };
   </script>
 </body>
 </html>

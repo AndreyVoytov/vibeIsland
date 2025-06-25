@@ -14,86 +14,62 @@
 <canvas id="mapCanvas"></canvas>
 
 <script>
-/* ------------------------------------------------------------------ */
-/* 1. Логическая сетка 20 × 36 и квадратный остров ~90 % ширины        */
-/* ------------------------------------------------------------------ */
+/* ——— константы ——— */
 const GRID_W = 20;
 const GRID_H = 36;
-const ISLAND_CELLS = Math.floor(GRID_W * 0.9);   // 18×18
 
-function buildMap(){
-  const map = Array.from({length: GRID_H}, () => new Uint8Array(GRID_W));
-  const half = ISLAND_CELLS / 2;
-  const cx   = Math.floor(GRID_W / 2);
-  const cy   = Math.floor(GRID_H / 2);
-  for (let y = cy - half; y < cy + half; y++){
-    for (let x = cx - half; x < cx + half; x++){
-      map[y][x] = 1;                     // суша
-    }
-  }
-  localStorage.setItem('map', JSON.stringify(map));
-  return map;
-}
-const map = buildMap();
+/* карта уже лежит в localStorage */
+const map = JSON.parse(localStorage.getItem('map') || '[]');
 
-/* ------------------------------------------------------------------ */
-/* 2. Отрисовка                                                        */
-/* ------------------------------------------------------------------ */
+/* ——— canvas ——— */
 const canvas = document.getElementById('mapCanvas');
 const ctx    = canvas.getContext('2d');
 
-/* помощь: перевод %W → px */
-const pctX = (p,w) => p * w;
+/* %W → px */
+const pctX = (p,w)=>p*w;
 
-/* рисуем остров «клетка-за-клеткой» */
-function drawIsland(ctx, w, h){
-  /* 2.1 – море */
-  ctx.fillStyle = '#1e6fff';
+/* ——— рисуем остров ——— */
+function drawIsland(w,h){
+  /* море */
+  ctx.fillStyle='#1e6fff';
   ctx.fillRect(0,0,w,h);
 
-  /* 2.2 – параметры клеток */
-  const cell = w / GRID_W;               // квадратные клетки
-  const radius = cell * 0.15;            // скругление углов
-  const shadowShift = cell * 0.25;       // тень вниз
+  const cell   = w/GRID_W;
+  const radius = cell*0.15;
+  const shadow = cell*0.25;
 
-  /* 2.3 – тень */
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  for (let y = 0; y < GRID_H; y++){
-    for (let x = 0; x < GRID_W; x++){
-      if (map[y][x]){
-        const px = x * cell;
-        const py = y * cell + shadowShift;
+  /* тень */
+  ctx.fillStyle='rgba(0,0,0,0.18)';
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      if(map[y]?.[x]){
         ctx.beginPath();
-        ctx.roundRect(px, py, cell, cell, radius);
+        ctx.roundRect(x*cell,(y*cell)+shadow,cell,cell,radius);
         ctx.fill();
       }
     }
   }
 
-  /* 2.4 – земля */
-  ctx.fillStyle = '#2fb84b';
-  for (let y = 0; y < GRID_H; y++){
-    for (let x = 0; x < GRID_W; x++){
-      if (map[y][x]){
-        const px = x * cell;
-        const py = y * cell;
+  /* земля */
+  ctx.fillStyle='#2fb84b';
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      if(map[y]?.[x]){
         ctx.beginPath();
-        ctx.roundRect(px, py, cell, cell, radius);
+        ctx.roundRect(x*cell,y*cell,cell,cell,radius);
         ctx.fill();
       }
     }
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* 3. Resize / init                                                    */
-/* ------------------------------------------------------------------ */
+/* ——— resize/init ——— */
 function resize(){
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  drawIsland(ctx, canvas.width, canvas.height);
+  canvas.width  = innerWidth;
+  canvas.height = innerHeight;
+  drawIsland(canvas.width,canvas.height);
 }
-window.addEventListener('resize', resize);
+addEventListener('resize',resize);
 resize();
 </script>
 </body>
