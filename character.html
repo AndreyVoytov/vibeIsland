@@ -1,0 +1,114 @@
+<!-- character.html (ожидает карту, потом запускает игру) -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Character</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+    canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
+  </style>
+</head>
+<body>
+<canvas id="g"></canvas>
+
+<script>
+/* ------ геометрия экрана & сетки ---------------------------------- */
+const GRID_W = 20, GRID_H = 36;
+const cvs = document.getElementById('g');
+const ctx = cvs.getContext('2d');
+let W,H,cell,offX,offY;
+function fit(){                 // пересчёт при ресайзе
+  W=innerWidth; H=innerHeight;
+  cvs.width=W; cvs.height=H;
+  cell = Math.min(W/GRID_W, H/GRID_H);
+  offX = (W - cell*GRID_W)/2;
+  offY = (H - cell*GRID_H)/2;
+}
+fit(); addEventListener('resize',fit);
+
+/* ------ ждём карту от layout -------------------------------------- */
+let MAP=null;
+function loadMap(){
+  const m = JSON.parse(localStorage.getItem('map')||'[]');
+  if(Array.isArray(m) && m.length===GRID_H && m[0].length===GRID_W){
+    MAP = m; initGame();
+  }else{
+    setTimeout(loadMap,100);     // проверяем ещё раз через 0.1 с
+  }
+}
+loadMap();
+
+/* ------ гейм-плей -------------------------------------------------- */
+let charX=10, charY=18, vx=0, vy=0;  // положение в клетках
+const SPD = 0.07;                    // скорость (клеток/кадр)
+
+/* джойстик */
+let joyActive=false, jCtr={x:0,y:0}, jVec={x:0,y:0};
+function pos(e){
+  const r=cvs.getBoundingClientRect(); if(e.touches)e=e.touches[0];
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+cvs.addEventListener('pointerdown',e=>{
+  cvs.setPointerCapture(e.pointerId);
+  joyActive=true; jCtr=pos(e); jVec={x:0,y:0};
+});
+cvs.addEventListener('pointermove',e=>{
+  if(!joyActive)return; const p=pos(e);
+  const dx=p.x-jCtr.x, dy=p.y-jCtr.y;
+  const max=cell*1.2*0.7, d=Math.hypot(dx,dy),k=d>max?max/d:1;
+  jVec={x:dx*k,y:dy*k}; vx=(jVec.x/max)*SPD; vy=(jVec.y/max)*SPD;
+});
+cvs.addEventListener('pointerup',e=>{
+  cvs.releasePointerCapture(e.pointerId);
+  joyActive=false; vx=vy=0; jVec={x:0,y:0};
+});
+cvs.addEventListener('pointercancel',e=>cvs.dispatchEvent(new PointerEvent('pointerup',e)));
+
+/* ---------- запуск после загрузки карты --------------------------- */
+function initGame(){
+  requestAnimationFrame(loop);
+}
+
+function update(){
+  const nx=charX+vx, ny=charY+vy;
+  const gx=Math.floor(nx), gy=Math.floor(ny);
+  if(MAP[gy]&&MAP[gy][gx]){ charX=nx; charY=ny; }
+}
+
+function drawDebug(){
+  ctx.save(); ctx.fillStyle='rgba(0,255,0,.15)';
+  MAP.forEach((row,y)=>row.forEach((v,x)=>{
+    if(v) ctx.fillRect(offX+x*cell, offY+y*cell, cell, cell);
+  })); ctx.restore();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawDebug();
+
+  /* герой */
+  ctx.fillStyle='#ffdc00';
+  ctx.beginPath();
+  ctx.arc(offX+charX*cell, offY+charY*cell, cell*0.5, 0, Math.PI*2);
+  ctx.fill();
+
+  /* джойстик */
+  if(joyActive){
+    const JR=cell*1.2;
+    ctx.save(); ctx.globalAlpha=.25;
+    ctx.fillStyle='#999';
+    ctx.beginPath(); ctx.arc(jCtr.x,jCtr.y,JR,0,Math.PI*2); ctx.fill(); ctx.restore();
+
+    ctx.fillStyle='#ccc';
+    ctx.beginPath(); ctx.arc(jCtr.x+jVec.x, jCtr.y+jVec.y, JR*0.4,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function loop(){ update(); render(); requestAnimationFrame(loop); }
+</script>
+</body>
+</html>

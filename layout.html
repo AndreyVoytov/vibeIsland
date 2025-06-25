@@ -1,0 +1,70 @@
+<!-- layout.html (GRID 20×36 — рисует остров, пишет map) -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Layout</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#000}
+    canvas{display:block;touch-action:none}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script type="module">
+/* ------ карта 0/1 (20×36) ---------------------------------------- */
+const GRID_W = 20, GRID_H = 36;
+const MAP_ROWS = [
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00001111111111110000','00001111111111110000','00001111111111110000',
+  '00001111111111110000','00001111111111110000','00001111111111110000',
+  '00001111111111110000','00001111111111110000','00001111111111110000',
+  '00001111111111110000','00001111111111110000','00001111111111110000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+  '00000000000000000000','00000000000000000000','00000000000000000000',
+];
+const MAP = MAP_ROWS.map(r => Uint8Array.from(r, n => +n));
+localStorage.setItem('map', JSON.stringify(MAP));   // <- главное
+
+/* ------ рисуем ---------------------------------------------------- */
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d');
+
+function draw(){
+  const W = innerWidth, H = innerHeight;
+  cvs.width = W; cvs.height = H;
+
+  const cell = Math.min(W/GRID_W, H/GRID_H);
+  const offX = (W - cell*GRID_W)/2;
+  const offY = (H - cell*GRID_H)/2;
+  const r    = cell*0.25, sh = cell*0.30;
+
+  ctx.fillStyle='#1e6fff'; ctx.fillRect(0,0,W,H);      // море
+
+  /* тень */
+  ctx.fillStyle='rgba(0,0,0,.18)';
+  MAP.forEach((row,y)=>row.forEach((v,x)=>{
+    if(v){ ctx.beginPath();
+           ctx.roundRect(offX+x*cell, offY+y*cell+sh, cell, cell, r);
+           ctx.fill(); }
+  }));
+  /* суша */
+  ctx.fillStyle='#2fb84b';
+  MAP.forEach((row,y)=>row.forEach((v,x)=>{
+    if(v){ ctx.beginPath();
+           ctx.roundRect(offX+x*cell, offY+y*cell, cell, cell, r);
+           ctx.fill(); }
+  }));
+}
+addEventListener('resize',draw); draw();
+</script>
+</body>
+</html>
