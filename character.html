@@ -32,7 +32,7 @@ let cw,ch,cell,joyR,charR;
 
 const pct2px = p => p * cw / 100;     // %W → px
 
-/* позиция героя в центре нового острова */
+/* позиция героя в центре острова */
 let charXPct = 50;                               // середина по X
 let charYPct = (GRID_H / 2) / GRID_W * 100;      // середина по Y в %W
 let vxPct = 0, vyPct = 0;
@@ -76,17 +76,24 @@ canvas.addEventListener('pointercancel',onUp);
 
 /* ---------- игровой цикл ---------- */
 function update(){
-  const ox=charXPct, oy=charYPct;
-  charXPct += vxPct;
-  charYPct += vyPct;
+  /* пробуем сдвинуть по X отдельно */
+  if (vxPct !== 0){
+    const nx = charXPct + vxPct;
+    const gx = Math.floor(pct2px(nx) / cell);
+    const gy = Math.floor(pct2px(charYPct) / cell);
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
+      charXPct = nx;
+    }
+  }
 
-  const xPx = pct2px(charXPct);
-  const yPx = pct2px(charYPct);
-  const gx = Math.floor(xPx/cell);
-  const gy = Math.floor(yPx/cell);
-
-  if(gx<0||gy<0||gx>=GRID_W||gy>=GRID_H||!map[gy]?.[gx]){
-    charXPct = ox; charYPct = oy;     // блок
+  /* пробуем сдвинуть по Y отдельно */
+  if (vyPct !== 0){
+    const ny = charYPct + vyPct;
+    const gx = Math.floor(pct2px(charXPct) / cell); // X уже мог измениться
+    const gy = Math.floor(pct2px(ny) / cell);
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
+      charYPct = ny;
+    }
   }
 }
 
