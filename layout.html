@@ -1,10 +1,9 @@
-<!-- layout.html (GRID 20×36 — рисует остров, пишет map) -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport"
-        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Layout</title>
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:#000}
@@ -12,59 +11,90 @@
   </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="mapCanvas"></canvas>
 
-<script type="module">
-/* ------ карта 0/1 (20×36) ---------------------------------------- */
-const GRID_W = 20, GRID_H = 36;
-const MAP_ROWS = [
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00001111111111110000','00001111111111110000','00001111111111110000',
-  '00001111111111110000','00001111111111110000','00001111111111110000',
-  '00001111111111110000','00001111111111110000','00001111111111110000',
-  '00001111111111110000','00001111111111110000','00001111111111110000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-  '00000000000000000000','00000000000000000000','00000000000000000000',
-];
-const MAP = MAP_ROWS.map(r => Uint8Array.from(r, n => +n));
-localStorage.setItem('map', JSON.stringify(MAP));   // <- главное
+<script>
+/* ------------------------------------------------------------------ */
+/* 1. Генерируем карту: квадрат 96×96 клеток по центру сетки 192×108  */
+/* ------------------------------------------------------------------ */
+const GRID_W = 192;
+const GRID_H = 108;
+const ISLAND_CELLS = 96;                 // размер острова в клетках
 
-/* ------ рисуем ---------------------------------------------------- */
-const cvs = document.getElementById('c');
-const ctx = cvs.getContext('2d');
-
-function draw(){
-  const W = innerWidth, H = innerHeight;
-  cvs.width = W; cvs.height = H;
-
-  const cell = Math.min(W/GRID_W, H/GRID_H);
-  const offX = (W - cell*GRID_W)/2;
-  const offY = (H - cell*GRID_H)/2;
-  const r    = cell*0.25, sh = cell*0.30;
-
-  ctx.fillStyle='#1e6fff'; ctx.fillRect(0,0,W,H);      // море
-
-  /* тень */
-  ctx.fillStyle='rgba(0,0,0,.18)';
-  MAP.forEach((row,y)=>row.forEach((v,x)=>{
-    if(v){ ctx.beginPath();
-           ctx.roundRect(offX+x*cell, offY+y*cell+sh, cell, cell, r);
-           ctx.fill(); }
-  }));
-  /* суша */
-  ctx.fillStyle='#2fb84b';
-  MAP.forEach((row,y)=>row.forEach((v,x)=>{
-    if(v){ ctx.beginPath();
-           ctx.roundRect(offX+x*cell, offY+y*cell, cell, cell, r);
-           ctx.fill(); }
-  }));
+function buildMap(){
+  const map = Array.from({length: GRID_H}, () => new Uint8Array(GRID_W));
+  const half = ISLAND_CELLS / 2;
+  const cx   = Math.floor(GRID_W / 2);
+  const cy   = Math.floor(GRID_H / 2);
+  for (let y = cy - half; y < cy + half; y++){
+    for (let x = cx - half; x < cx + half; x++){
+      map[y][x] = 1;                     // суша
+    }
+  }
+  localStorage.setItem('map', JSON.stringify(map));
+  return map;
 }
-addEventListener('resize',draw); draw();
+const map = buildMap();                  // хранится один раз
+
+/* ------------------------------------------------------------------ */
+/* 2. Отрисовка                                                        */
+/* ------------------------------------------------------------------ */
+const canvas = document.getElementById('mapCanvas');
+const ctx    = canvas.getContext('2d');
+
+/* помощь: перевод %W → px */
+const pctX = (p,w) => p * w;
+
+/* рисуем остров «клетка-за-клеткой» */
+function drawIsland(ctx, w, h){
+  /* 2.1 – море */
+  ctx.fillStyle = '#1e6fff';
+  ctx.fillRect(0,0,w,h);
+
+  /* 2.2 – параметры клеток */
+  const cell = w / GRID_W;               // Квадратные клетки! — опираемся на ширину
+  const radius = cell * 0.15;            // скругление углов 15 % клетки
+  const shadowShift = cell * 0.25;       // тень смещаем вниз на четверть клетки
+
+  /* 2.3 – тень: рисуем те же клетки, но чуть ниже и темнее */
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  for (let y = 0; y < GRID_H; y++){
+    for (let x = 0; x < GRID_W; x++){
+      if (map[y][x]){
+        const px = x * cell;
+        const py = y * cell + shadowShift;
+        ctx.beginPath();
+        ctx.roundRect(px, py, cell, cell, radius);
+        ctx.fill();
+      }
+    }
+  }
+
+  /* 2.4 – основная земля */
+  ctx.fillStyle = '#2fb84b';
+  for (let y = 0; y < GRID_H; y++){
+    for (let x = 0; x < GRID_W; x++){
+      if (map[y][x]){
+        const px = x * cell;
+        const py = y * cell;
+        ctx.beginPath();
+        ctx.roundRect(px, py, cell, cell, radius);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Resize / init                                                    */
+/* ------------------------------------------------------------------ */
+function resize(){
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  drawIsland(ctx, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
 </script>
 </body>
 </html>

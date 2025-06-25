@@ -1,10 +1,9 @@
-<!-- character.html (ожидает карту, потом запускает игру) -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport"
-        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Character</title>
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:transparent}
@@ -12,103 +11,141 @@
   </style>
 </head>
 <body>
-<canvas id="g"></canvas>
+<canvas id="gameCanvas"></canvas>
 
 <script>
-/* ------ геометрия экрана & сетки ---------------------------------- */
-const GRID_W = 20, GRID_H = 36;
-const cvs = document.getElementById('g');
-const ctx = cvs.getContext('2d');
-let W,H,cell,offX,offY;
-function fit(){                 // пересчёт при ресайзе
-  W=innerWidth; H=innerHeight;
-  cvs.width=W; cvs.height=H;
-  cell = Math.min(W/GRID_W, H/GRID_H);
-  offX = (W - cell*GRID_W)/2;
-  offY = (H - cell*GRID_H)/2;
-}
-fit(); addEventListener('resize',fit);
+/* ---------- логическая сетка ---------- */
+const GRID_W = 192;
+const GRID_H = 108;
 
-/* ------ ждём карту от layout -------------------------------------- */
-let MAP=null;
-function loadMap(){
-  const m = JSON.parse(localStorage.getItem('map')||'[]');
-  if(Array.isArray(m) && m.length===GRID_H && m[0].length===GRID_W){
-    MAP = m; initGame();
-  }else{
-    setTimeout(loadMap,100);     // проверяем ещё раз через 0.1 с
+/* ---------- процентные константы ---------- */
+const SPEED_PCT   = 0.4;    // %W за кадр
+const JOY_R_PCT   = 8;      // радиус джойстика
+const CHAR_R_PCT  = 6;      // радиус героя
+
+/* ---------- init ---------- */
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+const map    = JSON.parse(localStorage.getItem('map') || '[]');
+
+let cw,ch,cell,joyR,charR;
+
+const pct2px = p => p * cw / 100;     // %W → px
+
+/* позиция героя в %W (центр острова) */
+let charXPct = 50;                     // по X всегда середина
+let charYPct = (GRID_H/2) / GRID_W * 100;   // 108/2 /192 ≈ 28.125 %W
+let vxPct = 0, vyPct = 0;
+
+/* ---------- джойстик ---------- */
+let joyActive = false, joyCtr = {x:0,y:0}, joyVec={x:0,y:0};
+
+function getPos(e){
+  const r = canvas.getBoundingClientRect();
+  if(e.touches) e = e.touches[0];
+  return {x:e.clientX - r.left, y:e.clientY - r.top};
+}
+function onDown(e){
+  canvas.setPointerCapture(e.pointerId);
+  joyActive = true;
+  joyCtr = getPos(e);
+  joyVec = {x:0,y:0};
+}
+function onMove(e){
+  if(!joyActive) return;
+  const p  = getPos(e);
+  const dx = p.x - joyCtr.x;
+  const dy = p.y - joyCtr.y;
+  const max = joyR*0.6;
+  const dist = Math.hypot(dx,dy);
+  const s = dist>max ? max/dist : 1;
+  joyVec = {x:dx*s, y:dy*s};
+  vxPct  = (joyVec.x / max) * SPEED_PCT;
+  vyPct  = (joyVec.y / max) * SPEED_PCT;
+}
+function onUp(e){
+  canvas.releasePointerCapture(e.pointerId);
+  joyActive = false;
+  vxPct = vyPct = 0;
+  joyVec = {x:0,y:0};
+}
+canvas.addEventListener('pointerdown',  onDown);
+canvas.addEventListener('pointermove',  onMove);
+canvas.addEventListener('pointerup',    onUp);
+canvas.addEventListener('pointercancel',onUp);
+
+/* ---------- игровой цикл ---------- */
+function update(){
+  const ox=charXPct, oy=charYPct;
+  charXPct += vxPct;
+  charYPct += vyPct;
+
+  const xPx = pct2px(charXPct);
+  const yPx = pct2px(charYPct);
+  const gx = Math.floor(xPx/cell);
+  const gy = Math.floor(yPx/cell);
+
+  if(gx<0||gy<0||gx>=GRID_W||gy>=GRID_H||!map[gy][gx]){
+    charXPct = ox; charYPct = oy;     // блок
   }
 }
-loadMap();
 
-/* ------ гейм-плей -------------------------------------------------- */
-let charX=10, charY=18, vx=0, vy=0;  // положение в клетках
-const SPD = 0.07;                    // скорость (клеток/кадр)
-
-/* джойстик */
-let joyActive=false, jCtr={x:0,y:0}, jVec={x:0,y:0};
-function pos(e){
-  const r=cvs.getBoundingClientRect(); if(e.touches)e=e.touches[0];
-  return {x:e.clientX-r.left, y:e.clientY-r.top};
-}
-cvs.addEventListener('pointerdown',e=>{
-  cvs.setPointerCapture(e.pointerId);
-  joyActive=true; jCtr=pos(e); jVec={x:0,y:0};
-});
-cvs.addEventListener('pointermove',e=>{
-  if(!joyActive)return; const p=pos(e);
-  const dx=p.x-jCtr.x, dy=p.y-jCtr.y;
-  const max=cell*1.2*0.7, d=Math.hypot(dx,dy),k=d>max?max/d:1;
-  jVec={x:dx*k,y:dy*k}; vx=(jVec.x/max)*SPD; vy=(jVec.y/max)*SPD;
-});
-cvs.addEventListener('pointerup',e=>{
-  cvs.releasePointerCapture(e.pointerId);
-  joyActive=false; vx=vy=0; jVec={x:0,y:0};
-});
-cvs.addEventListener('pointercancel',e=>cvs.dispatchEvent(new PointerEvent('pointerup',e)));
-
-/* ---------- запуск после загрузки карты --------------------------- */
-function initGame(){
-  requestAnimationFrame(loop);
-}
-
-function update(){
-  const nx=charX+vx, ny=charY+vy;
-  const gx=Math.floor(nx), gy=Math.floor(ny);
-  if(MAP[gy]&&MAP[gy][gx]){ charX=nx; charY=ny; }
-}
-
-function drawDebug(){
-  ctx.save(); ctx.fillStyle='rgba(0,255,0,.15)';
-  MAP.forEach((row,y)=>row.forEach((v,x)=>{
-    if(v) ctx.fillRect(offX+x*cell, offY+y*cell, cell, cell);
-  })); ctx.restore();
+function drawDebugCells(){
+  ctx.save();
+  ctx.fillStyle='rgba(0,255,0,0.15)';
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      if(map[y][x]){
+        ctx.fillRect(x*cell, y*cell, cell, cell);
+      }
+    }
+  }
+  ctx.restore();
 }
 
 function render(){
-  ctx.clearRect(0,0,W,H);
-  drawDebug();
+  ctx.clearRect(0,0,cw,ch);
+
+  /* DEBUG: зелёные проходимые клетки */
+  drawDebugCells();
 
   /* герой */
+  const x = pct2px(charXPct), y = pct2px(charYPct);
   ctx.fillStyle='#ffdc00';
+  ctx.beginPath(); ctx.arc(x,y,charR,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#000';
   ctx.beginPath();
-  ctx.arc(offX+charX*cell, offY+charY*cell, cell*0.5, 0, Math.PI*2);
+  ctx.arc(x-charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
+  ctx.arc(x+charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
   ctx.fill();
 
   /* джойстик */
   if(joyActive){
-    const JR=cell*1.2;
-    ctx.save(); ctx.globalAlpha=.25;
+    ctx.save(); ctx.globalAlpha=0.25;
     ctx.fillStyle='#999';
-    ctx.beginPath(); ctx.arc(jCtr.x,jCtr.y,JR,0,Math.PI*2); ctx.fill(); ctx.restore();
+    ctx.beginPath(); ctx.arc(joyCtr.x,joyCtr.y,joyR,0,Math.PI*2); ctx.fill();
+    ctx.restore();
 
     ctx.fillStyle='#ccc';
-    ctx.beginPath(); ctx.arc(jCtr.x+jVec.x, jCtr.y+jVec.y, JR*0.4,0,Math.PI*2);
+    ctx.beginPath();
+    ctx.arc(joyCtr.x+joyVec.x,joyCtr.y+joyVec.y,joyR*0.4,0,Math.PI*2);
     ctx.fill();
   }
 }
 
 function loop(){ update(); render(); requestAnimationFrame(loop); }
+
+/* ---------- resize ---------- */
+function resize(){
+  cw = canvas.width  = window.innerWidth;
+  ch = canvas.height = window.innerHeight;
+  cell = cw / GRID_W;
+
+  joyR  = pct2px(JOY_R_PCT);
+  charR = pct2px(CHAR_R_PCT);
+}
+window.addEventListener('resize', resize);
+resize(); loop();
 </script>
 </body>
 </html>

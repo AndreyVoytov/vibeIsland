@@ -1,63 +1,69 @@
-<!-- index.html -->
+<!-- index.html (обновлённый) -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Portrait Game Shell</title>
-<style>
-html,body{
-  margin:0;
-  padding:0;
-  height:100%;
-  background:#000;       /* чёрные полосы по бокам в ландшафте */
-  overflow:hidden;
-}
-#gameContainer{
-  position:absolute;
-  top:0;left:0;right:0;bottom:0;
-  margin:auto;
-  width:min(100vw,56.25vh);           /* соотношение 9:16 */
-  height:calc(min(100vw,56.25vh)*16/9);
-}
-#gameContainer iframe{
-  position:absolute;
-  top:0;left:0;
-  width:100%;
-  height:100%;
-  border:none;
-}
-#layoutFrame{pointer-events:none;}    /* чтобы события шли к character.html */
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Mini-Game</title>
+  <style>
+    :root{ --game-width:100vw; }                /* значение пересчитывается скриптом */
+    html,body{ margin:0; height:100%; overflow:hidden; background:#000; }
+
+    /* обёртка, в которой живут оба слоя игры */
+    #gameWrapper{
+      position:absolute;
+      top:0; left:50%;
+      transform:translateX(-50%);
+      width:var(--game-width);      /* фиксируем ширину здесь */
+      height:100%;
+      overflow:hidden;              /* «режем» всё, что выходит за пределы игры */
+    }
+
+    .layer{
+      position:absolute;
+      top:0; left:0;
+      width:100%; height:100%;
+      border:0;
+    }
+    #layoutLayer{ z-index:1; }
+    #charLayer  { z-index:2; background:transparent; }
+  </style>
 </head>
 <body>
-  <!-- layout грузим сразу -->
-  <iframe id="layoutLayer" class="layer" src="layout.html"></iframe>
-  <!-- char вставим ПОЗЖЕ, когда layout полностью загрузится -->
-  <iframe id="charLayer"  class="layer" src="about:blank"></iframe>
+  <div id="gameWrapper">
+    <iframe id="layoutLayer" class="layer" src="layout.html"></iframe>
+    <iframe id="charLayer"   class="layer" src="character.html"></iframe>
+  </div>
 
   <script>
-    const layout = document.getElementById('layoutLayer');
-    const char   = document.getElementById('charLayer');
+    /*  Делает «портретное окно» с чёрными полосами по бокам,
+        если устройство повернули в ландшафт.                    */
+    (function resizeGame(){
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const portraitRatio = 9 / 16;          // желаемое W/H в портретном режиме
 
-    /* как только layout запишет карту, ставим src для char-слоя */
-    layout.addEventListener('load', () => {
-      char.src = 'character.html';
+      let gameW;
+      if (vw > vh) {                         // ландшафт
+        gameW = Math.floor(vh * portraitRatio);
+      } else {                               // портрет
+        gameW = vw;
+      }
+
+      document.documentElement
+              .style.setProperty('--game-width', `${gameW}px`);
+    })();
+
+    window.addEventListener('resize', () => {
+      /* debounce не нужен: пересчёт лёгкий */
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const portraitRatio = 9 / 16;
+      const gameW = (vw > vh) ? Math.floor(vh * portraitRatio) : vw;
+      document.documentElement
+              .style.setProperty('--game-width', `${gameW}px`);
     });
   </script>
-
-
-<script>
-function adjustContainer(){
-  const c=document.getElementById('gameContainer');
-  const vw=window.innerWidth, vh=window.innerHeight;
-  const w=Math.min(vw, vh*0.5625);        /* 0.5625 = 9/16 */
-  const h=w*16/9;
-  c.style.width=w+'px';
-  c.style.height=h+'px';
-}
-window.addEventListener('resize',adjustContainer);
-adjustContainer();
-</script>
 </body>
 </html>
