@@ -53,15 +53,26 @@ function onDown(e){
 }
 function onMove(e){
   if(!joyActive) return;
+
+  /* вектор касания */
   const p  = getPos(e);
   const dx = p.x - joyCtr.x;
   const dy = p.y - joyCtr.y;
-  const max = joyR*0.6;
   const dist = Math.hypot(dx,dy);
-  const s = dist>max ? max/dist : 1;
-  joyVec = {x:dx*s, y:dy*s};
-  vxPct  = (joyVec.x / max) * SPEED_PCT;
-  vyPct  = (joyVec.y / max) * SPEED_PCT;
+
+  /* положение «шапки» джойстика для отрисовки: ограничиваем радиусом max */
+  const max = joyR * 0.6;
+  const clampK = dist > max ? max / dist : 1;
+  joyVec = { x: dx * clampK, y: dy * clampK };
+
+  /* ───────── скорость героя ───────── */
+  if (dist > 1e-3) {      // защита от деления на 0
+    const k = SPEED_PCT / dist;   // нормализация ⇒ постоянный модуль SPEED_PCT
+    vxPct = dx * k;
+    vyPct = dy * k;
+  } else {
+    vxPct = vyPct = 0;
+  }
 }
 function onUp(e){
   canvas.releasePointerCapture(e.pointerId);
