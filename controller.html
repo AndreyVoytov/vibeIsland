@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Controller</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+    canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
+  </style>
+</head>
+<body>
+<canvas id="ctrlCanvas"></canvas>
+
+<script>
+/* ——— константы ——— */
+const SPEED_PCT = 0.4;     // %W за кадр
+const JOY_R_PCT = 8;       // радиус круга-основания
+
+const canvas = document.getElementById('ctrlCanvas');
+const ctx    = canvas.getContext('2d');
+
+/* %W → px (обновляется при resize) */
+let cw, ch, joyR, pct2px = p=>p*cw/100;
+
+/* состояние, которое будет храниться в localStorage */
+const state = {
+  joyActive:false,
+  joyCtr:{x:0,y:0},
+  joyVec:{x:0,y:0},
+  vxPct:0,
+  vyPct:0
+};
+save();                 // записать начальное «покой»
+
+/* —— утилиты —— */
+function save(){
+  localStorage.setItem('controller', JSON.stringify(state));
+}
+function getPos(e){
+  const r = canvas.getBoundingClientRect();
+  if(e.touches) e = e.touches[0];
+  return {x:e.clientX - r.left, y:e.clientY - r.top};
+}
+
+/* —— обработка указателя —— */
+function onDown(e){
+  canvas.setPointerCapture(e.pointerId);
+  state.joyActive = true;
+  state.joyCtr = getPos(e);
+  state.joyVec = {x:0,y:0};
+  save();
+}
+function onMove(e){
+  if(!state.joyActive) return;
+
+  const p  = getPos(e);
+  const dx = p.x - state.joyCtr.x;
+  const dy = p.y - state.joyCtr.y;
+  const dist = Math.hypot(dx,dy);
+
+  const max = joyR*0.6;
+  const clamp = (dist>max) ? max/dist : 1;
+  state.joyVec = {x:dx*clamp, y:dy*clamp};
+
+  if(dist>1e-3){
+    const k = SPEED_PCT / dist;      // нормализация
+    state.vxPct = dx*k;
+    state.vyPct = dy*k;
+  }else{
+    state.vxPct = state.vyPct = 0;
+  }
+  save();
+}
+function onUp(e){
+  canvas.releasePointerCapture(e.pointerId);
+  state.joyActive = false;
+  state.vxPct = state.vyPct = 0;
+  state.joyVec = {x:0,y:0};
+  save();
+}
+
+/* —— подписки —— */
+canvas.addEventListener('pointerdown',  onDown);
+canvas.addEventListener('pointermove',  onMove);
+canvas.addEventListener('pointerup',    onUp);
+canvas.addEventListener('pointercancel',onUp);
+
+/* —— рендер —— */
+function render(){
+  ctx.clearRect(0,0,cw,ch);
+
+  if(state.joyActive){
+    ctx.save(); ctx.globalAlpha=0.25;
+    ctx.fillStyle='#999';
+    ctx.beginPath();
+    ctx.arc(state.joyCtr.x, state.joyCtr.y, joyR, 0, Math.PI*2);
+    ctx.fill(); ctx.restore();
+
+    ctx.fillStyle='#ccc';
+    ctx.beginPath();
+    ctx.arc(state.joyCtr.x+state.joyVec.x,
+            state.joyCtr.y+state.joyVec.y,
+            joyR*0.4, 0, Math.PI*2);
+    ctx.fill();
+  }
+  requestAnimationFrame(render);
+}
+
+/* —— resize —— */
+function resize(){
+  cw = canvas.width  = innerWidth;
+  ch = canvas.height = innerHeight;
+  joyR  = pct2px(JOY_R_PCT);
+}
+addEventListener('resize', resize);
+resize(); requestAnimationFrame(render);
+</script>
+</body>
+</html>

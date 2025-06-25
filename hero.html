@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Hero</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+    canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
+  </style>
+</head>
+<body>
+<canvas id="heroCanvas"></canvas>
+
+<script>
+/* ——— карта и размеры сетки ——— */
+const map = JSON.parse(localStorage.getItem('map') || '[]');
+const GRID_H = map.length;
+const GRID_W = map[0] ? map[0].length : 0;
+
+/* ——— канвас ——— */
+const canvas = document.getElementById('heroCanvas');
+const ctx    = canvas.getContext('2d');
+
+/* %W → px */
+let cw,ch,cell,pct2px = p=>p*cw/100;
+
+/* ——— константы ——— */
+const CHAR_R_PCT = 6;   // радиус героя (в %W)
+
+let charXPct = 50;                              // центр острова
+let charYPct = (GRID_H/2)/GRID_W*100;
+let charR;
+
+/* ——— helpers ——— */
+function readController(){
+  try{
+    return JSON.parse(localStorage.getItem('controller') || '{}');
+  }catch(e){ return {}; }
+}
+function update(){
+  const ctrl = readController();
+  const vxPct = ctrl.vxPct || 0;
+  const vyPct = ctrl.vyPct || 0;
+
+  /* X-шаг */
+  if(vxPct!==0){
+    const nx = charXPct + vxPct;
+    const gx = Math.floor(pct2px(nx)/cell);
+    const gy = Math.floor(pct2px(charYPct)/cell);
+    if(gx>=0&&gx<GRID_W&&gy>=0&&gy<GRID_H&&map[gy]?.[gx]) charXPct = nx;
+  }
+  /* Y-шаг */
+  if(vyPct!==0){
+    const ny = charYPct + vyPct;
+    const gx = Math.floor(pct2px(charXPct)/cell);
+    const gy = Math.floor(pct2px(ny)/cell);
+    if(gx>=0&&gx<GRID_W&&gy>=0&&gy<GRID_H&&map[gy]?.[gx]) charYPct = ny;
+  }
+}
+function drawDebug(){
+  ctx.save();
+  ctx.fillStyle='rgba(0,255,0,0.15)';
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      if(map[y]?.[x]) ctx.fillRect(x*cell,y*cell,cell,cell);
+    }
+  }
+  ctx.restore();
+}
+function render(){
+  ctx.clearRect(0,0,cw,ch);
+  drawDebug();
+
+  const x = pct2px(charXPct), y = pct2px(charYPct);
+  ctx.fillStyle='#ffdc00';
+  ctx.beginPath(); ctx.arc(x,y,charR,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#000';
+  ctx.beginPath();
+  ctx.arc(x-charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
+  ctx.arc(x+charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
+  ctx.fill();
+}
+function loop(){ update(); render(); requestAnimationFrame(loop); }
+
+/* ——— resize —— */
+function resize(){
+  cw = canvas.width  = innerWidth;
+  ch = canvas.height = innerHeight;
+  cell = cw/GRID_W;
+  charR = pct2px(CHAR_R_PCT);
+}
+addEventListener('resize', resize);
+resize(); loop();
+</script>
+</body>
+</html>

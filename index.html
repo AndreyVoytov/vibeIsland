@@ -24,37 +24,36 @@
       width:100%; height:100%;
       border:0;
     }
-    /* порядок наложения */
-    #mapLayer   { z-index:0; display:none; }   /* «невидимый» */
-    #layoutLayer{ z-index:1; }
-    #charLayer  { z-index:2; background:transparent; }
+    #mapLayer        { z-index:0; display:none; }       /* невидимая инициализация карты */
+    #layoutLayer     { z-index:1; }                     /* остров */
+    #heroLayer       { z-index:2; background:transparent; } /* персонаж */
+    #controllerLayer { z-index:3; background:transparent; } /* джойстик */
   </style>
 </head>
 <body>
   <div id="gameWrapper">
-    <iframe id="mapLayer"   class="layer"></iframe>
-    <iframe id="layoutLayer" class="layer"></iframe>
-    <iframe id="charLayer"   class="layer"></iframe>
+    <iframe id="mapLayer"        class="layer"></iframe>
+    <iframe id="layoutLayer"     class="layer"></iframe>
+    <iframe id="heroLayer"       class="layer"></iframe>
+    <iframe id="controllerLayer" class="layer"></iframe>
   </div>
 
   <script>
-    /* ——— портретная рамка ——— */
+    /* —— портретная область —— */
     function setGameWidth(){
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const portrait = 9/16;
-      const gameW = (vw>vh) ? Math.floor(vh*portrait) : vw;
+      const vw = innerWidth, vh = innerHeight, pr = 9/16;
+      const gameW = (vw>vh) ? Math.floor(vh*pr) : vw;
       document.documentElement.style.setProperty('--game-width',`${gameW}px`);
     }
-    setGameWidth();
-    addEventListener('resize', setGameWidth);
+    setGameWidth(); addEventListener('resize', setGameWidth);
 
-    /* ——— загрузить map.html, а после него — слои игры ——— */
+    /* —— последовательная загрузка по зависимостям —— */
     const mapFrame = document.getElementById('mapLayer');
     mapFrame.src = 'map.html';
     mapFrame.onload = () => {
-      document.getElementById('layoutLayer').src = 'layout.html';
-      document.getElementById('charLayer').src   = 'character.html';
+      document.getElementById('layoutLayer').src     = 'layout.html';
+      document.getElementById('heroLayer').src       = 'hero.html';
+      document.getElementById('controllerLayer').src = 'controller.html';
     };
   </script>
 </body>
