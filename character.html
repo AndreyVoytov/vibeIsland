@@ -14,9 +14,6 @@
 <canvas id="gameCanvas"></canvas>
 
 <script>
-/* ---------- логическая сетка ---------- */
-const GRID_W = 20;
-const GRID_H = 36;
 
 /* ---------- процентные константы ---------- */
 const SPEED_PCT   = 0.4;    // %W за кадр
@@ -27,6 +24,8 @@ const CHAR_R_PCT  = 6;      // радиус героя
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
 const map    = JSON.parse(localStorage.getItem('map') || '[]');
+const GRID_H = map.length;                // 36
+const GRID_W = map[0] ? map[0].length : 0;
 
 let cw,ch,cell,joyR,charR;
 
@@ -121,13 +120,8 @@ function drawDebugCells(){
   ctx.restore();
 }
 
-function render(){
-  ctx.clearRect(0,0,cw,ch);
-
-  /* DEBUG: зелёные проходимые клетки */
-  drawDebugCells();
-
-  /* герой */
+function drawHero() {
+ /* герой */
   const x = pct2px(charXPct), y = pct2px(charYPct);
   ctx.fillStyle='#ffdc00';
   ctx.beginPath(); ctx.arc(x,y,charR,0,Math.PI*2); ctx.fill();
@@ -136,6 +130,15 @@ function render(){
   ctx.arc(x-charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
   ctx.arc(x+charR*0.33,y-charR*0.25,charR*0.17,0,Math.PI*2);
   ctx.fill();
+}
+
+function render(){
+  ctx.clearRect(0,0,cw,ch);
+
+  /* DEBUG: зелёные проходимые клетки */
+  //drawDebugCells();
+
+ drawHero();
 
   /* джойстик */
   if(joyActive){

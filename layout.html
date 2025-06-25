@@ -14,12 +14,11 @@
 <canvas id="mapCanvas"></canvas>
 
 <script>
-/* ——— константы ——— */
-const GRID_W = 20;
-const GRID_H = 36;
 
 /* карта уже лежит в localStorage */
 const map = JSON.parse(localStorage.getItem('map') || '[]');
+const GRID_H = map.length;                // 36
+const GRID_W = map[0] ? map[0].length : 0;
 
 /* ——— canvas ——— */
 const canvas = document.getElementById('mapCanvas');
