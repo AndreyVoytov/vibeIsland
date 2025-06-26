@@ -23,25 +23,30 @@ const GRID_W = map[0] ? map[0].length : 0;
 const canvas = document.getElementById('heroCanvas');
 const ctx    = canvas.getContext('2d');
 
-/* ---------- масштабы ---------- */
+/* ---------- масштабирование ---------- */
 let cw, ch, cell, pct2px = p => p * cw / 100;
-const CHAR_R_PCT = 6;                       // радиус головы в % ширины
-const SCALE      = 0.8;                     // общий масштаб
-let charR;                                  // абсолютный радиус (px)
+const CHAR_R_PCT = 6;      // радиус головы в % ширины
+const SCALE      = 0.8;    // масштаб рисунка
+let charR;                 // радиус в пикселях
+let footOffset;            // расстояние от головы-0,0 до стоп (px)
 
-/* ---------- позиция / направление ---------- */
+/* ---------- позиция / направление (координаты СТОП) ---------- */
 let charXPct = 50;
-let charYPct = (GRID_H / 2) / GRID_W * 100;
-let facing   = 1;                           // 1 → вправо, -1 → влево
+let charYPct = (GRID_H / 2) / GRID_W * 100;   // центр острова
+let facing   = 1;                             // 1 → вправо, −1 → влево
 
 /* ---------- анимация ---------- */
 let phase = 0, lastT = performance.now();
 const WALK_FREQ = 2 * Math.PI * 1;          // 1 цикл/с
 const IDLE_FREQ = 2 * Math.PI * 0.3;        // 0.3 цикла/с
 
+/* моргание */
 let blinkTimer = 0;
 let nextBlink  = 2000 + Math.random() * 4000;
 const BLINK_DUR = 150;
+
+/* дополнительное замедление перемещения */
+const SPEED_SCALE = 0.6;
 
 /* ------------------------------------------------------------------ */
 /*                        Р И С О В К А                               */
@@ -152,9 +157,14 @@ function drawHero(anim){
 
   ctx.save();
   ctx.translate(pct2px(charXPct), pct2px(charYPct));
-  ctx.scale(facing * SCALE, SCALE);              // зеркалирование по X
 
-  /* порядок слоёв: задняя нога → задняя рука → тело → глаза → передняя рука → кепка */
+  /* поднять рисунок на высоту стоп->0,0 */
+  ctx.translate(0, -footOffset);           // footOffset не масштабируется
+
+  /* масштаб + зеркалирование */
+  ctx.scale(facing * SCALE, SCALE);
+
+  /* слои от дальнего к ближнему */
   drawLegs(legSwing);
   drawBackArm(legSwing);
   drawBody(bounce);
@@ -168,11 +178,12 @@ function drawHero(anim){
 
 /* ---------- логика движения / анимации ---------- */
 function update(dtMs){
-  const ctrl = JSON.parse(localStorage.getItem('controller') || '{}');
-  const vx = ctrl.vxPct || 0, vy = ctrl.vyPct || 0;
-  const moving = Math.abs(vx) + Math.abs(vy) > 0.001;
+  const ctrl = JSON.parse(localStorage.getItem('controller')||'{}');
+  let vx = (ctrl.vxPct||0) * SPEED_SCALE;
+  let vy = (ctrl.vyPct||0) * SPEED_SCALE;
+  const moving = Math.abs(vx)+Math.abs(vy) > 0.001;
 
-  /* перемещение внутри карты */
+  /* коллизия по ногам */
   if(vx){
     const nx = charXPct + vx;
     const gx = Math.floor(pct2px(nx) / cell);
@@ -186,7 +197,7 @@ function update(dtMs){
     if(gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charYPct = ny;
   }
 
-  /* разворот в сторону движения */
+  /* разворот */
   if(Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
 
   /* фаза шага */
@@ -195,23 +206,22 @@ function update(dtMs){
   if(phase > Math.PI*2) phase -= Math.PI*2;
 
   /* моргание */
-  if(blinkTimer > 0){
+  if(blinkTimer>0){
     blinkTimer -= dtMs;
   }else{
     nextBlink -= dtMs;
-    if(nextBlink <= 0){
+    if(nextBlink<=0){
       blinkTimer = BLINK_DUR;
       nextBlink  = 2000 + Math.random()*4000;
     }
   }
 
-  return { isMoving: moving, phase };
+  return { isMoving:moving, phase };
 }
 
-/* ---------- основной цикл ---------- */
-let lastTime = performance.now();
+/* ---------- цикл ---------- */
 function frame(now){
-  const dt = now - lastTime; lastTime = now;
+  const dt = now - lastT; lastT = now;
   const anim = update(dt);
 
   ctx.clearRect(0,0,cw,ch);
@@ -224,8 +234,9 @@ function frame(now){
 function resize(){
   cw = canvas.width  = innerWidth;
   ch = canvas.height = innerHeight;
-  cell = cw / GRID_W;
-  charR = pct2px(CHAR_R_PCT);              // радиус без учёта SCALE
+  cell  = cw / GRID_W;
+  charR = pct2px(CHAR_R_PCT);              // радиус (без учёта SCALE)
+  footOffset = charR * 2;                // ~расстояние от стоп до 0,0
 }
 addEventListener('resize', resize);
 
