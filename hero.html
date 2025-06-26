@@ -71,13 +71,13 @@ function drawBody(bounce){
 
 /* — кепка + козырёк — */
 function drawCap(bounce){
-  ctx.translate(0, -bounce*1.4);
+  ctx.translate(0, -bounce*1.4 + charR*0.5);
   ctx.fillStyle = '#ff5151';
   ctx.beginPath();
   ctx.arc(0, -charR*0.85, charR*1.05, Math.PI, 0);                               // тулья
   ctx.fill();
   /* козырёк под углом ⇒ рисуем трапецией */
-  ctx.fillRect(-charR*0.2, -charR*0.85, charR*0.9, charR*0.22);
+  ctx.fillRect(charR*0.8, -charR*1.05, charR*0.9, charR*0.22);
   ctx.translate(0,  bounce*1.4);
 }
 
@@ -90,12 +90,12 @@ function drawEyes(){
     const y = -charR*0.15;
     ctx.beginPath();
     ctx.moveTo(-charR*0.15, y); ctx.lineTo( charR*0.05, y);
-    ctx.moveTo( charR*0.2 , y); ctx.lineTo( charR*0.4,  y);
+    ctx.moveTo( charR*0.12 , y); ctx.lineTo( charR*0.14,  y);
     ctx.stroke();
   }else{
     const eyeR = charR*0.12;
     ctx.beginPath(); ctx.arc(-charR*0.05, -charR*0.15, eyeR, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( charR*0.28, -charR*0.15, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( charR*0.38, -charR*0.15, eyeR, 0, Math.PI*2); ctx.fill();
   }
 }
 
@@ -135,12 +135,12 @@ function drawLegs(legSwing){
   const legW = charR*0.22, legH = charR*0.9;
 
   /* задняя нога (стоит почти прямо) */
-  ctx.fillRect(-legW/2 - charR*0.15, charR*1.6, legW, legH);
+  ctx.fillRect(-legW/2 - charR*0 - legSwing/2, charR*1.6, legW, legH);
 
   /* передняя нога с раскладкой */
   ctx.save();
-  ctx.translate(charR*0.18 + legSwing, charR*1.6);
-  ctx.fillRect(-legW/2, 0, legW, legH);
+  ctx.translate(charR*0.18 + legSwing/2, charR*1.6);
+  ctx.fillRect(-legW/2 + charR*0.15, 0, legW, legH);
   ctx.restore();
 }
 
