@@ -14,81 +14,49 @@ const map = JSON.parse(localStorage.getItem('map') || '[]');
 const GRID_H = map.length;
 const GRID_W = map[0] ? map[0].length : 0;
 
-/* ---------- “модель” героя ---------- */
+/* ---------- положение героя ---------- */
 let charXPct = 50;
 let charYPct = (GRID_H / 2) / GRID_W * 100;
 let facing   = 1;
 
-/* анимационные состояния */
-let phase = 0, lastT = performance.now();
-const WALK_FREQ = 2 * Math.PI * 1;
-const IDLE_FREQ = 2 * Math.PI * 0.3;
-let blinkTimer = 0;
-let nextBlink  = 2000 + Math.random() * 4000;
-const BLINK_DUR = 150;
-
-/* движение */
+/* скорость */
 const SPEED_SCALE = 0.6;
 
-function getViewWidth(){
-  let ww = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;   // гарантированная ширина
-  return ww;
-}
-
-/* ---------- физика / анимация ---------- */
+/* ---------- обновление координат ---------- */
 function update(dtMs){
   const ctrl = JSON.parse(localStorage.getItem('controller') || '{}');
   let vx = (ctrl.vxPct || 0) * SPEED_SCALE;
   let vy = (ctrl.vyPct || 0) * SPEED_SCALE;
-  const moving = Math.abs(vx) + Math.abs(vy) > 0.001;
+  const isMoving = Math.abs(vx) + Math.abs(vy) > 0.001;
 
-  /* коллизии по карте (координаты стоп) */
-  const vw   = getViewWidth();
+  /* коллизии по ногам */
+  const vw   = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const cell = vw / GRID_W;
   const pct2px = p => p * vw / 100;
-  
-  if (vx) {
+
+  if (vx){
     const nx = charXPct + vx;
     const gx = Math.floor(pct2px(nx) / cell);
     const gy = Math.floor(pct2px(charYPct) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charXPct = nx;
   }
-  if (vy) {
+  if (vy){
     const ny = charYPct + vy;
     const gx = Math.floor(pct2px(charXPct) / cell);
     const gy = Math.floor(pct2px(ny) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charYPct = ny;
   }
 
-  /* разворот */
   if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
 
-  /* шаги */
-  const dt = dtMs / 1000;
-  phase += dt * (moving ? WALK_FREQ : IDLE_FREQ);
-  if (phase > Math.PI*2) phase -= Math.PI*2;
-
-  /* моргание */
-  if (blinkTimer > 0) {
-    blinkTimer -= dtMs;
-  } else {
-    nextBlink -= dtMs;
-    if (nextBlink <= 0) {
-      blinkTimer = BLINK_DUR;
-      nextBlink  = 2000 + Math.random()*4000;
-    }
-  }
-
-  /* пишем всё в localStorage, чтобы hero.html мог отрисоваться */
+  /* публикуем только координаты + направление + факт движения */
   localStorage.setItem('heroState', JSON.stringify({
-    charXPct, charYPct, facing,
-    anim: { isMoving: moving, phase, blinkTimer }
+    charXPct, charYPct, facing, isMoving
   }));
 }
 
-addEventListener('resize', () => lastViewW = getViewWidth());
-
 /* ---------- цикл ---------- */
+let lastT = performance.now();
 function frame(now){
   const dt = now - lastT; lastT = now;
   update(dt);

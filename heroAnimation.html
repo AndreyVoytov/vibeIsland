@@ -27,6 +27,10 @@ const ctx    = canvas.getContext('2d');
 let cw, ch, cell, pct2px = p => p * cw / 100;
 const CHAR_R_PCT = 6;      // радиус головы в % ширины
 const SCALE      = 0.8;    // масштаб рисунка
+
+/* ---------- анимация (теперь только здесь) ---------- */
+let lastAnimT = performance.now();
+
 let charR;                 // радиус в пикселях
 let footOffset;            // расстояние от головы-0,0 до стоп (px)
 
@@ -177,17 +181,35 @@ function drawHero(anim){
 /* ------------------------------------------------------------------ */
 
 function frame(){
-  const s = JSON.parse(localStorage.getItem('heroState') || 'null');
-  if (!s){ requestAnimationFrame(frame); return; }
+  const state = JSON.parse(localStorage.getItem('heroState') || 'null');
+  if (!state){ requestAnimationFrame(frame); return; }
 
-  /* применяем данные, пришедшие из heroAnimation.html */
-  charXPct   = s.charXPct;
-  charYPct   = s.charYPct;
-  facing     = s.facing;
-  blinkTimer = s.anim.blinkTimer;
+  /* позиция и направление приходят из heroAnimation.html */
+  charXPct = state.charXPct;
+  charYPct = state.charYPct;
+  facing   = state.facing;
+  const isMoving = state.isMoving;
+
+  /* локальный шаг + моргание */
+  const now = performance.now();
+  const dtMs = now - lastAnimT; lastAnimT = now;
+  const dt = dtMs / 1000;
+
+  phase += dt * (isMoving ? WALK_FREQ : IDLE_FREQ);
+  if (phase > Math.PI*2) phase -= Math.PI*2;
+
+  if (blinkTimer > 0){
+    blinkTimer -= dtMs;
+  }else{
+    nextBlink -= dtMs;
+    if (nextBlink <= 0){
+      blinkTimer = BLINK_DUR;
+      nextBlink  = 2000 + Math.random()*4000;
+    }
+  }
 
   ctx.clearRect(0,0,cw,ch);
-  drawHero({ isMoving: s.anim.isMoving, phase: s.anim.phase });
+  drawHero({ isMoving, phase });
 
   requestAnimationFrame(frame);
 }
