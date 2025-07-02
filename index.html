@@ -19,15 +19,14 @@
     }
 
     .layer{
-      position:absolute;
-      top:0; left:0;
-      width:100%; height:100%;
-      border:0;
+      position:absolute; top:0; left:0;
+      width:100%; height:100%; border:0;
     }
-    #mapLayer        { z-index:0; display:none; }       /* невидимая инициализация карты */
-    #layoutLayer     { z-index:1; }                     /* остров */
-    #heroLayer       { z-index:2; background:transparent; } /* персонаж */
-    #controllerLayer { z-index:3; background:transparent; } /* джойстик */
+    #mapLayer        { z-index:0; display:none; }
+    #layoutLayer     { z-index:1; }
+    #heroLayer       { z-index:2; background:transparent; }
+    #heroLogicLayer  { z-index:2; width:0; height:0; pointer-events:none; } /* логика, невидима */
+    #controllerLayer { z-index:3; background:transparent; }
   </style>
 </head>
 <body>
@@ -35,25 +34,32 @@
     <iframe id="mapLayer"        class="layer"></iframe>
     <iframe id="layoutLayer"     class="layer"></iframe>
     <iframe id="heroLayer"       class="layer"></iframe>
+    <iframe id="heroLogicLayer"  class="layer"></iframe>
     <iframe id="controllerLayer" class="layer"></iframe>
   </div>
 
   <script>
-    /* —— портретная область —— */
+    /* — портретная ширина — */
     function setGameWidth(){
       const vw = innerWidth, vh = innerHeight, pr = 9/16;
-      const gameW = (vw>vh) ? Math.floor(vh*pr) : vw;
-      document.documentElement.style.setProperty('--game-width',`${gameW}px`);
+      const gameW = (vw > vh) ? Math.floor(vh * pr) : vw;
+	  const gameH = (vw > vh) ? vh : Math.floor(gameW / pr);
+	  localStorage.setItem('gameWidth', gameW);
+	  localStorage.setItem('gameHeight', gameH);
+	  console.log('gameWidth: ' + gameW + '; gameHeight: ' + gameH); 
+
+      document.documentElement.style.setProperty('--game-width', `${gameW}px`);
     }
     setGameWidth(); addEventListener('resize', setGameWidth);
 
-    /* —— последовательная загрузка по зависимостям —— */
+    /* — каскад загрузки — */
     const mapFrame = document.getElementById('mapLayer');
     mapFrame.src = 'map.html';
     mapFrame.onload = () => {
-      document.getElementById('layoutLayer').src     = 'layout.html';
-      document.getElementById('heroLayer').src       = 'hero.html';
-      document.getElementById('controllerLayer').src = 'controller.html';
+      document.getElementById('layoutLayer').src      = 'layout.html';
+      document.getElementById('heroLayer').src        = 'heroAnimation.html';
+      document.getElementById('heroLogicLayer').src   = 'hero.html';
+      document.getElementById('controllerLayer').src  = 'controller.html';
     };
   </script>
 </body>
