@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport"
         content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Hero</title>
+  <title>Hero (sprites)</title>
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:transparent}
     canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
@@ -26,190 +26,262 @@ const ctx    = canvas.getContext('2d');
 /* ---------- масштабирование ---------- */
 let cw, ch, cell, pct2px = p => p * cw / 100;
 const CHAR_R_PCT = 6;      // радиус головы в % ширины
-const SCALE      = 0.8;    // масштаб рисунка
+const SCALE      = 2.8;    // общий масштаб
 
-/* ---------- анимация (теперь только здесь) ---------- */
-let lastAnimT = performance.now();
+let charR;                 // радиус в px
+let footOffset;            // смещение 0,0-точки до стоп
 
-let charR;                 // радиус в пикселях
-let footOffset;            // расстояние от головы-0,0 до стоп (px)
-
-/* ---------- позиция / направление (координаты СТОП) ---------- */
+/* ---------- позиция / направление ---------- */
 let charXPct = 50;
-let charYPct = (GRID_H / 2) / GRID_W * 100;   // центр острова
-let facing   = 1;                             // 1 → вправо, −1 → влево
+let charYPct = (GRID_H / 2) / GRID_W * 100;
+let facing   = 1;     // 1 → вправо, −1 → влево
 
-/* ---------- анимация ---------- */
-let phase = 0, lastT = performance.now();
-const WALK_FREQ = 2 * Math.PI * 1;          // 1 цикл/с
-const IDLE_FREQ = 2 * Math.PI * 0.3;        // 0.3 цикла/с
+/* ---------- анимация шага / ожидания ---------- */
+let phase = 0;
+let lastAnimT = performance.now();
+const WALK_FREQ = 2 * Math.PI * 1;     // 1 цикл/с
+const IDLE_FREQ = 2 * Math.PI * 0.3;
 
 /* моргание */
 let blinkTimer = 0;
-let nextBlink  = 2000 + Math.random() * 4000;
-const BLINK_DUR = 150;
-
-/* дополнительное замедление перемещения */
-const SPEED_SCALE = 0.6;
+let nextBlink  = 500 + Math.random()*500;
+const BLINK_DUR = 200;
 
 /* ------------------------------------------------------------------ */
-/*                        Р И С О В К А                               */
+/*                       З А Г Р У З К А   С П Р А Й Т О В            */
 /* ------------------------------------------------------------------ */
 
-/* — рюкзак + торс + голова (базовый объём) — */
-function drawBody(bounce){
-  /* рюкзак за спиной (слегка правее центра) */
-  ctx.save();
-  ctx.translate(-charR * 0.5, -bounce * 1.3);
-  ctx.fillStyle = '#4e5327';
-  ctx.beginPath();
-  ctx.roundRect(-charR*0.3, -charR*0.2, charR*1.2, charR*1.8, charR*0.25);
-  ctx.fill();
-  ctx.restore();
+const SPR_DIR = './img/hero/';
+const SPR_NAMES = [
+  'arm1','arm2','axe',
+  'backpack','body','cap',
+  'eyes','head',
+  'leg1','leg2','pants'
+];
 
-  /* голова + торс */
+const spr = {};                         // {name: Image}
+let loaded = 0;
+
+function loadSprites(cb){
+  SPR_NAMES.forEach(name=>{
+    const img = new Image();
+    img.src = `${SPR_DIR}${name}.png`;
+    img.onload = ()=>{
+      if(++loaded === SPR_NAMES.length) cb();
+    };
+    spr[name] = img;
+  });
+}
+
+/* вспомогалка: отрисовать спрайт, задав pivot-точку в его центре */
+function draw(img,x,y,w,h,rot=0){
   ctx.save();
-  ctx.translate(0, -bounce);
-  ctx.fillStyle = '#ffd15c';
-  ctx.beginPath(); ctx.arc(0, 0, charR, 0, Math.PI*2); ctx.fill();               // голова
-  ctx.beginPath();
-  ctx.roundRect(-charR*0.25, charR*0.1, charR*0.9, charR*1.6, charR*0.25);       // торс
-  ctx.fill();
+  ctx.translate(x,y);
+  if(rot) ctx.rotate(rot);
+  ctx.drawImage(img, -w/2, -h/2, w, h);
   ctx.restore();
 }
 
-/* — кепка + козырёк — */
-function drawCap(bounce){
-  ctx.translate(0, -bounce*1.4 + charR*0.5);
-  ctx.fillStyle = '#ff5151';
-  ctx.beginPath();
-  ctx.arc(0, -charR*0.85, charR*1.05, Math.PI, 0);                               // тулья
-  ctx.fill();
-  /* козырёк под углом ⇒ рисуем трапецией */
-  ctx.fillRect(charR*0.8, -charR*1.05, charR*0.9, charR*0.22);
-  ctx.translate(0,  bounce*1.4);
+function drawFlip(img,x,y,w,h,rot=0){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(-1,1);   
+  if(rot) ctx.rotate(rot);
+  ctx.drawImage(img, -w/2, -h/2, w, h);
+  ctx.restore();
 }
 
-/* — глаза (оба) — */
-function drawEyes(){
-  ctx.fillStyle = '#000';
-  const closed = blinkTimer > 0;
-  if(closed){
-    ctx.lineWidth = charR*0.08;
-    const y = -charR*0.15;
-    ctx.beginPath();
-    ctx.moveTo(-charR*0.15, y); ctx.lineTo( charR*0.05, y);
-    ctx.moveTo( charR*0.12 , y); ctx.lineTo( charR*0.14,  y);
-    ctx.stroke();
-  }else{
-    const eyeR = charR*0.12;
-    ctx.beginPath(); ctx.arc(-charR*0.05, -charR*0.15, eyeR, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( charR*0.38, -charR*0.15, eyeR, 0, Math.PI*2); ctx.fill();
+/* ------------------------------------------------------------------ */
+/*                           Р И С О В К А                            */
+/* ------------------------------------------------------------------ */
+
+/* единичные относительные смещения (подогнайте при необходимости) */
+const O = {
+  backpack:{x:-0.35, y:0.2},
+  body    :{x: 0  , y:-0.1},
+  head    :{x: 0  , y:-0.05}, 
+  eyes    :{x: 0  , y:0.1},
+  cap     :{x: 0  , y:-0.05},
+  legBack :{x:0.1, y: -0.2},
+  legFront:{x: 0.28, y: -0.2},
+  armBack :{x:-0.35, y: 0.40},
+  armFront:{x: 0.25, y: 0.40},
+  axe     :{x: 1.10, y: 0.70},
+  pants   :{x: 0  ,  y: -0.18}
+};
+
+/* главный сборщик героя */
+function drawHero(anim){
+  const {isMoving, phase} = anim;
+  const legSwing = isMoving ? Math.sin(phase) * charR * 0.3 : 0;
+  const armSwing = isMoving ? Math.sin(phase) * charR * 0.25 : 0;
+  const bounce   = (isMoving ? 0.10 : 0.04) * charR * Math.abs(Math.sin(phase));
+
+  /* масштаб спрайтов так, чтобы диаметр головы = 2*charR */
+  const headScale = (charR*2) / spr.head.height;
+  const S = headScale * SCALE;
+
+  ctx.save();
+  ctx.translate(pct2px(charXPct), pct2px(charYPct) - footOffset);
+  ctx.scale(facing * S, S);
+
+  /* — задние слои — */
+  drawBackArm(); 
+  draw(spr.leg1,   O.legBack.x*charR,   O.legBack.y*charR,   spr.leg1.width, spr.leg1.height);
+                                   // функция ниже
+  drawFlip(spr.backpack, O.backpack.x*charR, O.backpack.y*charR - bounce*1.3,
+       spr.backpack.width, spr.backpack.height);
+
+  /* — центральные слои — */
+  drawLegs();
+  drawPants();                                    // функция ниже
+
+  draw(spr.body,   O.body.x*charR,   O.body.y*charR - bounce,
+       spr.body.width, spr.body.height);
+  drawFlip(spr.head,   O.head.x*charR,   O.head.y*charR - bounce,
+       spr.head.width, spr.head.height);
+  drawEyes(bounce);                               // функция ниже
+  drawCap(bounce);
+  
+  /* — передние слои — */
+                                      // функция ниже
+  drawFrontArm();                                 // функция ниже
+
+  ctx.restore();
+
+  /* ---------- локальные рисовалки (используют внешние переменные) ---------- */
+
+  /* задняя рука (без оружия) */
+  function drawBackArm(){
+    ctx.save();
+    ctx.translate(O.armBack.x*charR, O.armBack.y*charR - bounce);
+    ctx.rotate((-20 + armSwing*45/charR) * Math.PI/180/2);
+    ctx.drawImage(spr.arm1, -spr.arm1.width/2, -spr.arm1.height/2);
+	ctx.scale(-1,1);   
+    ctx.restore();
+  }
+
+  /* передняя рука + топор */
+  function drawFrontArm(){
+  ctx.save();
+  ctx.translate(O.armFront.x*charR, O.armFront.y*charR - bounce);
+  ctx.rotate((15 + armSwing*55/charR) * Math.PI/180 /2);
+
+  /* ─── топор РИСУЕМ ПЕРВЫМ ─── */
+  ctx.save();                              // локальный контекст только для топора
+  ctx.translate(spr.arm2.width * 0.05, 0); // к ладони
+  ctx.rotate(15 * Math.PI/180);
+  ctx.scale(-1,1);
+  ctx.drawImage(spr.axe,
+                -spr.axe.width / 2,
+                -spr.axe.height / 2);
+  ctx.restore();                           // вернулись в систему координат руки
+
+  /* ─── затем сама рука ─── */
+  ctx.drawImage(spr.arm2,
+                -spr.arm2.width / 2,
+                -spr.arm2.height / 2);
+
+  ctx.restore();
+}
+
+
+  /* ноги (анимируется только передняя) */
+  function drawLegs(){
+	  /* задняя нога */
+	  ctx.save();
+	  ctx.translate(
+		O.legBack.x * charR - legSwing/2,   // «-legSwing/2» → к центру при sin>0
+		O.legBack.y * charR
+	  );
+	 
+	  ctx.restore();
+
+	  /* передняя нога */
+	  ctx.save();
+	  ctx.translate(
+		O.legFront.x * charR + legSwing/2,  // «+legSwing/2» → к центру при sin>0
+		O.legFront.y * charR
+	  );
+	  ctx.drawImage(spr.leg2,
+					-spr.leg2.width / 2,
+					-spr.leg2.height / 2);
+	  ctx.restore();
+	}
+
+  /* штаны – статичны, слегка подпрыгивают вместе с торсом */
+  function drawPants(){
+    draw(spr.pants,
+         O.pants.x*charR,
+         O.pants.y*charR - bounce*0.2,
+         spr.pants.width, spr.pants.height);
+  }
+
+  /* глаза: спрайт открыт / линия закрыт */
+  function drawEyes(){
+    if(blinkTimer>0){
+      /* рисуем закрытые глаза линией */
+      ctx.save();
+      ctx.lineWidth = charR*0.1;
+      ctx.strokeStyle = '#000';
+      const y = (O.eyes.y*charR - bounce) + spr.eyes.height*0.05;
+      ctx.beginPath();
+	  let dx = charR*1;
+	  let dy = -charR*1.1;
+      ctx.moveTo(-charR*1.5 + dx, y + dy); ctx.lineTo(- charR*0.7 + dx, y + dy);
+	  ctx.moveTo(-charR*0.0 + dx, y + dy); ctx.lineTo( charR*0.6 + dx, y + dy);
+      ctx.stroke();
+      ctx.restore();
+    }else{
+      drawFlip(spr.eyes,
+           O.eyes.x*charR,
+           O.eyes.y*charR - bounce,
+          spr.eyes.width, spr.eyes.height);
+    }
+  }
+
+  /* кепка с лёгким «подпрыгиванием» */
+  function drawCap(){
+    drawFlip(spr.cap,
+         O.cap.x*charR,
+         O.cap.y*charR - bounce*1.4,
+         spr.cap.width, spr.cap.height);
   }
 }
 
-/* — задняя (дальняя) рука без оружия — */
-function drawBackArm(legSwing){
-  ctx.save();
-  ctx.translate(-charR*0.2, charR*0.45);
-  ctx.rotate((-20 + legSwing * 25 / charR) * Math.PI/180);
-  ctx.fillStyle = '#ffd15c';
-  ctx.fillRect(0, -charR*0.1, charR*0.55, charR*0.2);
-  ctx.restore();
-}
-
-/* — передняя рука с топором — */
-function drawFrontArm(legSwing){
-  ctx.save();
-  ctx.translate(charR*0.5, charR*0.55);
-  ctx.rotate((15 + legSwing * 35 / charR) * Math.PI/180);
-  ctx.fillStyle = '#ffd15c';
-  ctx.fillRect(0, -charR*0.12, charR*0.65, charR*0.25);
-
-  /* топор */
-  ctx.fillStyle = '#8b5a2b';
-  ctx.fillRect(charR*0.65, -charR*0.05, charR*0.75, charR*0.1);      // рукоять
-  ctx.fillStyle = '#cfd8dc';
-  ctx.beginPath();
-  ctx.moveTo(charR*1.4, -charR*0.3);
-  ctx.lineTo(charR*1.7, 0);
-  ctx.lineTo(charR*1.4,  charR*0.3);
-  ctx.closePath(); ctx.fill();
-  ctx.restore();
-}
-
-/* — ноги: задняя + передняя — */
-function drawLegs(legSwing){
-  ctx.fillStyle = '#464a4d';
-  const legW = charR*0.22, legH = charR*0.9;
-
-  /* задняя нога (стоит почти прямо) */
-  ctx.fillRect(-legW/2 - charR*0 - legSwing/2, charR*1.6, legW, legH);
-
-  /* передняя нога с раскладкой */
-  ctx.save();
-  ctx.translate(charR*0.18 + legSwing/2, charR*1.6);
-  ctx.fillRect(-legW/2 + charR*0.15, 0, legW, legH);
-  ctx.restore();
-}
-
-/* — собрать героя — */
-function drawHero(anim){
-  const { isMoving, phase } = anim;
-  const legSwing = isMoving ? Math.sin(phase) * charR * 0.3 : 0;
-  const bounce   = (isMoving ? 0.10 : 0.04) * charR * Math.abs(Math.sin(phase));
-
-  ctx.save();
-  ctx.translate(pct2px(charXPct), pct2px(charYPct));
-
-  /* поднять рисунок на высоту стоп->0,0 */
-  ctx.translate(0, -footOffset);           // footOffset не масштабируется
-
-  /* масштаб + зеркалирование */
-  ctx.scale(facing * SCALE, SCALE);
-
-  /* слои от дальнего к ближнему */
-  drawLegs(legSwing);
-  drawBackArm(legSwing);
-  drawBody(bounce);
-  drawEyes();
-  drawFrontArm(legSwing);
-  drawCap(bounce);
-
-  ctx.restore();
-}
+/* ------------------------------------------------------------------ */
+/*                              Ц И К Л                               */
 /* ------------------------------------------------------------------ */
 
 function frame(){
   const state = JSON.parse(localStorage.getItem('heroState') || 'null');
   if (!state){ requestAnimationFrame(frame); return; }
 
-  /* позиция и направление приходят из heroAnimation.html */
   charXPct = state.charXPct;
   charYPct = state.charYPct;
   facing   = state.facing;
   const isMoving = state.isMoving;
 
-  /* локальный шаг + моргание */
   const now = performance.now();
   const dtMs = now - lastAnimT; lastAnimT = now;
   const dt = dtMs / 1000;
 
   phase += dt * (isMoving ? WALK_FREQ : IDLE_FREQ);
-  if (phase > Math.PI*2) phase -= Math.PI*2;
+  if(phase > Math.PI*2) phase -= Math.PI*2;
 
-  if (blinkTimer > 0){
+  /* моргание */
+  if(blinkTimer>0){
     blinkTimer -= dtMs;
   }else{
     nextBlink -= dtMs;
-    if (nextBlink <= 0){
+    if(nextBlink<=0){
       blinkTimer = BLINK_DUR;
       nextBlink  = 2000 + Math.random()*4000;
     }
   }
 
   ctx.clearRect(0,0,cw,ch);
-  drawHero({ isMoving, phase });
+  drawHero({isMoving, phase});
 
   requestAnimationFrame(frame);
 }
@@ -219,13 +291,17 @@ function resize(){
   cw = canvas.width  = innerWidth;
   ch = canvas.height = innerHeight;
   cell  = cw / GRID_W;
-  charR = pct2px(CHAR_R_PCT);              // радиус (без учёта SCALE)
-  footOffset = charR * 2;                // ~расстояние от стоп до 0,0
+  charR = pct2px(CHAR_R_PCT);
+  footOffset = charR * 2;
 }
+
 addEventListener('resize', resize);
 
-resize();
-requestAnimationFrame(frame);
+/* ---------- старт ---------- */
+loadSprites(()=>{
+  resize();
+  requestAnimationFrame(frame);
+});
 </script>
 </body>
 </html>
