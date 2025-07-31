@@ -24,15 +24,17 @@
     }
     #mapLayer        { z-index:0; display:none; }
     #layoutLayer     { z-index:1; }
-    #heroLayer       { z-index:2; background:transparent; }
-    #heroLogicLayer  { z-index:2; width:0; height:0; pointer-events:none; } /* логика, невидима */
-    #controllerLayer { z-index:3; background:transparent; }
+	#berriesLayer    { z-index:2; }
+    #heroLayer       { z-index:3; background:transparent; }
+    #heroLogicLayer  { z-index:3; width:0; height:0; pointer-events:none; } /* логика, невидима */
+    #controllerLayer { z-index:4; background:transparent; }
   </style>
 </head>
 <body>
   <div id="gameWrapper">
     <iframe id="mapLayer"        class="layer"></iframe>
     <iframe id="layoutLayer"     class="layer"></iframe>
+	<iframe id="berriesLayer"    class="layer"></iframe>
     <iframe id="heroLayer"       class="layer"></iframe>
     <iframe id="heroLogicLayer"  class="layer"></iframe>
     <iframe id="controllerLayer" class="layer"></iframe>
@@ -57,6 +59,7 @@
     mapFrame.src = 'map.html';
     mapFrame.onload = () => {
       document.getElementById('layoutLayer').src      = 'layout.html';
+	  document.getElementById('berriesLayer').src      = 'berries.html';
       document.getElementById('heroLayer').src        = 'heroAnimation.html';
       document.getElementById('heroLogicLayer').src   = 'hero.html';
       document.getElementById('controllerLayer').src  = 'controller.html';

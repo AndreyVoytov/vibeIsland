@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Berries</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+    canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
+  </style>
+</head>
+<body>
+<canvas id="berriesCanvas"></canvas>
+
+<script>
+/* ---------------- карта из localStorage ---------------- */
+const map = JSON.parse(localStorage.getItem('map') || '[]');
+const GRID_H = map.length;
+const GRID_W = map[0] ? map[0].length : 0;
+
+/* ---------------- канвас ---------------- */
+const canvas = document.getElementById('berriesCanvas');
+const ctx    = canvas.getContext('2d');
+
+let cw = 0, ch = 0;
+const pct2px = p => p * cw / 100;    // и X, и Y считаем из ширины — по ТЗ
+
+/* ---------------- настройки «ягод» ---------------- */
+/* Если URL содержит 'images' -> рисуем картинкой (вариант 2, с габаритами в px),
+   иначе — рисуем примитивом (вариант 1). */
+const BERRY_ASSET_URL = ''; // пример: 'images/berry.png' чтобы включить режим картинки
+
+/* Габариты спрайта в пикселях (используются только если выбрана картинка) */
+const SPRITE_W_PX = 48;
+const SPRITE_H_PX = 48;
+
+/* Размер круга (вариант с примитивом) — в процентах от ширины канваса */
+const BERRY_RADIUS_PCT = 1.2;
+
+/* Время анимации появления scale 0 → 1 (мс) */
+const POP_ANIM_MS = 300;
+
+/* Раз в секунду спавним ягоду */
+const SPAWN_MS = 1000;
+
+/* Чтобы не захламлять сцену, ограничим количество */
+const MAX_BERRIES = 200;
+
+/* ---------------- загрузка спрайта (опционально) ---------------- */
+const useImage = typeof BERRY_ASSET_URL === 'string' && BERRY_ASSET_URL.includes('images');
+const berryImg = useImage ? new Image() : null;
+let imgReady = !useImage;
+if (useImage){
+  berryImg.src = BERRY_ASSET_URL;
+  berryImg.onload = ()=> imgReady = true;
+}
+
+/* ---------------- подготовка списка проходимых клеток ---------------- */
+const landCells = [];
+for (let y = 0; y < GRID_H; y++){
+  for (let x = 0; x < GRID_W; x++){
+    if (map[y]?.[x]) landCells.push({x, y});
+  }
+}
+
+/* ---------------- сущности ---------------- */
+const berries = []; // { xPct, yPct, t0 }
+
+/* easeOutBack для приятного «пружинящего» появления */
+function easeOutBack(t){
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t-1, 3) + c1 * Math.pow(t-1, 2);
+}
+
+/* спавн ягоды на случайной клетке острова */
+function spawnBerry(){
+  if (!landCells.length) return;
+  const cell = landCells[Math.floor(Math.random() * landCells.length)];
+
+  /* центр клетки в процентах от ширины канваса */
+  const xPct = ((cell.x + 0.5) / GRID_W) * 100;
+  const yPct = ((cell.y + 0.5) / GRID_W) * 100; // Y тоже через ширину — по ТЗ
+
+  berries.push({ xPct, yPct, t0: performance.now() });
+  if (berries.length > MAX_BERRIES) berries.shift();
+}
+
+/* отрисовка одной ягоды */
+function drawBerry(b){
+  const now = performance.now();
+  const t = Math.min(1, (now - b.t0) / POP_ANIM_MS);
+  const s = easeOutBack(t);
+
+  const x = pct2px(b.xPct);
+  const y = pct2px(b.yPct);
+
+  if (useImage && imgReady){
+    const w = SPRITE_W_PX * s;
+    const h = SPRITE_H_PX * s;
+    /* вариант 2: картинка с габаритами в пикселях */
+    ctx.drawImage(berryImg, x - w/2, y - h/2, w, h);
+  } else {
+    /* вариант 1: примитив — красный круг */
+    const r = pct2px(BERRY_RADIUS_PCT) * s;
+    ctx.save();
+    ctx.fillStyle = '#e11';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    /* маленький блик для выразительности */
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(x - r*0.35, y - r*0.35, r*0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* рендер-цикл */
+function frame(){
+  ctx.clearRect(0, 0, cw, ch);
+  for (const b of berries) drawBerry(b);
+  requestAnimationFrame(frame);
+}
+
+/* ресайз */
+function resize(){
+  cw = canvas.width  = innerWidth;
+  ch = canvas.height = innerHeight;
+}
+addEventListener('resize', resize);
+
+/* старт */
+resize();
+requestAnimationFrame(frame);
+setInterval(spawnBerry, SPAWN_MS);
+</script>
+</body>
+</html>
