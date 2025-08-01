@@ -1,309 +1,294 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-  <title>Berries (burst + scatter + throttled pickup)</title>
-  <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
-    canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Berries (stable logs + fixed dead-condition)</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;}
+  canvas{display:block;position:absolute;top:0;left:0;touch-action:none}
+</style>
 </head>
 <body>
 <canvas id="berriesCanvas"></canvas>
-
 <script>
-/* ==================== Карта и герой ==================== */
-const map = JSON.parse(localStorage.getItem('map') || '[]');
-const GRID_H = map.length;
-const GRID_W = map[0] ? map[0].length : 0;
+/* ──────────────────── Настройки ассетов ──────────────────── */
+const BUSH_ASSET_URL  = '';           // 'images/bush.png' — чтобы рисовать картинкой
+const BERRY_ASSET_URL = '';
+const LEAF_ASSET_URL  = '';
 
-function getHero(){
-  return JSON.parse(localStorage.getItem('heroState') || '{"charXPct":50,"charYPct":50,"facing":1,"isMoving":false}');
-}
-
-/* ==================== Канвас ==================== */
-const canvas = document.getElementById('berriesCanvas');
-const ctx = canvas.getContext('2d');
-let cw=0,ch=0;
-const pct2px = p => p * cw / 100; // и X, и Y — из ширины
-function resize(){ cw=canvas.width=innerWidth; ch=canvas.height=innerHeight; }
-addEventListener('resize', resize); resize();
-
-/* ==================== Ассеты и режим рисования ==================== */
-const BUSH_ASSET_URL  = '';  // напр.: 'images/bush.png'
-const BERRY_ASSET_URL = '';  // напр.: 'images/berry.png'
-const LEAF_ASSET_URL  = '';  // напр.: 'images/leaf.png'
-
-const BUSH_PX_W=120, BUSH_PX_H=100;
-const BERRY_PX_W=24,  BERRY_PX_H=24;
-const LEAF_PX_W=22,   LEAF_PX_H=14;
-
-const useBushImg  = (BUSH_ASSET_URL  + '').includes('images');
-const useBerryImg = (BERRY_ASSET_URL + '').includes('images');
-const useLeafImg  = (LEAF_ASSET_URL  + '').includes('images');
+const useBushImg  = BUSH_ASSET_URL .includes('images');
+const useBerryImg = BERRY_ASSET_URL.includes('images');
+const useLeafImg  = LEAF_ASSET_URL .includes('images');
 
 const bushImg  = useBushImg  ? new Image() : null;
 const berryImg = useBerryImg ? new Image() : null;
 const leafImg  = useLeafImg  ? new Image() : null;
+if (bushImg ) bushImg .src = BUSH_ASSET_URL ;
+if (berryImg) berryImg.src = BERRY_ASSET_URL;
+if (leafImg ) leafImg .src = LEAF_ASSET_URL ;
 
-let bushImgOk=true, berryImgOk=true, leafImgOk=true;
-if (bushImg){  bushImgOk=false;  bushImg.src=BUSH_ASSET_URL;  bushImg.onload=()=>bushImgOk=true; }
-if (berryImg){ berryImgOk=false; berryImg.src=BERRY_ASSET_URL; berryImg.onload=()=>berryImgOk=true; }
-if (leafImg){  leafImgOk=false;  leafImg.src=LEAF_ASSET_URL;  leafImg.onload=()=>leafImgOk=true; }
+/* ──────────────────── Константы баланса ──────────────────── */
+const SPAWN_MS         = 1000;  // один куст в секунду
+const BURST_R_PCT      = 12;    // радиус уничтожения куста
+const PICK_R_PCT       = 8;     // радиус подбора ягоды
+const PICK_COOLDOWN_MS = 1;   // ≥ 0.25 с между пикапами
 
-/* ==================== Параметры геймплея ==================== */
-const SPAWN_ONE_EVERY_MS = 1000;   // 1 куст/сек
-const MAX_BUSHES         = 400;
+const BUSH_GROW_MS    = 1000;
+const BERRIES_GROW_MS = 100;
+const BERRIES_MIN_MAX = [6,9];
 
-const BUSH_GROW_MS     = 1000;
-const BERRIES_GROW_MS  = 100;
-const BERRIES_PER_BUSH = [6,9];
+const SCATTER_MIN_PCT = 3.0;
+const SCATTER_MAX_PCT = 7.5;
+const BERRY_FLY_MS    = 600;
 
-const BURST_TRIGGER_RADIUS_PCT = 10.0; // ↑ больше радиус срабатывания
-const SCATTER_MIN_PCT = 2.2;           // куда улетают ягоды
-const SCATTER_MAX_PCT = 5.0;
-const FLY_TIME_MS     = 520;           // длительность полёта ягод
-const LEAFS_COUNT     = 18;
-const LEAF_LIFE_MS    = 520;
+const LEAF_COUNT    = 28;
+const LEAF_LIFE_MS  = 700;
+const LEAF_SPD_MIN  = 6;
+const LEAF_SPD_MAX  = 10;
 
-const BERRY_RADIUS_PCT = 1.2;
-const BUSH_RADIUS_PCT  = 3.7;
-const PICK_DIST_PCT    = 1.6;
-const PICKUP_COOLDOWN_MS = 120;
+const BERRY_R_PCT = 1.2;
+const BUSH_R_PCT  = 3.7;
 
-/* ==================== Утилиты ==================== */
-const rnd=(a,b)=>a+Math.random()*(b-a);
+/* ──────────────────── Утилиты ─────────────────────────────── */
+const rnd =(a,b)=>a+Math.random()*(b-a);
 const rndi=(a,b)=>Math.floor(rnd(a,b+1));
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-function easeOutBack(t){const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);}
-function easeOutCubic(t){return 1 - Math.pow(1 - t, 3);}
-function angle2vec(a){return {x:Math.cos(a),y:Math.sin(a)};}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const vec  = a=>({x:Math.cos(a), y:Math.sin(a)});
+const outBack = t=>{ const c1=1.70158,c3=c1+1; return 1+c3*(t-1)**3+c1*(t-1)**2; };
+const outCub  = t=>1-(1-t)**3;
 
-/* ==================== Геометрия карты ==================== */
+/* ──────────────────── Карта и «Герой» ─────────────────────── */
+const map = JSON.parse(localStorage.getItem('map') || '[]');
+const GRID_W = map[0]?.length || 0;
+function getHero(){
+  return JSON.parse(localStorage.getItem('heroState')
+    || '{"charXPct":50,"charYPct":50,"facing":1,"isMoving":false}');
+}
+
+/* ──────────────────── Канвас ──────────────────────────────── */
+const cvs = document.getElementById('berriesCanvas');
+const ctx = cvs.getContext('2d');
+let cw=0,ch=0; const pct2px = p=>p*cw/100;
+function onResize(){ cw=cvs.width=innerWidth; ch=cvs.height=innerHeight; }
+addEventListener('resize',onResize); onResize();
+
+/* ──────────────────── Геометрия карты ─────────────────────── */
 const landCells=[];
-for(let y=0;y<GRID_H;y++) for(let x=0;x<GRID_W;x++) if(map[y]?.[x]) landCells.push({x,y});
-const cellSizePct = 100/GRID_W;
-const cellCenterPct = (x,y)=>({xPct:(x+0.5)*cellSizePct, yPct:(y+0.5)*cellSizePct});
+map.forEach((row,y)=>row.forEach((cell,x)=>cell&&landCells.push({x,y})));
+const cellPct = 100/GRID_W;
+const center  = (x,y)=>({xPct:(x+0.5)*cellPct, yPct:(y+0.5)*cellPct});
 
-/* ==================== Сущности ==================== */
-// stage: 'growing' -> 'ripe' -> 'exploded' -> 'dead'
-const bushes=[];            // [{gridX,gridY,xPct,yPct,stage,t0,scale,berries[],leafs[]}]
-const busyCells=new Set();  // "x,y" занята кустом
+/* ──────────────────── Сущности ────────────────────────────── */
+const bushes = [];
+const busy   = new Set();          // "x,y" клетка занята
 
-function makeBerry(onBush,xPct,yPct){
-  return {
-    onBush, xPct, yPct,
-    t0:performance.now(), scale:0,
-    // параметры полёта к целевой точке
-    flying:false, x0:xPct, y0:yPct, tx:xPct, ty:yPct, tFly0:0, flyDur:FLY_TIME_MS,
-    alive:true
-  };
+function mkBerry(onBush,xPct,yPct){
+  return { onBush, xPct, yPct, scale:0, alive:true,
+           x0:xPct, y0:yPct, tx:xPct, ty:yPct,
+           flying:false, tFly0:0, flyDur:BERRY_FLY_MS,
+           t0:performance.now() };
 }
-function makeLeaf(xPct,yPct){
-  const a=rnd(0,Math.PI*2), v=angle2vec(a), spd=rnd(3.0,6.0); // %/с — ощутимо
-  return {
-    xPct, yPct,
-    vxPct:v.x*spd, vyPct:v.y*spd,
-    rot:rnd(0,Math.PI*2), angVel:rnd(-6,6)*(Math.PI/180), // рад/кадр
-    t0:performance.now(), life:LEAF_LIFE_MS
-  };
+function mkLeaf(xPct,yPct){
+  const a=rnd(0,Math.PI*2), v=vec(a), spd=rnd(LEAF_SPD_MIN,LEAF_SPD_MAX);
+  return { xPct, yPct, vxPct:v.x*spd, vyPct:v.y*spd,
+           rot:rnd(0,Math.PI*2), angVel:rnd(-10,10)*(Math.PI/180),
+           t0:performance.now() };
 }
 
-/* ==================== Спавним ровно 1 куст/сек ==================== */
-function spawnOneBush(){
-  if (bushes.length>=MAX_BUSHES || !landCells.length) return;
-  for (let tries=0; tries<30; tries++){
-    const c = landCells[Math.floor(Math.random()*landCells.length)];
-    const key = c.x+','+c.y;
-    if (!busyCells.has(key)){
-      const {xPct,yPct} = cellCenterPct(c.x,c.y);
-      busyCells.add(key);
-      bushes.push({gridX:c.x,gridY:c.y,xPct,yPct,stage:'growing',t0:performance.now(),scale:0,berries:[],leafs:[]});
-      break;
-    }
+/* ──────────────────── Спавн кустов ────────────────────────── */
+setInterval(()=>{
+  if (!landCells.length) return;
+  for(let i=0;i<30;i++){
+    const c = landCells[Math.random()*landCells.length|0];
+    const key = `${c.x},${c.y}`;
+    if (busy.has(key)) continue;
+    busy.add(key);
+    bushes.push({
+      gridX:c.x, gridY:c.y, ...center(c.x,c.y),
+      stage:'growing', t0:performance.now(), scale:0,
+      berries:[], leafs:[]
+    });
+    break;
   }
-}
-setInterval(spawnOneBush, SPAWN_ONE_EVERY_MS);
+}, SPAWN_MS);
 
-/* ==================== Логика куста ==================== */
+/* ──────────────────── Переменные логирования ──────────────── */
+let lastHeroXPct=null, lastHeroYPct=null;
+const HERO_EPS = 0.005;            // 0.005 % – считаем «сдвинулся»
+let lastPickupMs = 0;
+
+/* ──────────────────── Логика кустов ───────────────────────── */
 function updateBush(b){
-  const now=performance.now();
-
+  const now = performance.now();
+  /* growing */
   if (b.stage==='growing'){
-    const t=clamp((now-b.t0)/BUSH_GROW_MS,0,1);
-    b.scale=easeOutBack(t);
-    if(t>=1){
-      b.stage='ripe';
-      // подготовим ягоды на кусте
-      const count=rndi(BERRIES_PER_BUSH[0],BERRIES_PER_BUSH[1]);
-      b.berries.length=0;
-      for(let i=0;i<count;i++){
-        const ang=rnd(0,Math.PI*2), r=rnd(0.3,0.8)*BUSH_RADIUS_PCT, o=angle2vec(ang);
-        const be=makeBerry(true, b.xPct+o.x*r, b.yPct+o.y*r);
-        be.birthLen=BERRIES_GROW_MS;
-        b.berries.push(be);
+    b.scale = outBack(clamp((now-b.t0)/BUSH_GROW_MS,0,1));
+    if (b.scale >= 1){
+      b.stage = 'ripe';
+      const n = rndi(...BERRIES_MIN_MAX);
+      for (let i=0;i<n;i++){
+        const a=rnd(0,Math.PI*2), r=rnd(0.3,0.8)*BUSH_R_PCT, v=vec(a);
+        const berr = mkBerry(true, b.xPct+v.x*r, b.yPct+v.y*r);
+        berr.birthLen = BERRIES_GROW_MS;
+        b.berries.push(berr);
       }
     }
     return;
   }
 
+  /* ripe */
   if (b.stage==='ripe'){
-    // рост ягод
-    for (const be of b.berries){
-      const t=clamp((now-be.t0)/be.birthLen,0,1);
-      be.scale=t;
-    }
-    // триггер разрушения
-    const hero=getHero();
-    const dist=Math.hypot(pct2px(hero.charXPct-b.xPct), pct2px(hero.charYPct-b.yPct));
-    if (dist<=pct2px(BURST_TRIGGER_RADIUS_PCT)){
-      // всплеск листьев
-      for(let i=0;i<LEAFS_COUNT;i++) b.leafs.push(makeLeaf(b.xPct,b.yPct));
-      // разлёт ягод: задаём целевые точки
-      const nowT = performance.now();
-      for (const be of b.berries){
-        const a = rnd(0,Math.PI*2);
-        const d = rnd(SCATTER_MIN_PCT, SCATTER_MAX_PCT);
-        const dir = angle2vec(a);
-        be.x0 = be.xPct; be.y0 = be.yPct;
-        be.tx = b.xPct + dir.x*d;
-        be.ty = b.yPct + dir.y*d;
-        be.tFly0 = nowT; be.flyDur = FLY_TIME_MS;
-        be.flying = true; be.onBush = false; be.scale = 1;
-      }
-      // куст больше не рисуем, но он живёт пока есть частицы/ягоды
-      b.stage='exploded';
-      busyCells.delete(b.gridX+','+b.gridY);
+    b.berries.forEach(be=>{
+      be.scale = clamp((now-be.t0)/be.birthLen,0,1);
+    });
+    const h = getHero();
+    const dist = Math.hypot(pct2px(h.charXPct-b.xPct), pct2px(h.charYPct-b.yPct));
+    if (dist <= pct2px(BURST_R_PCT)){
+      for (let i=0;i<LEAF_COUNT;i++) b.leafs.push(mkLeaf(b.xPct,b.yPct));
+      const tNow = performance.now();
+      b.berries.forEach(be=>{
+        const a=rnd(0,Math.PI*2), d=rnd(SCATTER_MIN_PCT,SCATTER_MAX_PCT), v=vec(a);
+        Object.assign(be,{
+          x0:be.xPct, y0:be.yPct,
+          tx:b.xPct+v.x*d, ty:b.yPct+v.y*d,
+          flying:true, tFly0:tNow, flyDur:BERRY_FLY_MS,
+          onBush:false, scale:1
+        });
+      });
+      b.stage = 'exploded';
+      busy.delete(`${b.gridX},${b.gridY}`);
     }
     return;
   }
 
+  /* exploded */
   if (b.stage==='exploded'){
-    // листья: движение, вращение и угасание
     b.leafs = b.leafs.filter(l=>{
-      const dt = 1/60;
+      const dt=1/60;
       l.xPct += l.vxPct*dt;
       l.yPct += l.vyPct*dt;
       l.rot  += l.angVel;
-      return (performance.now()-l.t0) < l.life;
+      return performance.now()-l.t0 < LEAF_LIFE_MS;
     });
-
-    // ягоды: интерполяция к цели
-    for (const be of b.berries){
-      if (!be.alive || !be.flying) continue;
-      const u = clamp((now - be.tFly0)/be.flyDur, 0, 1);
-      const k = easeOutCubic(u);
-      be.xPct = be.x0 + (be.tx - be.x0)*k;
-      be.yPct = be.y0 + (be.ty - be.y0)*k;
-      if (u>=1) be.flying = false; // после этого можно подбирать
-    }
-
-    // когда всё стихло — куст «умирает»
-    if (b.leafs.length===0 && !b.berries.some(be=>be.flying)) b.stage='dead';
+    b.berries.forEach(be=>{
+      if (!be.flying) return;
+      const k = outCub(clamp((now-be.tFly0)/be.flyDur,0,1));
+      be.xPct = be.x0+(be.tx-be.x0)*k;
+      be.yPct = be.y0+(be.ty-be.y0)*k;
+      if (k >= 1) be.flying = false;
+    });
+    /*     FIX – удаляем куст только когда все ягоды ПОДОБРАНЫ */
+    if (!b.leafs.length && b.berries.every(be=>!be.alive)) b.stage='dead';
   }
 }
 
-/* ==================== Подбор ягод (после полёта, с троттлингом) ==================== */
-let lastPickupMs = 0;
+/* ──────────────────── Подбор ягод + логи ─────────────────── */
 function collectLoop(){
-  const now = performance.now();
-  if (now - lastPickupMs < PICKUP_COOLDOWN_MS) return; // не чаще 1/120мс
+  const now  = performance.now();
+  const hero = getHero();
+  const hxPct = hero.charXPct, hyPct = hero.charYPct;
+  const hx = pct2px(hxPct),   hy = pct2px(hyPct);
 
-  const hero=getHero();
-  const hx=pct2px(hero.charXPct), hy=pct2px(hero.charYPct);
-  let collected = parseInt(localStorage.getItem('berriesCollected')||'0',10);
-
-  for (const b of bushes){
-    for (const be of b.berries){
-      if (!be.alive || be.onBush || be.flying) continue;
-      const dx=pct2px(be.xPct)-hx, dy=pct2px(be.yPct)-hy;
-      if (Math.hypot(dx,dy) <= pct2px(PICK_DIST_PCT)){
-        be.alive=false; collected+=1;
-        lastPickupMs = now; // подобрали ровно одну, выйдем на этом кадре
-        localStorage.setItem('berriesCollected', String(collected));
-        return;
-      }
-    }
+  /* лог координат героя только при движении */
+  if ( lastHeroXPct===null || lastHeroYPct===null ||
+       Math.abs(hxPct-lastHeroXPct) > HERO_EPS ||
+       Math.abs(hyPct-lastHeroYPct) > HERO_EPS ){
+    console.log(`[berries] hero %(${hxPct.toFixed(2)}%,${hyPct.toFixed(2)}%)`);
+    lastHeroXPct = hxPct; lastHeroYPct = hyPct;
   }
-  localStorage.setItem('berriesCollected', String(collected));
+
+  /* собираем все доступные ягоды вокруг */
+  const candidates = [];
+  bushes.forEach(b=>b.berries.forEach(be=>{
+    if (be.alive && !be.onBush && !be.flying){
+      const dist = Math.hypot(pct2px(be.xPct)-hx, pct2px(be.yPct)-hy);
+      if (dist <= pct2px(PICK_R_PCT)) candidates.push({be, dist});
+    }
+  }));
+  if (!candidates.length) return;
+
+  candidates.sort((a,b)=>a.dist-b.dist);
+  const {be, dist} = candidates[0];
+
+  if (now - lastPickupMs < PICK_COOLDOWN_MS) return;  // кулдаун
+
+  be.alive = false;                                    // собрали ягоду
+  lastPickupMs = now;
+
+  const total = (+localStorage.getItem('berriesCollected') || 0) + 1;
+  localStorage.setItem('berriesCollected', total);
+
+  console.log(`[berries] PICKED at %(${be.xPct.toFixed(2)}%,${be.yPct.toFixed(2)}%) `
+    +`dPx=${dist.toFixed(1)} total=${total}`);
 }
 
-/* ==================== Рендер ==================== */
+/* ──────────────────── Рендер ─────────────────────────────── */
 function drawBush(b){
   if (b.stage==='exploded' || b.stage==='dead') return;
   const s = b.stage==='growing' ? b.scale : 1;
-  if (useBushImg && bushImgOk){
-    const w=BUSH_PX_W*s, h=BUSH_PX_H*s;
-    ctx.drawImage(bushImg, pct2px(b.xPct)-w/2, pct2px(b.yPct)-h/2, w, h);
-  } else {
-    const r=pct2px(BUSH_RADIUS_PCT)*s;
+  if (useBushImg && bushImg.complete){
+    ctx.drawImage(bushImg,
+      pct2px(b.xPct)-60*s, pct2px(b.yPct)-50*s, 120*s, 100*s);
+  }else{
+    const r = pct2px(BUSH_R_PCT)*s;
     ctx.save();
     ctx.fillStyle='#145c2b';
     ctx.beginPath(); ctx.arc(pct2px(b.xPct), pct2px(b.yPct), r, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle='#197c3a';
-    ctx.beginPath(); ctx.arc(pct2px(b.xPct)-r*0.3, pct2px(b.yPct)-r*0.2, r*0.8, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(pct2px(b.xPct)+r*0.35, pct2px(b.yPct)-r*0.1, r*0.75, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pct2px(b.xPct)-0.3*r, pct2px(b.yPct)-0.2*r, 0.8*r, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pct2px(b.xPct)+0.35*r, pct2px(b.yPct)-0.1*r, 0.75*r,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
 }
-
 function drawBerry(be){
   const s = be.onBush ? be.scale : 1;
-  if (useBerryImg && berryImgOk){
-    const w=BERRY_PX_W*s, h=BERRY_PX_H*s;
-    ctx.drawImage(berryImg, pct2px(be.xPct)-w/2, pct2px(be.yPct)-h/2, w, h);
-  } else {
-    const r=pct2px(BERRY_RADIUS_PCT)*s;
+  if (useBerryImg && berryImg.complete){
+    ctx.drawImage(berryImg,
+      pct2px(be.xPct)-12*s, pct2px(be.yPct)-12*s, 24*s, 24*s);
+  }else{
+    const r = pct2px(BERRY_R_PCT)*s;
     ctx.save();
     ctx.fillStyle='#e11';
     ctx.beginPath(); ctx.arc(pct2px(be.xPct), pct2px(be.yPct), r, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle='rgba(255,255,255,0.6)';
-    ctx.beginPath(); ctx.arc(pct2px(be.xPct)-r*0.35, pct2px(be.yPct)-r*0.35, r*0.25, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pct2px(be.xPct)-0.35*r, pct2px(be.yPct)-0.35*r, 0.25*r, 0,
+      Math.PI*2); ctx.fill();
     ctx.restore();
   }
 }
-
 function drawLeaf(l){
-  const lifeT=(performance.now()-l.t0)/LEAF_LIFE_MS;
-  const alpha=clamp(1-lifeT,0,1);
-  if (useLeafImg && leafImgOk){
-    const w=LEAF_PX_W, h=LEAF_PX_H;
+  const alpha = clamp(1-(performance.now()-l.t0)/LEAF_LIFE_MS,0,1);
+  if (useLeafImg && leafImg.complete){
+    ctx.save(); ctx.globalAlpha = alpha;
+    ctx.translate(pct2px(l.xPct), pct2px(l.yPct)); ctx.rotate(l.rot);
+    ctx.drawImage(leafImg, -14, -9, 28, 18); ctx.restore();
+  }else{
+    const w=pct2px(2), h=pct2px(1);
     ctx.save(); ctx.globalAlpha=alpha;
-    ctx.translate(pct2px(l.xPct), pct2px(l.yPct));
-    ctx.rotate(l.rot);
-    ctx.drawImage(leafImg,-w/2,-h/2,w,h);
-    ctx.restore();
-  } else {
-    // примитив: «лист» (ромб), крупнее прежнего
-    const w=pct2px(1.4), h=pct2px(0.8);
-    ctx.save(); ctx.globalAlpha=alpha;
-    ctx.translate(pct2px(l.xPct), pct2px(l.yPct));
-    ctx.rotate(l.rot);
+    ctx.translate(pct2px(l.xPct), pct2px(l.yPct)); ctx.rotate(l.rot);
     ctx.fillStyle='#1d8f46';
-    ctx.beginPath();
-    ctx.moveTo(-w/2,0); ctx.lineTo(0,-h/2); ctx.lineTo(w/2,0); ctx.lineTo(0,h/2);
-    ctx.closePath(); ctx.fill();
-    ctx.restore();
+    ctx.beginPath(); ctx.moveTo(-w/2,0); ctx.lineTo(0,-h/2); ctx.lineTo(w/2,0); ctx.lineTo(0,h/2);
+    ctx.closePath(); ctx.fill(); ctx.restore();
   }
 }
 
-/* ==================== Цикл ==================== */
-function updateAll(){
-  for (const b of bushes){ if (b.stage!=='dead') updateBush(b); }
+/* ──────────────────── Главный цикл ───────────────────────── */
+function frame(){
+  bushes.forEach(b=>b.stage!=='dead' && updateBush(b));
   for (let i=bushes.length-1;i>=0;i--) if (bushes[i].stage==='dead') bushes.splice(i,1);
   collectLoop();
-}
-function renderAll(){
+
   ctx.clearRect(0,0,cw,ch);
-  for (const b of bushes){
+  bushes.forEach(b=>{
     drawBush(b);
-    for (const lf of b.leafs) drawLeaf(lf);
-    for (const be of b.berries) if (be.alive) drawBerry(be);
-  }
+    b.leafs.forEach(drawLeaf);
+    b.berries.forEach(be=>be.alive && drawBerry(be));
+  });
+
+  requestAnimationFrame(frame);
 }
-function frame(){ updateAll(); renderAll(); requestAnimationFrame(frame); }
-requestAnimationFrame(frame);
+frame();
 </script>
 </body>
 </html>
