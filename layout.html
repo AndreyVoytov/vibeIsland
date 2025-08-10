@@ -31,14 +31,14 @@ function pct2px(p){ return p*cw/100; }
 const SHADOW_ASSET_URL = ''; // e.g. './images/island_shadow.png' — if contains 'images', image will be used
 const SHADOW_COLOR = 'rgb(12, 32, 92)';
 const SHADOW_OPACITY = 0.35;
-const SHADOW_PADDING_X = 0.05;
+const SHADOW_PADDING_X = 0.04;
 const SHADOW_PADDING_Y = 0.09;
-const SHADOW_OFFSET_Y = 0.01;
-const SHADOW_RADIUS   = 0.05;
+const SHADOW_OFFSET_Y = 0.015;
+const SHADOW_RADIUS   = 0.02;
 // === end config ===
 
 // === Tile image (optional) ===
-const TILE_ASSET_URL = ''; // e.g. './images/tile.png' — if contains 'images', image will be used
+const TILE_ASSET_URL = './img/tiles/1.png'; // e.g. './images/tile.png' — if contains 'images', image will be used
 const TILE_IMG_OPACITY = 1.0;
 const TILE_IMG_ROUNDED = true; // clip to rounded rect same as primitive tiles
 // === end config ===
@@ -230,7 +230,7 @@ function drawIsland(cam){
     ctx.fill();
   }
 
-  const useTileImg = (typeof TILE_ASSET_URL==='string') && TILE_ASSET_URL.includes('images');
+  const useTileImg = (typeof TILE_ASSET_URL==='string') && TILE_ASSET_URL.includes('img');
   if(useTileImg){
     // рисуем изображение на каждом тайле с клипом по скруглённому прямоугольнику
     const img = drawIsland._tileImg || (drawIsland._tileImg = new Image());
@@ -244,11 +244,11 @@ function drawIsland(cam){
       ctx.globalAlpha = TILE_IMG_OPACITY;
       if(TILE_IMG_ROUNDED && ctx.roundRect){
         ctx.beginPath();
-        ctx.roundRect(sx, sy, ww, hh, radius);
+        ctx.roundRect(sx, sy, ww, hh + 10, radius);
         ctx.clip();
       }
       if(img.complete && img.naturalWidth>0){
-        ctx.drawImage(img, sx, sy, ww, hh);
+        ctx.drawImage(img, sx, sy, ww, hh + 10);
       }else{
         // заглушка пока картинка грузится
         ctx.fillStyle = '#2fb84b';
