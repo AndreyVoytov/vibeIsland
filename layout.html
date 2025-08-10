@@ -14,62 +14,222 @@
 <canvas id="mapCanvas"></canvas>
 
 <script>
-
-/* карта уже лежит в localStorage */
 const map = JSON.parse(localStorage.getItem('map') || '[]');
-const GRID_H = map.length;                // 36
+const GRID_H = map.length;
 const GRID_W = map[0] ? map[0].length : 0;
+const H_PCT = (GRID_H/GRID_W) * 100;
 
-/* ——— canvas ——— */
+function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
+
+/* canvas */
 const canvas = document.getElementById('mapCanvas');
 const ctx    = canvas.getContext('2d');
+let cw=0, ch=0;
+function pct2px(p){ return p*cw/100; }
 
-/* %W → px */
-const pctX = (p,w)=>p*w;
+// === Shadow under island: config ===
+const SHADOW_ASSET_URL = ''; // e.g. './images/island_shadow.png' — if contains 'images', image will be used
+const SHADOW_COLOR = 'rgb(12, 32, 92)';
+const SHADOW_OPACITY = 0.35;
+const SHADOW_PADDING_X = 0.05;
+const SHADOW_PADDING_Y = 0.09;
+const SHADOW_OFFSET_Y = 0.01;
+const SHADOW_RADIUS   = 0.05;
+// === end config ===
 
-/* ——— рисуем остров ——— */
-function drawIsland(w,h){
-  /* море */
-  ctx.fillStyle='#1e6fff';
-  ctx.fillRect(0,0,w,h);
+/* SHARKS */
+const sharks = [];
+const SHARK_N = 5;
+const SHARK_SPEED = 5 / 1000; // % ширины в мс
+for (let i=0;i<SHARK_N;i++){
+  sharks.push({ xPct: Math.random()*100, yBase: 10 + Math.random()*(H_PCT-20), dir: Math.random()<0.5 ? -1 : 1, amp: 1 + Math.random()*1.5, phase: Math.random()*Math.PI*2 });
+}
 
-  const cell   = w/GRID_W;
-  const radius = cell*0.15;
-  const shadow = cell*0.25;
+/* море */
+function drawSea(){ ctx.fillStyle='#1e6fff'; ctx.fillRect(0,0,cw,ch); }
 
-  /* тень */
-  ctx.fillStyle='rgba(0,0,0,0.18)';
-  for(let y=0;y<GRID_H;y++){
-    for(let x=0;x<GRID_W;x++){
-      if(map[y]?.[x]){
-        ctx.beginPath();
-        ctx.roundRect(x*cell,(y*cell)+shadow,cell,cell,radius);
-        ctx.fill();
-      }
+/* большая «тень» под островом (замена: глубокий тёмно-синий скруглённый прямоугольник)
+   * Можно заменить на картинку, указав URL (если содержит 'images', будет использовано изображение).
+   */
+
+function drawIslandUnderShadow(cam){
+  // Find island bounding box in canvas space
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  const cell = cw/GRID_W;
+  for(let y=0;y<GRID_H;y++) for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
+    minX=Math.min(minX,x*cell); minY=Math.min(minY,y*cell);
+    maxX=Math.max(maxX,(x+1)*cell); maxY=Math.max(maxY,(y+1)*cell);
+  }
+  if(!isFinite(minX)) return;
+
+  const w=maxX-minX, h=maxY-minY;
+  const padX = w*SHADOW_PADDING_X, padY = h*SHADOW_PADDING_Y;
+  const x = minX - padX;
+  const y = minY - padY*0.5 + h * SHADOW_OFFSET_Y;
+  const ww = w + padX*2;
+  const hh = h + padY;
+  const radius = Math.min(ww,hh) * SHADOW_RADIUS;
+
+  const useShadowImg = (typeof SHADOW_ASSET_URL==='string') && SHADOW_ASSET_URL.includes('images');
+  ctx.save();
+  ctx.translate(-cam.x, -cam.y);
+
+  if(useShadowImg){
+    const img = drawIslandUnderShadow._img || (drawIslandUnderShadow._img = new Image());
+    if(!img.src) img.src = SHADOW_ASSET_URL;
+    if(img.complete && img.naturalWidth>0){
+      ctx.drawImage(img, x, y, ww, hh);
+    }else{
+      ctx.globalAlpha = SHADOW_OPACITY*0.5;
+      ctx.fillStyle = SHADOW_COLOR;
+      if (ctx.roundRect){ ctx.beginPath(); ctx.roundRect(x,y,ww,hh, radius); ctx.fill(); }
+      else { ctx.beginPath(); ctx.ellipse(x+ww/2,y+hh/2,ww*0.5,hh*0.5,0,0,Math.PI*2); ctx.fill(); }
+    }
+  }else{
+    ctx.globalAlpha = SHADOW_OPACITY;
+    ctx.fillStyle = SHADOW_COLOR;
+    if (ctx.roundRect){
+      ctx.beginPath();
+      ctx.roundRect(x, y, ww, hh, radius);
+      ctx.fill();
+    }else{
+      ctx.beginPath();
+      ctx.ellipse(x+ww/2, y+hh*0.5, ww*0.5, hh*0.5, 0, 0, Math.PI*2);
+      ctx.fill();
     }
   }
 
-  /* земля */
+  ctx.restore();
+}
+
+/* акулы */
+function updateSharks(dt){ sharks.forEach(s=>{ s.xPct += s.dir*SHARK_SPEED*dt; if(s.xPct<-5){s.xPct=-5; s.dir=1;} if(s.xPct>105){s.xPct=105; s.dir=-1;} s.phase += dt*0.003; }); }
+function drawSharks(cam){
+  ctx.save(); ctx.translate(-cam.x,-cam.y);
+  sharks.forEach(s=>{
+    const yPct = s.yBase + Math.sin(s.phase)*s.amp;
+    const x = pct2px(s.xPct), y = pct2px(yPct);
+    // пена
+    ctx.save(); ctx.globalAlpha=0.5; ctx.beginPath(); ctx.ellipse(x, y+4, 16, 6, 0, 0, Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.restore();
+    // плавник
+    ctx.save(); ctx.translate(x,y); if(s.dir<0) ctx.scale(-1,1);
+    ctx.beginPath(); ctx.moveTo(-10,6); ctx.lineTo(0,-16); ctx.lineTo(10,6); ctx.closePath(); ctx.fillStyle='#0a2a66'; ctx.fill(); ctx.restore();
+  });
+  ctx.restore();
+}
+
+/* остров: перекрывающиеся тайлы + «срез» */
+function drawIsland(cam){
+  const cell = cw/GRID_W, radius = cell*0.22, overlap = cell*0.12;
+
+  ctx.save(); ctx.translate(-cam.x,-cam.y);
+
+  // мягкая тень каждого тайла (стала чуть мягче и круглее)
+  ctx.fillStyle='rgba(0,0,0,0.16)';
+  for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(x*cell - overlap/2, (y*cell)+cell*0.24 - overlap/2, cell+overlap, cell+overlap, radius);
+    else { ctx.rect(x*cell - overlap/2, (y*cell)+cell*0.24 - overlap/2, cell+overlap, cell+overlap); }
+    ctx.fill();
+  }
+
+  // верхняя поверхность — зелёная трава
   ctx.fillStyle='#2fb84b';
-  for(let y=0;y<GRID_H;y++){
-    for(let x=0;x<GRID_W;x++){
-      if(map[y]?.[x]){
-        ctx.beginPath();
-        ctx.roundRect(x*cell,y*cell,cell,cell,radius);
-        ctx.fill();
+  for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(x*cell - overlap/2, y*cell - overlap/2, cell+overlap, cell+overlap, radius);
+    else { ctx.rect(x*cell - overlap/2, y*cell - overlap/2, cell+overlap, cell+overlap); }
+    ctx.fill();
+  }
+
+  // Детальный «срез»: тёмно-зелёная кромка, затем зелёная кромка, затем коричневая земля и тонкая белая пена
+  const dkG = '#1f8a3a';  // тёмно-зелёный
+  const ltG = '#2fb84b';  // светло-зелёный (та же трава)
+  const earth = '#8a5a2b'; // коричневый
+  const foam  = 'rgba(255,255,255,0.85)';
+
+  const bandDk = cell*0.035;
+  const bandLt = cell*0.030;
+  const bandEarth = cell*0.12;
+  const bandFoam  = cell*0.020;
+
+  for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
+    // НИЖНИЙ КРАЙ
+    if(!map[y+1] || !map[y+1][x]){
+      const sx = x*cell, sy = (y+1)*cell;
+      // Тёмно-зелёный кант
+      ctx.fillStyle = dkG;
+      ctx.fillRect(sx, sy, cell, bandDk);
+      // Светло-зелёный кант
+      ctx.fillStyle = ltG;
+      ctx.fillRect(sx, sy + bandDk, cell, bandLt);
+      // Земля (толще, с лёгким затемнением к низу)
+      const g = ctx.createLinearGradient(0, sy+bandDk+bandLt, 0, sy+bandDk+bandLt+bandEarth);
+      g.addColorStop(0, earth);
+      g.addColorStop(1, '#6f4424');
+      ctx.fillStyle = g;
+      ctx.fillRect(sx, sy + bandDk + bandLt, cell, bandEarth);
+      // Пена (тонкая белая полоса с лёгкой «рваностью»)
+      ctx.save();
+      ctx.fillStyle = foam;
+      const px = 4, py = 2;
+      for(let i=0;i<cell;i+=px){
+        const jitter = (Math.sin((i+sx)*0.07)*0.5 + Math.random()*0.25) * py;
+        ctx.fillRect(sx+i, sy + bandDk + bandLt + bandEarth + jitter, px, bandFoam);
       }
+      ctx.restore();
+    }
+
+    // ПРАВЫЙ КРАЙ
+    if(!map[y][x+1]){
+      const sx = (x+1)*cell, sy = y*cell;
+      // Тёмно-зелёный кант
+      ctx.fillStyle = dkG;
+      ctx.fillRect(sx, sy, bandDk, cell);
+      // Светло-зелёный кант
+      ctx.fillStyle = ltG;
+      ctx.fillRect(sx + bandDk, sy, bandLt, cell);
+      // Земля
+      const g = ctx.createLinearGradient(sx + bandDk + bandLt, 0, sx + bandDk + bandLt + bandEarth, 0);
+      g.addColorStop(0, earth);
+      g.addColorStop(1, '#6f4424');
+      ctx.fillStyle = g;
+      ctx.fillRect(sx + bandDk + bandLt, sy, bandEarth, cell);
+      // Пена
+      ctx.save();
+      ctx.fillStyle = foam;
+      const px = 2, py = 4;
+      for(let j=0;j<cell;j+=py){
+        const jitter = (Math.cos((j+sy)*0.09)*0.5 + Math.random()*0.25) * px;
+        ctx.fillRect(sx + bandDk + bandLt + bandEarth + jitter, sy + j, bandFoam, py);
+      }
+      ctx.restore();
     }
   }
+
+  ctx.restore();
 }
 
-/* ——— resize/init ——— */
-function resize(){
-  canvas.width  = innerWidth;
-  canvas.height = innerHeight;
-  drawIsland(canvas.width,canvas.height);
+/* кадр */
+let last = performance.now();
+function frame(now){
+  const dt = now - last; last = now;
+  updateSharks(dt);
+
+  ctx.clearRect(0,0,cw,ch);
+  drawSea();
+
+  const cam = getCam();
+  drawIslandUnderShadow(cam);
+  drawSharks(cam);
+  drawIsland(cam);
+
+  requestAnimationFrame(frame);
 }
-addEventListener('resize',resize);
-resize();
+
+/* resize/init */
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; cw=canvas.width; ch=canvas.height; }
+addEventListener('resize',resize); resize(); requestAnimationFrame(frame);
 </script>
 </body>
 </html>

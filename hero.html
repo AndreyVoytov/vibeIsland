@@ -22,6 +22,10 @@ let facing   = 1;
 /* скорость */
 const SPEED_SCALE = 1;
 
+/* вспомогалки */
+function pct2pxX(p, gameW){ return p * gameW / 100; }
+function pct2pxY(p, gameW){ return p * gameW / 100; } // ось Y тоже в % от ширины
+
 /* ---------- обновление координат ---------- */
 function update(dtMs){
   const ctrl = JSON.parse(localStorage.getItem('controller') || '{}');
@@ -29,30 +33,42 @@ function update(dtMs){
   let vy = (ctrl.vyPct || 0) * SPEED_SCALE;
   const isMoving = Math.abs(vx) + Math.abs(vy) > 0.001;
 
-  /* коллизии по ногам */
+  /* коллизии по ногам (как и было) */
   const vw   = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const cell = vw / GRID_W;
-  const pct2px = p => p * vw / 100;
 
   if (vx){
     const nx = charXPct + vx;
-    const gx = Math.floor(pct2px(nx) / cell);
-    const gy = Math.floor(pct2px(charYPct) / cell);
+    const gx = Math.floor(pct2pxX(nx, vw) / cell);
+    const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charXPct = nx;
   }
   if (vy){
     const ny = charYPct + vy;
-    const gx = Math.floor(pct2px(charXPct) / cell);
-    const gy = Math.floor(pct2px(ny) / cell);
+    const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
+    const gy = Math.floor(pct2pxY(ny, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charYPct = ny;
   }
 
   if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
 
-  /* публикуем только координаты + направление + факт движения */
-  localStorage.setItem('heroState', JSON.stringify({
-    charXPct, charYPct, facing, isMoving
-  }));
+  /* публикуем состояние героя */
+  localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
+
+  /* —— камера: всегда держим героя в центре экрана (без клампа) —— */
+  const ghCam = parseFloat(localStorage.getItem('gameHeight')) || innerHeight;
+  const vwCam = parseFloat(localStorage.getItem('gameWidth'))  || innerWidth;
+  const worldW = vwCam;                              // логика мира остаётся прежней
+  const worldH = vwCam * (GRID_H / GRID_W);          // ось Y в % от ширины
+
+  const heroX = pct2pxX(charXPct, vwCam);
+  const heroY = pct2pxY(charYPct, vwCam);
+
+  // Камера — центр на герое, без ограничений, чтобы остров «ездил» под ним.
+  const camX = heroX - vwCam/2;
+  const camY = heroY - ghCam/2;
+
+  localStorage.setItem('camera', JSON.stringify({x:camX, y:camY}));
 }
 
 /* ---------- цикл ---------- */
