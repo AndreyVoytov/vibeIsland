@@ -16,7 +16,7 @@
 <script>
 /*────────────────── ассеты ──────────────────*/
 const BUSH_ASSET_URL  = '';     // укажите путь с 'images/…' — будут спрайты
-const BERRY_ASSET_URL = '';
+const BERRY_ASSET_URL = './img/berry/1.png';
 const LEAF_ASSET_URL  = '';
 
 const useBushImg  = BUSH_ASSET_URL .includes('images');
@@ -83,6 +83,26 @@ addEventListener('resize',resize);resize();
 const land=[];map.forEach((row,y)=>row.forEach((c,x)=>c&&land.push({x,y})));
 const cellPct = 100/GRID_W;
 const center  =(x,y)=>({xPct:(x+0.5)*cellPct, yPct:(y+0.5)*cellPct});
+
+/* рамки острова и кламп внутри поля */
+const islandBounds = (()=>{
+  if(!land.length) return {minXPct:0, maxXPct:100, minYPct:0, maxYPct:100};
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  land.forEach(({x,y})=>{ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; });
+  return {
+    minXPct: minX*cellPct,
+    maxXPct: (maxX+1)*cellPct,
+    minYPct: minY*cellPct,
+    maxYPct: (maxY+1)*cellPct,
+  };
+})();
+function clampToIsland(xPct,yPct,radPct=0){
+  const b=islandBounds;
+  return {
+    xPct: Math.max(b.minXPct+radPct, Math.min(b.maxXPct-radPct, xPct)),
+    yPct: Math.max(b.minYPct+radPct, Math.min(b.maxYPct-radPct, yPct)),
+  };
+}
 
 /*────────────────── сущности ───────────────*/
 const bushes=[], busy=new Set();
@@ -158,8 +178,9 @@ function updBush(b){
       b.berries.forEach(be=>{
         const a=rnd(0,Math.PI*2), d=rnd(SCATTER_MIN_PCT,SCATTER_MAX_PCT), v=vec(a);
         Object.assign(be,{
-          x0:be.xPct, y0:be.yPct,
-          tx:b.xPct+v.x*d, ty:b.yPct+v.y*d,
+          /* clamp within island */
+          ...( ()=>{ const to=clampToIsland(b.xPct+v.x*d, b.yPct+v.y*d, BERRY_R_PCT); return { x0:be.xPct, y0:be.yPct, tx:to.xPct, ty:to.yPct, }; } )(),
+
           flying:true, tFly0:tNow, flyDur:BERRY_FLY_MS,
           onBush:false, scale:1
         });
@@ -184,6 +205,7 @@ function updBush(b){
         const k=outCub(clamp((now-be.tFly0)/be.flyDur,0,1));
         be.xPct = be.x0 + (be.tx-be.x0)*k;
         be.yPct = be.y0 + (be.ty-be.y0)*k;
+                { const _p=clampToIsland(be.xPct, be.yPct, BERRY_R_PCT); be.xPct=_p.xPct; be.yPct=_p.yPct; }
         if(k>=1) be.flying=false;
       }
     });
@@ -205,6 +227,7 @@ function collectLoop(){
       const u=clamp((now-be.tPick0)/PICK_OUT_MS,0,1);
       be.xPct = lerp(be.x0, be.x0 + be.ux*PICK_OUT_DIST_PCT*PICK_R_PCT, u);
       be.yPct = lerp(be.y0, be.y0 + be.uy*PICK_OUT_DIST_PCT*PICK_R_PCT, u);
+      { const _p=clampToIsland(be.xPct, be.yPct, BERRY_R_PCT); be.xPct=_p.xPct; be.yPct=_p.yPct; }
       if(u>=1){
         be.stage='collectIn';
         be.tPick0=now;

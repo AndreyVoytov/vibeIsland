@@ -292,7 +292,8 @@ function resize(){
   ch = canvas.height = innerHeight;
   cell  = cw / GRID_W;
   charR = pct2px(CHAR_R_PCT);
-  footOffset = charR * 2;
+  footOffset = 38;
+  console.log('footOffset ' + footOffset);
 }
 
 addEventListener('resize', resize);
