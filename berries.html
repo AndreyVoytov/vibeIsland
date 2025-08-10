@@ -40,9 +40,9 @@ const BUSH_GROW_MS       = 1000;
 const BERRIES_GROW_MS    = 100;
 const BERRIES_MIN_MAX    = [6,9];
 
-const SCATTER_MIN_PCT    = 3;
-const SCATTER_MAX_PCT    = 7.5;
-const BERRY_FLY_MS       = 600;
+const SCATTER_MIN_PCT    = 5;
+const SCATTER_MAX_PCT    = 13;
+const BERRY_FLY_MS       = 200;
 
 const LEAF_COUNT         = 28;
 const LEAF_LIFE_MS       = 700;
@@ -52,9 +52,15 @@ const LEAF_SPD_MAX       = 10;
 const BERRY_R_PCT        = 1.2;
 const BUSH_R_PCT         = 3.7;
 
-const PICK_OUT_MS        = 150;      // отлет
-const PICK_IN_MS         = 250;      // влет
-const PICK_OUT_DIST_PCT  = 0.25;     // 25 % радиуса
+const PICK_OUT_MS        = 200;      // отлет
+const PICK_IN_MS         = 200;      // влет
+const PICK_OUT_DIST_PCT  = 1;     // 25 % радиуса
+
+/*----------------- герой -------------------*/
+const HERO_W_CELLS = 3;
+const HERO_H_CELLS = 3;
+// смещения от пивота (ног) до сторон прямоугольника в КЛЕТКАХ
+const HERO_PIVOT = { left: 1.7, right: 1.7, up: 4, down: -0.5 };
 
 /*────────────────── утилиты ────────────────*/
 const rnd  =(a,b)=>a+Math.random()*(b-a);
@@ -88,6 +94,26 @@ const MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
 
 const cellPct = 100/GRID_W;
 const center  =(x,y)=>({xPct:(x+0.5)*cellPct, yPct:(y+0.5)*cellPct});
+
+function getHeroRect(hxPct,hyPct){
+  return {
+    left:   hxPct - HERO_PIVOT.left  * cellPct,
+    right:  hxPct + HERO_PIVOT.right * cellPct,
+    top:    hyPct - HERO_PIVOT.up    * cellPct,
+    bottom: hyPct + HERO_PIVOT.down  * cellPct,
+  };
+}
+function isInHeroRect(xPct,yPct,hxPct,hyPct){
+  const r = getHeroRect(hxPct,hyPct);
+  return (xPct>=r.left && xPct<=r.right && yPct>=r.top && yPct<=r.bottom);
+}
+function bushTouchesHero(bxPct,byPct,hxPct,hyPct,radPct=BUSH_R_PCT){
+  const r = getHeroRect(hxPct,hyPct);
+  const cx = Math.max(r.left, Math.min(r.right, bxPct));
+  const cy = Math.max(r.top,  Math.min(r.bottom, byPct));
+  const dx = pct2px(bxPct - cx), dy = pct2px(byPct - cy);
+  return Math.hypot(dx,dy) <= pct2px(radPct);
+}
 
 /* рамки острова и кламп внутри поля */
 const islandBounds = (()=>{
@@ -179,8 +205,9 @@ function updBush(b){
     });
 
     const h=getHero();
-    const dist=Math.hypot(pct2px(h.charXPct-b.xPct),pct2px(h.charYPct-b.yPct));
-    if(dist<=pct2px(BURST_R_PCT)){
+	const dist=Math.hypot(pct2px(h.charXPct-b.xPct),pct2px(h.charYPct-b.yPct));
+	const touch = bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
+	if (touch || dist <= pct2px(BURST_R_PCT)) { 
       for(let i=0;i<LEAF_COUNT;i++) b.leafs.push(mkLeaf(b.xPct,b.yPct));
 
       const tNow=now;
@@ -255,17 +282,20 @@ function collectLoop(){
   if(now-lastPickMs<PICK_COOLDOWN_MS) return;
 
   /* ищем ближайшую «лежачую» ягоду */
-  const cand=[];
-  bushes.forEach(b=>b.berries.forEach(be=>{
-    if(be.stage==='idle' && be.alive && !be.flying && !be.onBush){
-      const d=Math.hypot(pct2px(be.xPct)-hx, pct2px(be.yPct)-hy);
-      if(d<=pct2px(PICK_R_PCT)) cand.push({be,d});
+  const cand = [];
+  bushes.forEach(b => b.berries.forEach(be => {
+    if (be.stage==='idle' && be.alive && !be.flying && !be.onBush) {
+      const d = Math.hypot(pct2px(be.xPct) - hx, pct2px(be.yPct) - hy);
+	  console.log('hyPct ' + hyPct);
+      const under = isInHeroRect(be.xPct, be.yPct, hxPct, hyPct);
+	  if (under || d <= pct2px(PICK_R_PCT)) cand.push({ be, d });
     }
   }));
-  if(!cand.length) return;
-  cand.sort((a,b)=>a.d-b.d);
-  const {be}=cand[0];
-  lastPickMs=now;
+
+  if (!cand.length) return;
+  cand.sort((a,b) => a.d - b.d);
+  const { be } = cand[0];
+  lastPickMs = now;
 
   /* запускаем анимацию отлёта → влёта */
   const ux=be.xPct-hxPct, uy=be.yPct-hyPct, len=Math.hypot(ux,uy)||1;
