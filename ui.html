@@ -24,8 +24,10 @@
     .money-pill span{font-weight:600;font-size:16px;letter-spacing:0.3px;}
 
     .shop-button{
-      position:absolute;bottom:16px;right:16px;width:56px;height:56px;border-radius:18px;
-      border:none;background:rgba(0,0,0,0.7);box-shadow:0 6px 14px rgba(0,0,0,0.45);
+      position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+      width:180px;height:56px;border-radius:28px;border:none;
+      background:linear-gradient(135deg,#1e66f5,#4b90ff);
+      box-shadow:0 6px 14px rgba(0,0,0,0.45);
       display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;
     }
     .shop-button img{width:28px;height:28px;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.4));}
@@ -43,12 +45,12 @@
     }
     .panel-overlay.open{opacity:1;pointer-events:auto;}
     .shop-panel{
-      position:absolute;right:12px;bottom:84px;width:260px;max-height:70%;
+      position:absolute;left:50%;bottom:84px;width:min(320px, calc(100% - 24px));max-height:70%;
       background:var(--panel-bg);border-radius:18px;border:1px solid var(--panel-border);
       box-shadow:var(--card-shadow);display:flex;flex-direction:column;overflow:hidden;
-      pointer-events:none;transform:translateY(12px);opacity:0;transition:0.2s ease;
+      pointer-events:none;transform:translate(-50%, 12px);opacity:0;transition:0.2s ease;
     }
-    .shop-panel.open{transform:translateY(0);opacity:1;pointer-events:auto;}
+    .shop-panel.open{transform:translate(-50%, 0);opacity:1;pointer-events:auto;}
     .panel-header{
       display:flex;align-items:center;justify-content:space-between;padding:12px 14px;
       background:rgba(255,255,255,0.04);font-weight:600;
@@ -63,6 +65,7 @@
       display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;
       background:#2c2c2c;border:1px solid rgba(255,255,255,0.08);
     }
+    .resource-card.clickable{cursor:pointer;}
     .resource-card.unlocked{background:linear-gradient(135deg,#b67a1b,#f3c545);}
     .resource-card.available{background:rgba(155, 240, 140, 0.35);}
     .resource-card.locked{background:rgba(140,140,140,0.35);}
@@ -200,6 +203,17 @@
       localStorage.setItem('user', JSON.stringify(user));
     }
 
+    function attemptUnlock(res){
+      const latest = getUserState();
+      if(latest.unlockedResources[res.id]) return false;
+      if(latest.money < res.unlockCost) return false;
+      latest.money -= res.unlockCost;
+      latest.unlockedResources[res.id] = true;
+      setUserState(latest);
+      renderResources();
+      return true;
+    }
+
     function isUiControlTarget(target){
       if(!target || !(target instanceof HTMLElement)){
         return false;
@@ -291,6 +305,11 @@
 
     function createResourceCard(res){
       const card = document.createElement('div');
+      card.setAttribute('data-ui-control', '');
+      card.addEventListener('click', (event) => {
+        if(event.target.closest('button')) return;
+        attemptUnlock(res);
+      });
 
       const icon = document.createElement('div');
       icon.className = 'resource-icon';
@@ -325,13 +344,9 @@
       const label = document.createElement('span');
       button.appendChild(coin);
       button.appendChild(label);
-      button.addEventListener('click', () => {
-        const latest = getUserState();
-        if(latest.money < res.unlockCost) return;
-        latest.money -= res.unlockCost;
-        latest.unlockedResources[res.id] = true;
-        setUserState(latest);
-        renderResources();
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        attemptUnlock(res);
       });
 
       const check = document.createElement('img');
@@ -365,7 +380,7 @@
           resourceCards.set(res.id, entry);
         }
 
-        entry.card.className = 'resource-card ' + (unlocked ? 'unlocked' : canBuy ? 'available' : 'locked');
+        entry.card.className = 'resource-card ' + (unlocked ? 'unlocked' : canBuy ? 'available clickable' : 'locked');
         entry.label.textContent = res.unlockCost;
         entry.button.className = 'unlock-button' + (canBuy ? '' : ' locked');
         entry.button.disabled = !canBuy;
