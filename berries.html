@@ -197,6 +197,7 @@ function getBushVisualDef(bush){
   const def = bush.berryDef || {};
   return {
     type: def.bushType || 'default',
+    scale: typeof def.bushScale === 'number' ? def.bushScale : 1,
     assetUrl: def.bushAssetUrl || DEFAULT_BUSH_ASSET_URL,
     primitive: def.bushPrimitive || null,
   };
@@ -468,8 +469,9 @@ function drawBushCentered(b, now, visual){
   if(b.stage==='exploded'||b.stage==='dead') return;
   const { sx, sy } = getCenteredBushScale(now, b);
   const base = pct2px(BUSH_R_PCT);
-  const w = base * 6 * sx;
-  const h = base * 5 * sy;
+  const scale = typeof visual.scale === 'number' ? visual.scale : 1;
+  const w = base * 6 * sx * scale;
+  const h = base * 5 * sy * scale;
   const x = pct2px(b.xPct);
   const y = pct2px(b.yPct);
   const rec = getBushImgRec(visual.assetUrl);

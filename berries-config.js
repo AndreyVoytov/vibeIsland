@@ -1,6 +1,6 @@
 /* berries-config.js */
 (function (global) {
-  /** @type {{id:string,titleRu:string,assetUrl:string,widthPx:number,heightPx:number,primitive:{base?:string,highlight?:string,kind?:string,cap?:string,stem?:string,spots?:string,root?:string,leaf?:string},bushType?:string,bushAssetUrl?:string,bushPrimitive?:{kind?:string,cap?:string,capShade?:string,stem?:string,grass?:string,spots?:string,root?:string,leaf?:string,shadow?:string}}[]} */
+  /** @type {{id:string,titleRu:string,assetUrl:string,widthPx:number,heightPx:number,primitive:{base?:string,highlight?:string,kind?:string,cap?:string,stem?:string,spots?:string,root?:string,leaf?:string},bushType?:string,bushScale?:number,bushAssetUrl?:string,bushPrimitive?:{kind?:string,cap?:string,capShade?:string,stem?:string,grass?:string,spots?:string,root?:string,leaf?:string,shadow?:string}}[]} */
   const berries = [
     {
       id: 'strawberry',
@@ -30,8 +30,9 @@
       id: 'champignon',
       titleRu: 'Шампиньон',
       assetUrl: './img/berry/champignon.png',
-      widthPx: 20,
-      heightPx: 20,
+      widthPx: 26,
+      heightPx: 26,
+      bushScale: 0.8,
       primitive: {
         kind: 'mushroom',
         cap: '#f4eee6',
@@ -54,8 +55,9 @@
       id: 'beet',
       titleRu: 'Свёкла',
       assetUrl: './img/berry/beet.png',
-      widthPx: 20,
-      heightPx: 20,
+      widthPx: 26,
+      heightPx: 26,
+      bushScale: 0.8,
       primitive: {
         kind: 'beet',
         root: '#9b1b30',
