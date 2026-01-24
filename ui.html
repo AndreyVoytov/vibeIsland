@@ -26,7 +26,7 @@
     .shop-button{
       position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
       width:180px;height:56px;border-radius:28px;border:none;
-      background:linear-gradient(135deg,#1e66f5,#4b90ff);
+      background:linear-gradient(135deg,#e4c18d,#f4dfb5);
       box-shadow:0 6px 14px rgba(0,0,0,0.45);
       display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;
     }
@@ -317,6 +317,12 @@
       img.alt = res.title;
       img.src = res.assetUrl || '';
       img.onerror = () => {
+        const fallbackAsset = uiConfig.uiAssets.resourceFallback || {};
+        const fallbackUrl = fallbackAsset.url || fallbackAsset.fallback;
+        if(fallbackUrl && img.src !== fallbackUrl){
+          img.src = fallbackUrl;
+          return;
+        }
         const base = res.primitive.base || res.primitive.cap || '#ffffff66';
         icon.style.background = base;
         icon.innerHTML = '';

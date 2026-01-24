@@ -45,6 +45,16 @@
           '</svg>'
       ),
     },
+    resourceFallback: {
+      fallback: svgDataUri(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
+          "<rect x='6' y='6' width='52' height='52' rx='14' fill='#f4dfb5'/>" +
+          "<circle cx='28' cy='30' r='10' fill='#e95a5a'/>" +
+          "<circle cx='40' cy='28' r='8' fill='#ff7b7b'/>" +
+          "<path d='M30 16c6-4 14-2 18 3-8 2-14 6-18 12-4-6-10-10-18-12 4-5 12-7 18-3z' fill='#2f9b52'/>" +
+          '</svg>'
+      ),
+    },
   };
 
   const resourceEconomy = [

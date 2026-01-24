@@ -5,7 +5,7 @@
     {
       id: 'strawberry',
       titleRu: 'Клубника',
-      assetUrl: './img/berry/1.png',
+      assetUrl: './img/berry/missing-strawberry.png',
       widthPx: 28,
       heightPx: 28,
       primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.65)' },
@@ -13,7 +13,7 @@
     {
       id: 'blueberry',
       titleRu: 'Черника',
-      assetUrl: './img/berry/2.png',
+      assetUrl: './img/berry/missing-blueberry.png',
       widthPx: 24,
       heightPx: 24,
       primitive: { base: '#7a3cff', highlight: 'rgba(255,255,255,0.55)' },
@@ -21,7 +21,7 @@
     {
       id: 'raspberry',
       titleRu: 'Малина',
-      assetUrl: './img/berry/1.png',
+      assetUrl: './img/berry/missing-raspberry.png',
       widthPx: 26,
       heightPx: 26,
       primitive: { base: '#ff2a6a', highlight: 'rgba(255,255,255,0.55)' },
@@ -29,7 +29,7 @@
     {
       id: 'champignon',
       titleRu: 'Шампиньон',
-      assetUrl: './img/berry/champignon.png',
+      assetUrl: './img/berry/missing-champignon.png',
       widthPx: 78,
       heightPx: 78,
       bushScale: 0.8,
@@ -54,7 +54,7 @@
     {
       id: 'beet',
       titleRu: 'Свёкла',
-      assetUrl: './img/berry/beet.png',
+      assetUrl: './img/berry/missing-beet.png',
       widthPx: 78,
       heightPx: 78,
       bushScale: 0.8,
@@ -77,7 +77,7 @@
     {
       id: 'radish',
       titleRu: 'Редиска',
-      assetUrl: './img/berry/1.png',
+      assetUrl: './img/berry/missing-radish.png',
       widthPx: 24,
       heightPx: 24,
       primitive: {
@@ -90,7 +90,7 @@
     {
       id: 'potato',
       titleRu: 'Куст картофеля',
-      assetUrl: './img/berry/1.png',
+      assetUrl: './img/berry/missing-potato.png',
       widthPx: 26,
       heightPx: 26,
       primitive: { base: '#c6a46c', highlight: 'rgba(255,255,255,0.45)' },
@@ -98,7 +98,7 @@
     {
       id: 'tomato',
       titleRu: 'Куст помидоров',
-      assetUrl: './img/berry/1.png',
+      assetUrl: './img/berry/missing-tomato.png',
       widthPx: 26,
       heightPx: 26,
       primitive: { base: '#e63a2f', highlight: 'rgba(255,255,255,0.5)' },
