@@ -116,6 +116,7 @@ const LEAF_COUNT = 28, LEAF_LIFE_MS = 700, LEAF_SPD_MIN = 6, LEAF_SPD_MAX = 10;
 const BERRY_R_PCT = 1.2, BUSH_R_PCT = 3.7;
 const BUSH_TOP_GROW_MULT = 1.2;
 const PICK_OUT_MS = 200, PICK_IN_MS = 200, PICK_OUT_DIST_PCT = 1;
+const PICK_TARGET_UP_CELLS = 2.2;
 
 /* хитбокс ног героя */
 const HERO_PIVOT = { left: 1.7, right: 1.7, up: 4, down: -0.5 };
@@ -292,6 +293,7 @@ function collectLoop(){
   const now=performance.now(), hero=getHero();
   const hxPct=hero.charXPct, hyPct=hero.charYPct;
   const hx=pct2px(hxPct),  hy=pct2px(hyPct);
+  const pickTargetYPct = hyPct - PICK_TARGET_UP_CELLS * cellPct;
 
   bushes.forEach(b=>b.berries.forEach(be=>{
     if(be.stage==='collectOut'){
@@ -301,7 +303,7 @@ function collectLoop(){
       if(u>=1){ be.stage='collectIn'; be.tPick0=now; be.x0=be.xPct; be.y0=be.yPct; }
     }else if(be.stage==='collectIn'){
       const u=clamp((now-be.tPick0)/PICK_IN_MS,0,1);
-      be.xPct = lerp(be.x0,hxPct,u); be.yPct = lerp(be.y0,hyPct,u);
+      be.xPct = lerp(be.x0,hxPct,u); be.yPct = lerp(be.y0,pickTargetYPct,u);
       if(u>=1){
         be.alive=false; be.stage='done';
         const total=(+localStorage.getItem('berriesCollected')||0)+1;
