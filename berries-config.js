@@ -1,6 +1,6 @@
 /* berries-config.js */
 (function (global) {
-  /** @type {{id:string,titleRu:string,assetUrl:string,widthPx:number,heightPx:number,primitive:{base:string,highlight:string}}[]} */
+  /** @type {{id:string,titleRu:string,assetUrl:string,widthPx:number,heightPx:number,primitive:{base?:string,highlight?:string,kind?:string,cap?:string,stem?:string,spots?:string,root?:string,leaf?:string},bushType?:string,bushAssetUrl?:string,bushPrimitive?:{kind?:string,cap?:string,capShade?:string,stem?:string,grass?:string,spots?:string,root?:string,leaf?:string,shadow?:string}}[]} */
   const berries = [
     {
       id: 'strawberry',
@@ -25,6 +25,52 @@
       widthPx: 26,
       heightPx: 26,
       primitive: { base: '#ff2a6a', highlight: 'rgba(255,255,255,0.55)' },
+    },
+    {
+      id: 'champignon',
+      titleRu: 'Шампиньон',
+      assetUrl: './img/berry/champignon.png',
+      widthPx: 20,
+      heightPx: 20,
+      primitive: {
+        kind: 'mushroom',
+        cap: '#f4eee6',
+        stem: '#e1d2bf',
+        spots: 'rgba(255,255,255,0.85)',
+      },
+      bushType: 'centered',
+      bushAssetUrl: './img/berry/champignon-bush.png',
+      bushPrimitive: {
+        kind: 'mushroom',
+        cap: '#f2e9dd',
+        capShade: '#d6c7b4',
+        stem: '#e6d7c3',
+        grass: '#1f8b45',
+        spots: '#ffffff',
+        shadow: 'rgba(0,0,0,0.2)',
+      },
+    },
+    {
+      id: 'beet',
+      titleRu: 'Свёкла',
+      assetUrl: './img/berry/beet.png',
+      widthPx: 20,
+      heightPx: 20,
+      primitive: {
+        kind: 'beet',
+        root: '#9b1b30',
+        leaf: '#2f9b52',
+        highlight: 'rgba(255,255,255,0.45)',
+      },
+      bushType: 'centered',
+      bushAssetUrl: './img/berry/beet-bush.png',
+      bushPrimitive: {
+        kind: 'beet',
+        root: '#8a1227',
+        leaf: '#2f9b52',
+        grass: '#1b7d3e',
+        shadow: 'rgba(0,0,0,0.2)',
+      },
     },
     // {
       // id: 'blackberry',
