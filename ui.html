@@ -12,8 +12,9 @@
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       color: #fff;
     }
-    html,body{margin:0;height:100%;overflow:hidden;background:transparent;}
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent;touch-action:none;}
     #uiRoot{position:absolute;inset:0;pointer-events:none;}
+    #joystickCanvas{position:absolute;inset:0;pointer-events:none;}
     .money-pill{
       position:absolute;top:14px;right:14px;display:flex;align-items:center;gap:8px;
       background:rgba(0,0,0,0.55);border-radius:999px;padding:6px 12px;
@@ -89,21 +90,22 @@
       <span id="moneyValue">0</span>
     </div>
 
-    <button id="shopButton" class="shop-button" aria-label="Открыть магазин">
+    <button id="shopButton" class="shop-button ui-control" aria-label="Открыть магазин" data-ui-control>
       <img id="cartIcon" alt="cart" />
       <span id="upgradeMarker" class="upgrade-marker hidden">
         <img id="arrowIcon" alt="upgrade" />
       </span>
     </button>
 
-    <div id="shopPanel" class="shop-panel" aria-hidden="true">
+    <div id="shopPanel" class="shop-panel ui-control" aria-hidden="true" data-ui-control>
       <div class="panel-header">
         <span>Магазин ресурсов</span>
-        <button id="closePanel" aria-label="Закрыть">×</button>
+        <button id="closePanel" class="ui-control" aria-label="Закрыть" data-ui-control>×</button>
       </div>
       <div id="resourceList" class="resource-list"></div>
     </div>
   </div>
+  <canvas id="joystickCanvas"></canvas>
 
   <script src="./berries-config.js"></script>
   <script src="./ui-config.js"></script>
@@ -129,6 +131,25 @@
     const resourceList = document.getElementById('resourceList');
     const upgradeMarker = document.getElementById('upgradeMarker');
     const resourceCards = new Map();
+    const joystickCanvas = document.getElementById('joystickCanvas');
+    const joystickCtx = joystickCanvas.getContext('2d');
+    const joystickState = {
+      joyActive:false,
+      joyCtr:{x:0,y:0},
+      joyVec:{x:0,y:0},
+      vxPct:0,
+      vyPct:0
+    };
+    let joystickPointerId = null;
+    let joyCanvasW = 0;
+    let joyCanvasH = 0;
+    let joyR = 0;
+    const JOY_R_PCT = 8;
+    const SPEED_PCT = 0.4;
+
+    function saveJoystick(){
+      localStorage.setItem('controller', JSON.stringify(joystickState));
+    }
 
     function setImageWithFallback(img, key){
       const asset = uiConfig.uiAssets[key] || {};
@@ -170,6 +191,95 @@
 
     function setUserState(user){
       localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    function isUiControlTarget(target){
+      if(!target || !(target instanceof HTMLElement)){
+        return false;
+      }
+      return Boolean(target.closest('[data-ui-control]'));
+    }
+
+    function getJoystickPos(e){
+      const rect = joystickCanvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    function setJoystickSize(){
+      joyCanvasW = joystickCanvas.width = innerWidth;
+      joyCanvasH = joystickCanvas.height = innerHeight;
+      joyR = (JOY_R_PCT * joyCanvasW) / 100;
+    }
+
+    function onJoyDown(e){
+      if(joystickPointerId !== null) return;
+      if(isUiControlTarget(e.target)) return;
+      joystickPointerId = e.pointerId ?? 'mouse';
+      const pos = getJoystickPos(e);
+      joystickState.joyActive = true;
+      joystickState.joyCtr = pos;
+      joystickState.joyVec = {x:0,y:0};
+      joystickState.vxPct = 0;
+      joystickState.vyPct = 0;
+      saveJoystick();
+      e.preventDefault();
+    }
+
+    function onJoyMove(e){
+      if(!joystickState.joyActive) return;
+      if(joystickPointerId !== null && e.pointerId !== joystickPointerId) return;
+      const pos = getJoystickPos(e);
+      const dx = pos.x - joystickState.joyCtr.x;
+      const dy = pos.y - joystickState.joyCtr.y;
+      const dist = Math.hypot(dx, dy);
+      const max = joyR * 0.6;
+      const clamp = dist > max ? max / dist : 1;
+      joystickState.joyVec = { x: dx * clamp, y: dy * clamp };
+      if(dist > 1e-3){
+        const k = SPEED_PCT / dist;
+        joystickState.vxPct = dx * k;
+        joystickState.vyPct = dy * k;
+      } else {
+        joystickState.vxPct = 0;
+        joystickState.vyPct = 0;
+      }
+      saveJoystick();
+      e.preventDefault();
+    }
+
+    function onJoyUp(e){
+      if(joystickPointerId !== null && e.pointerId !== joystickPointerId) return;
+      joystickPointerId = null;
+      joystickState.joyActive = false;
+      joystickState.joyVec = {x:0,y:0};
+      joystickState.vxPct = 0;
+      joystickState.vyPct = 0;
+      saveJoystick();
+    }
+
+    function renderJoystick(){
+      joystickCtx.clearRect(0,0,joyCanvasW,joyCanvasH);
+      if(joystickState.joyActive){
+        joystickCtx.save();
+        joystickCtx.globalAlpha = 0.25;
+        joystickCtx.fillStyle = '#999';
+        joystickCtx.beginPath();
+        joystickCtx.arc(joystickState.joyCtr.x, joystickState.joyCtr.y, joyR, 0, Math.PI * 2);
+        joystickCtx.fill();
+        joystickCtx.restore();
+
+        joystickCtx.fillStyle = '#ccc';
+        joystickCtx.beginPath();
+        joystickCtx.arc(
+          joystickState.joyCtr.x + joystickState.joyVec.x,
+          joystickState.joyCtr.y + joystickState.joyVec.y,
+          joyR * 0.4,
+          0,
+          Math.PI * 2
+        );
+        joystickCtx.fill();
+      }
+      requestAnimationFrame(renderJoystick);
     }
 
     function createResourceCard(res){
@@ -264,6 +374,15 @@
       shopPanel.classList.toggle('open', open);
       shopPanel.setAttribute('aria-hidden', (!open).toString());
     }
+
+    saveJoystick();
+    setJoystickSize();
+    requestAnimationFrame(renderJoystick);
+    window.addEventListener('resize', setJoystickSize);
+    window.addEventListener('pointerdown', onJoyDown, { passive: false });
+    window.addEventListener('pointermove', onJoyMove, { passive: false });
+    window.addEventListener('pointerup', onJoyUp);
+    window.addEventListener('pointercancel', onJoyUp);
 
     shopButton.addEventListener('click', () => togglePanel());
     closePanel.addEventListener('click', () => togglePanel(false));
