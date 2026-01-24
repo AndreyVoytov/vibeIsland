@@ -188,7 +188,19 @@ function getHero(){ return JSON.parse(localStorage.getItem('heroState') || '{"ch
 /* канвас */
 const cvs=document.getElementById('berriesCanvas'),ctx=cvs.getContext('2d');
 let cw=0,ch=0; const pct2px=p=>p*cw/100;
-function resize(){cw=cvs.width=innerWidth;ch=cvs.height=innerHeight;} addEventListener('resize',resize); resize();
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  const width = innerWidth;
+  const height = innerHeight;
+  cvs.style.width = `${width}px`;
+  cvs.style.height = `${height}px`;
+  cvs.width = Math.round(width * dpr);
+  cvs.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cw = width;
+  ch = height;
+}
+addEventListener('resize',resize); resize();
 
 /* геометрия острова */
 const land=[]; map.forEach((row,y)=>row.forEach((c,x)=>c&&land.push({x,y})));

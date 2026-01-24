@@ -64,9 +64,9 @@
     { id: 'raspberry', profit: 3, unlockCost: 50 },
     { id: 'champignon', profit: 4, unlockCost: 250 },
     { id: 'beet', profit: 5, unlockCost: 1250 },
-    { id: 'radish', profit: 6, unlockCost: 2500 },
-    { id: 'potato', profit: 7, unlockCost: 6000 },
-    { id: 'tomato', profit: 8, unlockCost: 12000 },
+    { id: 'radish', profit: 6, unlockCost: 2250 },
+    { id: 'potato', profit: 7, unlockCost: 3250 },
+    { id: 'tomato', profit: 8, unlockCost: 4250 },
   ];
 
   global.UIConfig = {

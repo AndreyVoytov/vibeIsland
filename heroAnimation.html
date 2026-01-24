@@ -230,8 +230,16 @@ function frame(){
 
 /* ---------- resize ---------- */
 function resize(){
-  cw = canvas.width  = innerWidth;
-  ch = canvas.height = innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const width = innerWidth;
+  const height = innerHeight;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cw = width;
+  ch = height;
   cell  = cw / GRID_W;
   charR = pct2px(CHAR_R_PCT);
   footOffset = 38;
