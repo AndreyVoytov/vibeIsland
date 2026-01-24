@@ -16,7 +16,7 @@
       assetUrl: './img/berry/2.png',
       widthPx: 24,
       heightPx: 24,
-      primitive: { base: '#2d44ff', highlight: 'rgba(255,255,255,0.55)' },
+      primitive: { base: '#7a3cff', highlight: 'rgba(255,255,255,0.55)' },
     },
     {
       id: 'raspberry',

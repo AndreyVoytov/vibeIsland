@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Layout Sea</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#000}
+    canvas{display:block;touch-action:none}
+  </style>
+</head>
+<body>
+<canvas id="seaCanvas"></canvas>
+
+<script>
+const map = JSON.parse(localStorage.getItem('map') || '[]');
+const GRID_H = map.length;
+const GRID_W = map[0] ? map[0].length : 0;
+const H_PCT = GRID_W ? (GRID_H/GRID_W) * 100 : 100;
+
+function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
+
+/* canvas */
+const canvas = document.getElementById('seaCanvas');
+const ctx    = canvas.getContext('2d');
+let cw=0, ch=0;
+function pct2px(p){ return p*cw/100; }
+
+/* === SHARKS (safe spawn away from island) === */
+const sharks = [];
+const SHARK_N = 5;
+const SHARK_WANDER_R = 7;     // радиус блуждания (в % ширины)
+const SHARK_SAFE_FACTOR = 1.5; // спавн не ближе чем 1.5*R к тайлам
+const SHARK_ANG_SPEED_MIN = 0.0006;
+const SHARK_ANG_SPEED_MAX = 0.0016;
+
+// расстояние от точки до прямоугольника в тех же единицах (проценты)
+function distPointRect(px, py, rx, ry, rw, rh){
+  const dx = Math.max(rx - px, 0, px - (rx + rw));
+  const dy = Math.max(ry - py, 0, py - (ry + rh));
+  return Math.hypot(dx, dy);
+}
+
+// bbox острова в процентах (0..100 по X, 0..H_PCT по Y)
+function getIslandBBoxPct(){
+  if(!GRID_W || !GRID_H) return null;
+  let minGX=Infinity, minGY=Infinity, maxGX=-Infinity, maxGY=-Infinity;
+  for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++){
+    if(map[y]?.[x]){
+      if(x<minGX) minGX=x;
+      if(y<minGY) minGY=y;
+      if(x+1>maxGX) maxGX=x+1;
+      if(y+1>maxGY) maxGY=y+1;
+    }
+  }
+  if(!isFinite(minGX)) return null;
+  const xPct = (minGX/GRID_W)*100;
+  const yPct = (minGY/GRID_W)*100; // важно: приводим к % от ширины
+  const wPct = ((maxGX-minGX)/GRID_W)*100;
+  const hPct = ((maxGY-minGY)/GRID_W)*100; // тоже от ширины
+  return {xPct, yPct, wPct, hPct};
+}
+
+// случайное число в [a,b]
+function rand(a,b){ return a + Math.random()*(b-a); }
+
+function spawnSharks(){
+  sharks.length = 0;
+  const bbox = getIslandBBoxPct();
+  for(let i=0;i<SHARK_N;i++){
+    let tries = 0;
+    let sx=0, sy=0, ok=false;
+    const R = SHARK_WANDER_R;
+    // ограничим спавн так, чтобы круг блуждания оставался в пределах моря
+    while(tries++<200 && !ok){
+      sx = rand(R, 100 - R);
+      sy = rand(R, H_PCT - R);
+      // если есть остров — соблюдаем безопасную дистанцию
+      let safe = true;
+      if(bbox){
+        const d = distPointRect(sx, sy, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
+        if(d < SHARK_SAFE_FACTOR * R) safe = false;
+      }
+      ok = safe;
+    }
+    const phase = Math.random()*Math.PI*2;
+    const angSpeed = rand(SHARK_ANG_SPEED_MIN, SHARK_ANG_SPEED_MAX);
+    sharks.push({
+      sxPct: sx, syPct: sy,
+      R: SHARK_WANDER_R,
+      angle: Math.random()*Math.PI*2,
+      angSpeed,
+      phase,
+      xPct: sx, yPct: sy
+    });
+  }
+}
+
+function updateSharks(dt){
+  const bbox = getIslandBBoxPct();
+  sharks.forEach(s=>{
+    s.angle += s.angSpeed * dt;
+    const x = s.sxPct + Math.cos(s.angle) * s.R;
+    const y = s.syPct + Math.sin(s.angle*1.25 + s.phase) * (s.R*0.65);
+    s.xPct = Math.max(0, Math.min(100, x));
+    s.yPct = Math.max(0, Math.min(H_PCT, y));
+    // на всякий случай мягко отталкиваемся, если кто-то оказался слишком близко (численно)
+    if(bbox){
+      const d = distPointRect(s.xPct, s.yPct, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
+      const minD = SHARK_SAFE_FACTOR * s.R * 0.98;
+      if(d < minD){
+        // вектор от центра прямоугольника к акуле
+        const cx = bbox.xPct + bbox.wPct/2;
+        const cy = bbox.yPct + bbox.hPct/2;
+        let vx = s.xPct - cx, vy = s.yPct - cy;
+        const len = Math.hypot(vx,vy) || 1;
+        vx/=len; vy/=len;
+        const push = (minD - d);
+        s.xPct += vx * push;
+        s.yPct += vy * push;
+      }
+    }
+  });
+}
+
+function drawSharks(cam){
+  ctx.save(); ctx.translate(-cam.x,-cam.y);
+  sharks.forEach(s=>{
+    const x = pct2px(s.xPct), y = pct2px(s.yPct);
+    // пена
+    ctx.save(); ctx.globalAlpha=0.5; ctx.beginPath(); ctx.ellipse(x, y+4, 16, 6, 0, 0, Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.restore();
+    // плавник
+    ctx.save(); ctx.translate(x,y);
+    // направление — по производной от угла
+    const dx = -Math.sin(s.angle), dy = Math.cos(s.angle*1.25 + s.phase)*1.25;
+    if(dx<0) ctx.scale(-1,1);
+    ctx.beginPath(); ctx.moveTo(-10,6); ctx.lineTo(0,-16); ctx.lineTo(10,6); ctx.closePath(); ctx.fillStyle='#0a2a66'; ctx.fill();
+    ctx.restore();
+  });
+  ctx.restore();
+}
+/* === end sharks === */
+
+/* море */
+function drawSea(){ ctx.fillStyle='#1e6fff'; ctx.fillRect(0,0,cw,ch); }
+
+/* кадр */
+let last = performance.now();
+function frame(now){
+  const dt = now - last; last = now;
+  updateSharks(dt);
+
+  ctx.clearRect(0,0,cw,ch);
+  drawSea();
+
+  const cam = getCam();
+  drawSharks(cam);
+
+  requestAnimationFrame(frame);
+}
+
+/* resize/init */
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; cw=canvas.width; ch=canvas.height; }
+addEventListener('resize',resize); resize(); spawnSharks(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
