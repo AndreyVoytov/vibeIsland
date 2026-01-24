@@ -94,7 +94,10 @@ function drawHero(anim){
 
   const cam = getCam();
   ctx.save();
-  ctx.translate(pct2px(charXPct) - cam.x, pct2px(charYPct) - cam.y - footOffset);
+  ctx.translate(
+    pct2px(charXPct) - cam.x,
+    pct2px(charYPct) - cam.y - footOffset + cell / 2
+  );
   ctx.scale(facing * S, S);
 
   // задние
