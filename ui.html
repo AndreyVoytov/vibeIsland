@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>UI Layer</title>
+  <style>
+    :root{
+      --panel-bg: rgba(18, 18, 18, 0.9);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --card-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #fff;
+    }
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent;}
+    #uiRoot{position:absolute;inset:0;pointer-events:none;}
+    .money-pill{
+      position:absolute;top:14px;right:14px;display:flex;align-items:center;gap:8px;
+      background:rgba(0,0,0,0.55);border-radius:999px;padding:6px 12px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.35);pointer-events:auto;
+    }
+    .money-pill img{width:20px;height:20px;display:block;}
+    .money-pill span{font-weight:600;font-size:16px;letter-spacing:0.3px;}
+
+    .shop-button{
+      position:absolute;bottom:16px;right:16px;width:56px;height:56px;border-radius:18px;
+      border:none;background:rgba(0,0,0,0.7);box-shadow:0 6px 14px rgba(0,0,0,0.45);
+      display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;
+    }
+    .shop-button img{width:28px;height:28px;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.4));}
+    .upgrade-marker{
+      position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:999px;
+      background:#1ec971;display:flex;align-items:center;justify-content:center;
+      box-shadow:0 0 0 2px rgba(0,0,0,0.6);
+    }
+    .upgrade-marker img{width:14px;height:14px;}
+    .upgrade-marker.hidden{display:none;}
+
+    .shop-panel{
+      position:absolute;right:12px;bottom:84px;width:260px;max-height:70%;
+      background:var(--panel-bg);border-radius:18px;border:1px solid var(--panel-border);
+      box-shadow:var(--card-shadow);display:flex;flex-direction:column;overflow:hidden;
+      pointer-events:auto;transform:translateY(12px);opacity:0;transition:0.2s ease;
+    }
+    .shop-panel.open{transform:translateY(0);opacity:1;}
+    .panel-header{
+      display:flex;align-items:center;justify-content:space-between;padding:12px 14px;
+      background:rgba(255,255,255,0.04);font-weight:600;
+    }
+    .panel-header button{
+      border:none;background:rgba(255,255,255,0.12);color:#fff;border-radius:10px;
+      width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1;
+    }
+    .resource-list{overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;}
+
+    .resource-card{
+      display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;
+      background:#2c2c2c;border:1px solid rgba(255,255,255,0.08);
+    }
+    .resource-card.unlocked{background:linear-gradient(135deg,#b67a1b,#f3c545);}
+    .resource-card.available{background:rgba(155, 240, 140, 0.35);}
+    .resource-card.locked{background:rgba(140,140,140,0.35);}
+
+    .resource-icon{
+      width:42px;height:42px;border-radius:12px;flex-shrink:0;
+      background:#ffffff33;display:flex;align-items:center;justify-content:center;
+      border:1px solid rgba(255,255,255,0.25);overflow:hidden;
+    }
+    .resource-icon img{width:100%;height:100%;object-fit:cover;}
+
+    .resource-info{flex:1;display:flex;flex-direction:column;gap:2px;}
+    .resource-info span{font-size:14px;}
+    .resource-info small{color:rgba(255,255,255,0.7);font-size:12px;}
+
+    .unlock-button{
+      border:none;border-radius:12px;padding:6px 10px;font-size:12px;font-weight:600;
+      display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;
+      background:#2ecc71;color:#0d2b0f;
+    }
+    .unlock-button.locked{background:rgba(220, 80, 80, 0.35);color:rgba(255,255,255,0.5);cursor:not-allowed;}
+    .unlock-button img{width:16px;height:16px;}
+    .check-icon{width:24px;height:24px;}
+  </style>
+</head>
+<body>
+  <div id="uiRoot">
+    <div class="money-pill">
+      <img id="coinIcon" alt="coin" />
+      <span id="moneyValue">0</span>
+    </div>
+
+    <button id="shopButton" class="shop-button" aria-label="Открыть магазин">
+      <img id="cartIcon" alt="cart" />
+      <span id="upgradeMarker" class="upgrade-marker hidden">
+        <img id="arrowIcon" alt="upgrade" />
+      </span>
+    </button>
+
+    <div id="shopPanel" class="shop-panel" aria-hidden="true">
+      <div class="panel-header">
+        <span>Магазин ресурсов</span>
+        <button id="closePanel" aria-label="Закрыть">×</button>
+      </div>
+      <div id="resourceList" class="resource-list"></div>
+    </div>
+  </div>
+
+  <script src="./berries-config.js"></script>
+  <script src="./ui-config.js"></script>
+  <script>
+    const uiConfig = window.UIConfig || { uiAssets: {}, resourceEconomy: [] };
+    const berryConfig = window.BerriesConfig || { berries: [] };
+    const resources = berryConfig.berries.map((def, index) => {
+      const econ = uiConfig.resourceEconomy.find((item) => item.id === def.id) || {};
+      return {
+        id: def.id,
+        title: def.titleRu || def.id,
+        assetUrl: def.assetUrl,
+        primitive: def.primitive || {},
+        profit: typeof econ.profit === 'number' ? econ.profit : index + 1,
+        unlockCost: typeof econ.unlockCost === 'number' ? econ.unlockCost : 0,
+      };
+    });
+
+    const moneyValue = document.getElementById('moneyValue');
+    const shopButton = document.getElementById('shopButton');
+    const shopPanel = document.getElementById('shopPanel');
+    const closePanel = document.getElementById('closePanel');
+    const resourceList = document.getElementById('resourceList');
+    const upgradeMarker = document.getElementById('upgradeMarker');
+
+    function setImageWithFallback(img, key){
+      const asset = uiConfig.uiAssets[key] || {};
+      if(asset.url){
+        img.src = asset.url;
+        img.onerror = () => {
+          if(asset.fallback){
+            img.src = asset.fallback;
+          }
+        };
+      } else if (asset.fallback) {
+        img.src = asset.fallback;
+      }
+    }
+
+    setImageWithFallback(document.getElementById('coinIcon'), 'coin');
+    setImageWithFallback(document.getElementById('cartIcon'), 'cart');
+    setImageWithFallback(document.getElementById('arrowIcon'), 'arrowUp');
+
+    function getUserState(){
+      let user = {};
+      try {
+        user = JSON.parse(localStorage.getItem('user') || '{}');
+      } catch (err) {
+        user = {};
+      }
+      if(typeof user.money !== 'number' || Number.isNaN(user.money)){
+        user.money = 0;
+      }
+      if(!user.unlockedResources || typeof user.unlockedResources !== 'object'){
+        user.unlockedResources = {};
+      }
+      if(!Object.values(user.unlockedResources).some(Boolean) && resources[0]){
+        user.unlockedResources[resources[0].id] = true;
+      }
+      localStorage.setItem('user', JSON.stringify(user));
+      return user;
+    }
+
+    function setUserState(user){
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    function renderResources(){
+      const user = getUserState();
+      moneyValue.textContent = user.money;
+      resourceList.innerHTML = '';
+
+      let canUpgrade = false;
+
+      resources.forEach((res) => {
+        const unlocked = !!user.unlockedResources[res.id];
+        const canBuy = user.money >= res.unlockCost && !unlocked;
+        if(canBuy) canUpgrade = true;
+
+        const card = document.createElement('div');
+        card.className = 'resource-card ' + (unlocked ? 'unlocked' : canBuy ? 'available' : 'locked');
+
+        const icon = document.createElement('div');
+        icon.className = 'resource-icon';
+        const img = document.createElement('img');
+        img.alt = res.title;
+        img.src = res.assetUrl || '';
+        img.onerror = () => {
+          const base = res.primitive.base || res.primitive.cap || '#ffffff66';
+          icon.style.background = base;
+          icon.innerHTML = '';
+          const placeholder = document.createElement('div');
+          placeholder.style.width = '100%';
+          placeholder.style.height = '100%';
+          placeholder.style.background = base;
+          icon.appendChild(placeholder);
+        };
+        icon.appendChild(img);
+
+        const info = document.createElement('div');
+        info.className = 'resource-info';
+        const title = document.createElement('span');
+        title.textContent = res.title;
+        const profit = document.createElement('small');
+        profit.textContent = `Прибыль: +${res.profit}`;
+        info.appendChild(title);
+        info.appendChild(profit);
+
+        card.appendChild(icon);
+        card.appendChild(info);
+
+        if(unlocked){
+          const check = document.createElement('img');
+          check.className = 'check-icon';
+          check.alt = 'unlocked';
+          setImageWithFallback(check, 'check');
+          card.appendChild(check);
+        } else {
+          const button = document.createElement('button');
+          button.className = 'unlock-button' + (canBuy ? '' : ' locked');
+          button.disabled = !canBuy;
+          const coin = document.createElement('img');
+          setImageWithFallback(coin, 'coin');
+          const label = document.createElement('span');
+          label.textContent = res.unlockCost;
+          button.appendChild(coin);
+          button.appendChild(label);
+          button.addEventListener('click', () => {
+            const latest = getUserState();
+            if(latest.money < res.unlockCost) return;
+            latest.money -= res.unlockCost;
+            latest.unlockedResources[res.id] = true;
+            setUserState(latest);
+            renderResources();
+          });
+          card.appendChild(button);
+        }
+
+        resourceList.appendChild(card);
+      });
+
+      upgradeMarker.classList.toggle('hidden', !canUpgrade);
+    }
+
+    function togglePanel(forceOpen){
+      const open = typeof forceOpen === 'boolean' ? forceOpen : !shopPanel.classList.contains('open');
+      shopPanel.classList.toggle('open', open);
+      shopPanel.setAttribute('aria-hidden', (!open).toString());
+    }
+
+    shopButton.addEventListener('click', () => togglePanel());
+    closePanel.addEventListener('click', () => togglePanel(false));
+
+    renderResources();
+    setInterval(renderResources, 400);
+    window.addEventListener('storage', renderResources);
+  </script>
+</body>
+</html>
