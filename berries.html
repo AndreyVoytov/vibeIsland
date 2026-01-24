@@ -40,26 +40,19 @@ const getResourceWeight = (window.BerriesConfig && typeof window.BerriesConfig.g
 /* =========================
    1) ассеты куст/листья (опционально)
 ========================= */
-const BUSH_ASSET_URL  = '';
+const DEFAULT_BUSH_ASSET_URL = '';
 const LEAF_ASSET_URL  = '';
 
-const useBushImg = BUSH_ASSET_URL.includes('images');
 const useLeafImg = LEAF_ASSET_URL.includes('images');
-
-const bushImg = useBushImg ? new Image() : null;
 const leafImg = useLeafImg ? new Image() : null;
-
-let bushImgOk=false, leafImgOk=false;
+let leafImgOk = false;
 
 function wireImg(img, setOk){
   if(!img) return;
   img.onload = () => setOk(true);
   img.onerror = () => setOk(false);
 }
-wireImg(bushImg, v=>bushImgOk=v);
 wireImg(leafImg, v=>leafImgOk=v);
-
-if (bushImg) bushImg.src = BUSH_ASSET_URL;
 if (leafImg) leafImg.src = LEAF_ASSET_URL;
 
 function canDrawImg(img){
@@ -67,7 +60,7 @@ function canDrawImg(img){
 }
 
 /* =========================
-   2) кэш картинок ягод
+   2) кэш картинок ягод/кустов
 ========================= */
 const berryImgCache = new Map(); // url -> {img, ok}
 function getBerryImgRec(url){
@@ -80,6 +73,20 @@ function getBerryImgRec(url){
   img.onerror = () => { rec.ok = false; };
   img.src = url;
   berryImgCache.set(url, rec);
+  return rec;
+}
+
+const bushImgCache = new Map(); // url -> {img, ok}
+function getBushImgRec(url){
+  if(!url) return null;
+  let rec = bushImgCache.get(url);
+  if(rec) return rec;
+  const img = new Image();
+  rec = { img, ok:false };
+  img.onload = () => { rec.ok = true; };
+  img.onerror = () => { rec.ok = false; };
+  img.src = url;
+  bushImgCache.set(url, rec);
   return rec;
 }
 
@@ -186,6 +193,15 @@ function mkLeaf(xPct,yPct){
   return { xPct,yPct, vxPct:v.x*spd, vyPct:v.y*spd, rot:rnd(0,Math.PI*2), angVel:rnd(-10,10)*(Math.PI/180), t0:performance.now() };
 }
 
+function getBushVisualDef(bush){
+  const def = bush.berryDef || {};
+  return {
+    type: def.bushType || 'default',
+    assetUrl: def.bushAssetUrl || DEFAULT_BUSH_ASSET_URL,
+    primitive: def.bushPrimitive || null,
+  };
+}
+
 /* =========================
    6) спавн кустов
 ========================= */
@@ -225,12 +241,17 @@ function updBush(b){
       //  b.berries.push(mkBerry(true, b.xPct+v.x*r, b.yPct+v.y*r, def));
       //}
 	  
-	  if(!b.berryDef) b.berryDef = pickBerryDef(); // <-- один раз на куст
+      if(!b.berryDef) b.berryDef = pickBerryDef(); // <-- один раз на куст
+      const bushType = b.berryDef && b.berryDef.bushType;
 
-	  for(let i=0;i<n;i++){
-	    const a=rnd(0,Math.PI*2), r=rnd(0.3,0.8)*BUSH_R_PCT, v=vec(a);
-	    b.berries.push(mkBerry(true, b.xPct+v.x*r, b.yPct+v.y*r, b.berryDef));
-	  }
+      for(let i=0;i<n;i++){
+        if(bushType === 'centered'){
+          b.berries.push(mkBerry(true, b.xPct, b.yPct, b.berryDef));
+          continue;
+        }
+        const a=rnd(0,Math.PI*2), r=rnd(0.3,0.8)*BUSH_R_PCT, v=vec(a);
+        b.berries.push(mkBerry(true, b.xPct+v.x*r, b.yPct+v.y*r, b.berryDef));
+      }
     }
     return;
   }
@@ -348,12 +369,131 @@ function getTopBushScale(stage, t0, now){
   return outBack(grow);
 }
 
-function drawBushBottom(b, now){
+function getCenteredBushScale(now, b){
+  const grow = clamp((now - b.t0) / BUSH_GROW_MS, 0, 1);
+  return {
+    sx: lerp(0.6, 1, outCub(grow)),
+    sy: lerp(0.2, 1, outBack(grow)),
+  };
+}
+
+function drawMushroomPrimitive(x, y, w, h, primitive){
+  const cap = primitive.cap || '#f2e9dd';
+  const capShade = primitive.capShade || '#d6c7b4';
+  const stem = primitive.stem || '#e6d7c3';
+  const grass = primitive.grass || '#1f8b45';
+  const spots = primitive.spots || '#ffffff';
+  const shadow = primitive.shadow || 'rgba(0,0,0,0.2)';
+
+  ctx.save();
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.25, w * 0.4, h * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = grass;
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.32, w * 0.45, h * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = stem;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.12, y - h * 0.05);
+  ctx.lineTo(x + w * 0.12, y - h * 0.05);
+  ctx.lineTo(x + w * 0.12, y + h * 0.23);
+  ctx.lineTo(x - w * 0.12, y + h * 0.23);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = cap;
+  ctx.beginPath();
+  ctx.ellipse(x, y - h * 0.1, w * 0.45, h * 0.32, 0, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = capShade;
+  ctx.beginPath();
+  ctx.ellipse(x, y - h * 0.02, w * 0.4, h * 0.24, 0, Math.PI, 0);
+  ctx.fill();
+
+  ctx.fillStyle = spots;
+  ctx.beginPath(); ctx.arc(x - w * 0.2, y - h * 0.17, w * 0.04, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w * 0.05, y - h * 0.2, w * 0.05, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w * 0.22, y - h * 0.14, w * 0.035, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawBeetPrimitive(x, y, w, h, primitive){
+  const root = primitive.root || '#8a1227';
+  const leaf = primitive.leaf || '#2f9b52';
+  const grass = primitive.grass || '#1b7d3e';
+  const shadow = primitive.shadow || 'rgba(0,0,0,0.2)';
+
+  ctx.save();
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.25, w * 0.4, h * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = grass;
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.28, w * 0.45, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = root;
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.05, w * 0.28, h * 0.32, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x, y + h * 0.35);
+  ctx.lineTo(x - w * 0.08, y + h * 0.45);
+  ctx.lineTo(x + w * 0.08, y + h * 0.45);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = leaf;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 0.1);
+  ctx.quadraticCurveTo(x - w * 0.35, y - h * 0.35, x - w * 0.1, y - h * 0.45);
+  ctx.quadraticCurveTo(x - w * 0.15, y - h * 0.25, x, y - h * 0.1);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 0.12);
+  ctx.quadraticCurveTo(x + w * 0.35, y - h * 0.35, x + w * 0.1, y - h * 0.45);
+  ctx.quadraticCurveTo(x + w * 0.15, y - h * 0.2, x, y - h * 0.12);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBushCentered(b, now, visual){
+  if(b.stage==='exploded'||b.stage==='dead') return;
+  const { sx, sy } = getCenteredBushScale(now, b);
+  const base = pct2px(BUSH_R_PCT);
+  const w = base * 6 * sx;
+  const h = base * 5 * sy;
+  const x = pct2px(b.xPct);
+  const y = pct2px(b.yPct);
+  const rec = getBushImgRec(visual.assetUrl);
+
+  if(rec && rec.ok && canDrawImg(rec.img)){
+    ctx.drawImage(rec.img, x - w / 2, y - h * 0.45, w, h);
+    return;
+  }
+
+  const primitive = visual.primitive || {};
+  if(primitive.kind === 'beet'){
+    drawBeetPrimitive(x, y, w, h, primitive);
+    return;
+  }
+  drawMushroomPrimitive(x, y, w, h, primitive);
+}
+
+function drawBushBottom(b, now, visual){
   if(b.stage==='exploded'||b.stage==='dead') return;
   const s = getBushScale(b.stage, b.t0, now);
+  const rec = getBushImgRec(visual.assetUrl);
 
-  if(useBushImg && bushImgOk && canDrawImg(bushImg)){
-    ctx.drawImage(bushImg, pct2px(b.xPct)-60*s, pct2px(b.yPct)-50*s, 120*s, 100*s);
+  if(rec && rec.ok && canDrawImg(rec.img)){
+    ctx.drawImage(rec.img, pct2px(b.xPct)-60*s, pct2px(b.yPct)-50*s, 120*s, 100*s);
   }else{
     const r=pct2px(BUSH_R_PCT)*s;
     ctx.save();
@@ -368,7 +508,9 @@ function drawBushBottom(b, now){
 
 function drawBushTop(b, now){
   if(b.stage==='exploded'||b.stage==='dead') return;
-  if(useBushImg && bushImgOk && canDrawImg(bushImg)) return;
+  const visual = getBushVisualDef(b);
+  const rec = getBushImgRec(visual.assetUrl);
+  if(rec && rec.ok && canDrawImg(rec.img)) return;
 
   const s = getTopBushScale(b.stage, b.t0, now);
   const r = pct2px(BUSH_R_PCT) * s;
@@ -381,6 +523,7 @@ function drawBushTop(b, now){
 
 function drawBerry(be){
   if(!be.alive && be.stage!=='collectOut' && be.stage!=='collectIn') return;
+  if(be.onBush && be.def && be.def.bushType === 'centered') return;
   const s = be.onBush ? be.scale : 1;
   const def = be.def || { widthPx:24,heightPx:24,assetUrl:'',primitive:{base:'#e11',highlight:'rgba(255,255,255,0.6)'} };
 
@@ -393,6 +536,43 @@ function drawBerry(be){
   }
 
   const r = pct2px(BERRY_R_PCT) * s;
+  const primitive = def.primitive || {};
+  if(primitive.kind === 'mushroom'){
+    ctx.save();
+    ctx.fillStyle = primitive.stem || '#e1d2bf';
+    ctx.fillRect(pct2px(be.xPct)-r*0.2, pct2px(be.yPct)+r*0.05, r*0.4, r*0.5);
+    ctx.fillStyle = primitive.cap || '#f4eee6';
+    ctx.beginPath();
+    ctx.ellipse(pct2px(be.xPct), pct2px(be.yPct)-r*0.1, r*0.7, r*0.5, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = primitive.spots || 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(pct2px(be.xPct)-r*0.2, pct2px(be.yPct)-r*0.2, r*0.12, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pct2px(be.xPct)+r*0.15, pct2px(be.yPct)-r*0.18, r*0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
+  if(primitive.kind === 'beet'){
+    ctx.save();
+    ctx.fillStyle = primitive.root || '#9b1b30';
+    ctx.beginPath();
+    ctx.ellipse(pct2px(be.xPct), pct2px(be.yPct)+r*0.1, r*0.6, r*0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = primitive.leaf || '#2f9b52';
+    ctx.beginPath();
+    ctx.moveTo(pct2px(be.xPct), pct2px(be.yPct)-r*0.1);
+    ctx.lineTo(pct2px(be.xPct)-r*0.45, pct2px(be.yPct)-r*0.6);
+    ctx.lineTo(pct2px(be.xPct)-r*0.1, pct2px(be.yPct)-r*0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(pct2px(be.xPct), pct2px(be.yPct)-r*0.1);
+    ctx.lineTo(pct2px(be.xPct)+r*0.45, pct2px(be.yPct)-r*0.6);
+    ctx.lineTo(pct2px(be.xPct)+r*0.1, pct2px(be.yPct)-r*0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.fillStyle = (def.primitive && def.primitive.base) ? def.primitive.base : '#e11';
   ctx.beginPath(); ctx.arc(pct2px(be.xPct),pct2px(be.yPct),r,0,Math.PI*2); ctx.fill();
@@ -440,10 +620,17 @@ function frame(){
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   bushes.forEach(b=>{
-    drawBushBottom(b, now);
+    const visual = getBushVisualDef(b);
+    if(visual.type === 'centered'){
+      drawBushCentered(b, now, visual);
+    }else{
+      drawBushBottom(b, now, visual);
+    }
     b.leafs.forEach(drawLeaf);
     b.berries.forEach(drawBerry);
-    drawBushTop(b, now);
+    if(visual.type !== 'centered'){
+      drawBushTop(b, now);
+    }
   });
   ctx.restore();
 
