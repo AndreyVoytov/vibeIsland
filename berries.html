@@ -114,6 +114,7 @@ const BUSH_GROW_MS = 1000, BERRIES_GROW_MS = 100, BERRIES_MIN_MAX = [6,9];
 const SCATTER_MIN_PCT = 5, SCATTER_MAX_PCT = 13, BERRY_FLY_MS = 200;
 const LEAF_COUNT = 28, LEAF_LIFE_MS = 700, LEAF_SPD_MIN = 6, LEAF_SPD_MAX = 10;
 const BERRY_R_PCT = 1.2, BUSH_R_PCT = 3.7;
+const BUSH_TOP_GROW_MULT = 1.2;
 const PICK_OUT_MS = 200, PICK_IN_MS = 200, PICK_OUT_DIST_PCT = 1;
 
 /* хитбокс ног героя */
@@ -334,9 +335,20 @@ function collectLoop(){
 /* =========================
    9) рендер
 ========================= */
-function drawBush(b){
+function getBushScale(stage, t0, now){
+  if(stage !== 'growing') return 1;
+  return outBack(clamp((now - t0) / BUSH_GROW_MS, 0, 1));
+}
+
+function getTopBushScale(stage, t0, now){
+  if(stage !== 'growing') return 1;
+  const grow = clamp(((now - t0) * BUSH_TOP_GROW_MULT) / BUSH_GROW_MS, 0, 1);
+  return outBack(grow);
+}
+
+function drawBushBottom(b, now){
   if(b.stage==='exploded'||b.stage==='dead') return;
-  const s=b.stage==='growing'?b.scale:1;
+  const s = getBushScale(b.stage, b.t0, now);
 
   if(useBushImg && bushImgOk && canDrawImg(bushImg)){
     ctx.drawImage(bushImg, pct2px(b.xPct)-60*s, pct2px(b.yPct)-50*s, 120*s, 100*s);
@@ -350,6 +362,19 @@ function drawBush(b){
     ctx.beginPath(); ctx.arc(pct2px(b.xPct)+0.35*r,pct2px(b.yPct)-0.1*r,0.75*r,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
+}
+
+function drawBushTop(b, now){
+  if(b.stage==='exploded'||b.stage==='dead') return;
+  if(useBushImg && bushImgOk && canDrawImg(bushImg)) return;
+
+  const s = getTopBushScale(b.stage, b.t0, now);
+  const r = pct2px(BUSH_R_PCT) * s;
+  ctx.save();
+  ctx.fillStyle='#1a7b38';
+  ctx.beginPath(); ctx.arc(pct2px(b.xPct)-0.2*r,pct2px(b.yPct)-0.35*r,0.82*r,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(pct2px(b.xPct)+0.35*r,pct2px(b.yPct)-0.3*r,0.9*r,0,Math.PI*2); ctx.fill();
+  ctx.restore();
 }
 
 function drawBerry(be){
@@ -408,13 +433,15 @@ function frame(){
   collectLoop();
 
   const cam = getCam();
+  const now = performance.now();
   ctx.clearRect(0,0,cw,ch);
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   bushes.forEach(b=>{
-    drawBush(b);
+    drawBushBottom(b, now);
     b.leafs.forEach(drawLeaf);
     b.berries.forEach(drawBerry);
+    drawBushTop(b, now);
   });
   ctx.restore();
 
