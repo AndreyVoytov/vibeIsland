@@ -30,8 +30,8 @@
       id: 'champignon',
       titleRu: 'Шампиньон',
       assetUrl: './img/berry/champignon.png',
-      widthPx: 26,
-      heightPx: 26,
+      widthPx: 78,
+      heightPx: 78,
       bushScale: 0.8,
       primitive: {
         kind: 'mushroom',
@@ -55,8 +55,8 @@
       id: 'beet',
       titleRu: 'Свёкла',
       assetUrl: './img/berry/beet.png',
-      widthPx: 26,
-      heightPx: 26,
+      widthPx: 78,
+      heightPx: 78,
       bushScale: 0.8,
       primitive: {
         kind: 'beet',
