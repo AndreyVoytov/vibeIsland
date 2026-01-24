@@ -5,7 +5,7 @@
     {
       id: 'strawberry',
       titleRu: 'Клубника',
-      assetUrl: './img/berry/missing-strawberry.png',
+      assetUrl: './img/berry/1.png',
       widthPx: 28,
       heightPx: 28,
       primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.65)' },
