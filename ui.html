@@ -37,13 +37,18 @@
     .upgrade-marker img{width:14px;height:14px;}
     .upgrade-marker.hidden{display:none;}
 
+    .panel-overlay{
+      position:absolute;inset:0;background:rgba(0,0,0,0.35);opacity:0;
+      pointer-events:none;transition:0.2s ease;
+    }
+    .panel-overlay.open{opacity:1;pointer-events:auto;}
     .shop-panel{
       position:absolute;right:12px;bottom:84px;width:260px;max-height:70%;
       background:var(--panel-bg);border-radius:18px;border:1px solid var(--panel-border);
       box-shadow:var(--card-shadow);display:flex;flex-direction:column;overflow:hidden;
-      pointer-events:auto;transform:translateY(12px);opacity:0;transition:0.2s ease;
+      pointer-events:none;transform:translateY(12px);opacity:0;transition:0.2s ease;
     }
-    .shop-panel.open{transform:translateY(0);opacity:1;}
+    .shop-panel.open{transform:translateY(0);opacity:1;pointer-events:auto;}
     .panel-header{
       display:flex;align-items:center;justify-content:space-between;padding:12px 14px;
       background:rgba(255,255,255,0.04);font-weight:600;
@@ -97,6 +102,7 @@
       </span>
     </button>
 
+    <div id="panelOverlay" class="panel-overlay" data-ui-control></div>
     <div id="shopPanel" class="shop-panel ui-control" aria-hidden="true" data-ui-control>
       <div class="panel-header">
         <span>Магазин ресурсов</span>
@@ -128,6 +134,7 @@
     const shopButton = document.getElementById('shopButton');
     const shopPanel = document.getElementById('shopPanel');
     const closePanel = document.getElementById('closePanel');
+    const panelOverlay = document.getElementById('panelOverlay');
     const resourceList = document.getElementById('resourceList');
     const upgradeMarker = document.getElementById('upgradeMarker');
     const resourceCards = new Map();
@@ -373,6 +380,7 @@
       const open = typeof forceOpen === 'boolean' ? forceOpen : !shopPanel.classList.contains('open');
       shopPanel.classList.toggle('open', open);
       shopPanel.setAttribute('aria-hidden', (!open).toString());
+      panelOverlay.classList.toggle('open', open);
     }
 
     saveJoystick();
@@ -386,6 +394,7 @@
 
     shopButton.addEventListener('click', () => togglePanel());
     closePanel.addEventListener('click', () => togglePanel(false));
+    panelOverlay.addEventListener('click', () => togglePanel(false));
 
     renderResources();
     setInterval(renderResources, 400);
