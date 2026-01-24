@@ -227,8 +227,16 @@
     }
 
     function setJoystickSize(){
-      joyCanvasW = joystickCanvas.width = innerWidth;
-      joyCanvasH = joystickCanvas.height = innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+      const width = innerWidth;
+      const height = innerHeight;
+      joystickCanvas.style.width = `${width}px`;
+      joystickCanvas.style.height = `${height}px`;
+      joystickCanvas.width = Math.round(width * dpr);
+      joystickCanvas.height = Math.round(height * dpr);
+      joystickCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      joyCanvasW = width;
+      joyCanvasH = height;
       joyR = (JOY_R_PCT * joyCanvasW) / 100;
     }
 
