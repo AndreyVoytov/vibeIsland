@@ -103,11 +103,11 @@ function drawHero(anim){
   // задние
   drawBackArm();
   draw(spr.shadow,   O.shadow.x*charR,   O.shadow.y*charR,   spr.shadow.width, spr.shadow.height);
-  draw(spr.leg1, O.legBack.x*charR, O.legBack.y*charR, spr.leg1.width, spr.leg1.height);
+  drawBackLeg();
   drawFlip(spr.backpack, O.backpack.x*charR, O.backpack.y*charR - bounce*1.3, spr.backpack.width, spr.backpack.height);
 
   // центр
-  drawLegs();
+  drawFrontLeg();
   drawPants();
   draw(spr.body, O.body.x*charR, O.body.y*charR - bounce, spr.body.width, spr.body.height);
   drawFlip(spr.head, O.head.x*charR, O.head.y*charR - bounce, spr.head.width, spr.head.height);
@@ -167,10 +167,17 @@ function drawHero(anim){
     ctx.restore();
   }
 
-  function drawLegs(){
-    ctx.save(); ctx.translate(O.legBack.x*charR - legSwing/2, O.legBack.y*charR); ctx.restore();
-    ctx.save(); ctx.translate(O.legFront.x*charR + legSwing/2, O.legFront.y*charR);
-    ctx.drawImage(spr.leg2, -spr.leg2.width/2, -spr.leg2.height/2); ctx.restore();
+  function drawBackLeg(){
+    ctx.save();
+    ctx.translate(O.legBack.x*charR - legSwing/2, O.legBack.y*charR);
+    ctx.drawImage(spr.leg1, -spr.leg1.width/2, -spr.leg1.height/2);
+    ctx.restore();
+  }
+  function drawFrontLeg(){
+    ctx.save();
+    ctx.translate(O.legFront.x*charR + legSwing/2, O.legFront.y*charR);
+    ctx.drawImage(spr.leg2, -spr.leg2.width/2, -spr.leg2.height/2);
+    ctx.restore();
   }
   function drawPants(){ draw(spr.pants, O.pants.x*charR, O.pants.y*charR - bounce*0.2, spr.pants.width, spr.pants.height); }
   function drawEyes(){ if(blinkTimer>0){ ctx.save(); ctx.lineWidth = charR*0.1; ctx.strokeStyle='#000';
