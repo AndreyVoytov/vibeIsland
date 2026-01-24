@@ -128,6 +128,7 @@
     const closePanel = document.getElementById('closePanel');
     const resourceList = document.getElementById('resourceList');
     const upgradeMarker = document.getElementById('upgradeMarker');
+    const resourceCards = new Map();
 
     function setImageWithFallback(img, key){
       const asset = uiConfig.uiAssets[key] || {};
@@ -171,10 +172,68 @@
       localStorage.setItem('user', JSON.stringify(user));
     }
 
+    function createResourceCard(res){
+      const card = document.createElement('div');
+
+      const icon = document.createElement('div');
+      icon.className = 'resource-icon';
+      const img = document.createElement('img');
+      img.alt = res.title;
+      img.src = res.assetUrl || '';
+      img.onerror = () => {
+        const base = res.primitive.base || res.primitive.cap || '#ffffff66';
+        icon.style.background = base;
+        icon.innerHTML = '';
+        const placeholder = document.createElement('div');
+        placeholder.style.width = '100%';
+        placeholder.style.height = '100%';
+        placeholder.style.background = base;
+        icon.appendChild(placeholder);
+      };
+      icon.appendChild(img);
+
+      const info = document.createElement('div');
+      info.className = 'resource-info';
+      const title = document.createElement('span');
+      title.textContent = res.title;
+      const profit = document.createElement('small');
+      profit.textContent = `Прибыль: +${res.profit}`;
+      info.appendChild(title);
+      info.appendChild(profit);
+
+      const button = document.createElement('button');
+      button.className = 'unlock-button';
+      const coin = document.createElement('img');
+      setImageWithFallback(coin, 'coin');
+      const label = document.createElement('span');
+      button.appendChild(coin);
+      button.appendChild(label);
+      button.addEventListener('click', () => {
+        const latest = getUserState();
+        if(latest.money < res.unlockCost) return;
+        latest.money -= res.unlockCost;
+        latest.unlockedResources[res.id] = true;
+        setUserState(latest);
+        renderResources();
+      });
+
+      const check = document.createElement('img');
+      check.className = 'check-icon';
+      check.alt = 'unlocked';
+      setImageWithFallback(check, 'check');
+
+      card.appendChild(icon);
+      card.appendChild(info);
+      card.appendChild(button);
+      card.appendChild(check);
+      resourceList.appendChild(card);
+
+      return { card, button, label, check };
+    }
+
     function renderResources(){
       const user = getUserState();
       moneyValue.textContent = user.money;
-      resourceList.innerHTML = '';
 
       let canUpgrade = false;
 
@@ -183,66 +242,18 @@
         const canBuy = user.money >= res.unlockCost && !unlocked;
         if(canBuy) canUpgrade = true;
 
-        const card = document.createElement('div');
-        card.className = 'resource-card ' + (unlocked ? 'unlocked' : canBuy ? 'available' : 'locked');
-
-        const icon = document.createElement('div');
-        icon.className = 'resource-icon';
-        const img = document.createElement('img');
-        img.alt = res.title;
-        img.src = res.assetUrl || '';
-        img.onerror = () => {
-          const base = res.primitive.base || res.primitive.cap || '#ffffff66';
-          icon.style.background = base;
-          icon.innerHTML = '';
-          const placeholder = document.createElement('div');
-          placeholder.style.width = '100%';
-          placeholder.style.height = '100%';
-          placeholder.style.background = base;
-          icon.appendChild(placeholder);
-        };
-        icon.appendChild(img);
-
-        const info = document.createElement('div');
-        info.className = 'resource-info';
-        const title = document.createElement('span');
-        title.textContent = res.title;
-        const profit = document.createElement('small');
-        profit.textContent = `Прибыль: +${res.profit}`;
-        info.appendChild(title);
-        info.appendChild(profit);
-
-        card.appendChild(icon);
-        card.appendChild(info);
-
-        if(unlocked){
-          const check = document.createElement('img');
-          check.className = 'check-icon';
-          check.alt = 'unlocked';
-          setImageWithFallback(check, 'check');
-          card.appendChild(check);
-        } else {
-          const button = document.createElement('button');
-          button.className = 'unlock-button' + (canBuy ? '' : ' locked');
-          button.disabled = !canBuy;
-          const coin = document.createElement('img');
-          setImageWithFallback(coin, 'coin');
-          const label = document.createElement('span');
-          label.textContent = res.unlockCost;
-          button.appendChild(coin);
-          button.appendChild(label);
-          button.addEventListener('click', () => {
-            const latest = getUserState();
-            if(latest.money < res.unlockCost) return;
-            latest.money -= res.unlockCost;
-            latest.unlockedResources[res.id] = true;
-            setUserState(latest);
-            renderResources();
-          });
-          card.appendChild(button);
+        let entry = resourceCards.get(res.id);
+        if(!entry){
+          entry = createResourceCard(res);
+          resourceCards.set(res.id, entry);
         }
 
-        resourceList.appendChild(card);
+        entry.card.className = 'resource-card ' + (unlocked ? 'unlocked' : canBuy ? 'available' : 'locked');
+        entry.label.textContent = res.unlockCost;
+        entry.button.className = 'unlock-button' + (canBuy ? '' : ' locked');
+        entry.button.disabled = !canBuy;
+        entry.button.style.display = unlocked ? 'none' : 'flex';
+        entry.check.style.display = unlocked ? 'block' : 'none';
       });
 
       upgradeMarker.classList.toggle('hidden', !canUpgrade);
