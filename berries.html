@@ -14,6 +14,7 @@
 
 <!-- конфиг ягод -->
 <script src="./berries-config.js"></script>
+<script src="./ui-config.js"></script>
 
 <script>
 /* =========================
@@ -36,6 +37,44 @@ const BERRIES_LIST = (window.BerriesConfig && Array.isArray(window.BerriesConfig
 const getResourceWeight = (window.BerriesConfig && typeof window.BerriesConfig.getResourceWeight === 'function')
   ? window.BerriesConfig.getResourceWeight
   : (/*index*/)=>1;
+
+const uiConfig = window.UIConfig || { resourceEconomy: [] };
+const resourceEconomy = Array.isArray(uiConfig.resourceEconomy) ? uiConfig.resourceEconomy : [];
+
+function getUserState(){
+  let user = {};
+  try {
+    user = JSON.parse(localStorage.getItem('user') || '{}');
+  } catch (err) {
+    user = {};
+  }
+  if(typeof user.money !== 'number' || Number.isNaN(user.money)){
+    user.money = 0;
+  }
+  if(!user.unlockedResources || typeof user.unlockedResources !== 'object'){
+    user.unlockedResources = {};
+  }
+  if(!Object.values(user.unlockedResources).some(Boolean) && BERRIES_LIST[0]){
+    user.unlockedResources[BERRIES_LIST[0].id] = true;
+  }
+  localStorage.setItem('user', JSON.stringify(user));
+  return user;
+}
+
+function setUserState(user){
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
+function getUnlockedResourceIds(){
+  const user = getUserState();
+  return Object.keys(user.unlockedResources).filter((id)=>user.unlockedResources[id]);
+}
+
+function getResourceProfitById(id){
+  const found = resourceEconomy.find((entry)=>entry.id === id);
+  if(found && typeof found.profit === 'number') return found.profit;
+  return 1;
+}
   
 /* =========================
    1) ассеты куст/листья (опционально)
@@ -109,8 +148,14 @@ function pickBerryDef(){
     id:'fallback', titleRu:'Ягода', assetUrl:'', widthPx:24, heightPx:24,
     primitive:{base:'#e11', highlight:'rgba(255,255,255,0.6)'}
   };
-  const idx = pickWeightedIndex(BERRIES_LIST, getResourceWeight);
-  return BERRIES_LIST[idx] || BERRIES_LIST[0];
+  const unlocked = new Set(getUnlockedResourceIds());
+  const available = BERRIES_LIST.filter((def)=>unlocked.has(def.id));
+  const pool = available.length ? available : BERRIES_LIST;
+  const idx = pickWeightedIndex(pool, (i) => {
+    const originalIndex = BERRIES_LIST.indexOf(pool[i]);
+    return getResourceWeight(originalIndex >= 0 ? originalIndex : i);
+  });
+  return pool[idx] || pool[0];
 }
 
 /* =========================
@@ -330,6 +375,10 @@ function collectLoop(){
         be.alive=false; be.stage='done';
         const total=(+localStorage.getItem('berriesCollected')||0)+1;
         localStorage.setItem('berriesCollected',total);
+        const profit = getResourceProfitById(be.def && be.def.id);
+        const user = getUserState();
+        user.money = (user.money || 0) + profit;
+        setUserState(user);
       }
     }
   }));
