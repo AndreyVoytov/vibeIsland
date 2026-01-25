@@ -232,10 +232,10 @@
     }
 
     function expandIsland(map){
-      if(!Array.isArray(map) || !map.length) return map;
+      if(!Array.isArray(map) || !map.length) return { map, shift: { x: 0, y: 0 } };
       let nextMap = normalizeMap(map);
       const bounds = getIslandBounds(nextMap);
-      if(!bounds) return nextMap;
+      if(!bounds) return { map: nextMap, shift: { x: 0, y: 0 } };
       const width = nextMap[0]?.length || 0;
       const height = nextMap.length;
       const padding = {
@@ -263,7 +263,7 @@
           }
         }
       }
-      return expanded;
+      return { map: expanded, shift: { x: padding.left, y: padding.top } };
     }
 
     const berryResources = berryConfig.berries.map((def, index) => {
@@ -300,8 +300,9 @@
       fallbackUrl: buildExpandFallback(def),
       onUnlock: () => {
         const current = loadMap();
-        const expanded = expandIsland(current);
-        localStorage.setItem('map', JSON.stringify(expanded));
+        const result = expandIsland(current);
+        localStorage.setItem('mapShift', JSON.stringify(result.shift || { x: 0, y: 0 }));
+        localStorage.setItem('map', JSON.stringify(result.map));
         localStorage.setItem('islandWiggleAt', Date.now().toString());
       },
     }));
