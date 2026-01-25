@@ -6,7 +6,7 @@
       id: 'strawberry',
       titleRu: 'Клубника',
       assetUrl: './img/berry/1.png',
-      profit: 1,
+      profit: 100,
       unlockCost: 0,
       widthPx: 28,
       heightPx: 28,
@@ -15,7 +15,6 @@
     {
       id: 'blueberry',
       titleRu: 'Черника',
-      assetUrl: './img/berry/missing-blueberry.png',
       profit: 2,
       unlockCost: 10,
       widthPx: 24,
@@ -25,7 +24,6 @@
     {
       id: 'raspberry',
       titleRu: 'Малина',
-      assetUrl: './img/berry/missing-raspberry.png',
       profit: 3,
       unlockCost: 50,
       widthPx: 26,
@@ -35,7 +33,6 @@
     {
       id: 'champignon',
       titleRu: 'Шампиньон',
-      assetUrl: './img/berry/missing-champignon.png',
       profit: 4,
       unlockCost: 250,
       widthPx: 78,
@@ -62,7 +59,6 @@
     {
       id: 'beet',
       titleRu: 'Свёкла',
-      assetUrl: './img/berry/missing-beet.png',
       profit: 5,
       unlockCost: 1250,
       widthPx: 78,
@@ -87,7 +83,6 @@
     {
       id: 'radish',
       titleRu: 'Редиска',
-      assetUrl: './img/berry/missing-radish.png',
       profit: 6,
       unlockCost: 2250,
       widthPx: 24,
@@ -102,7 +97,6 @@
     {
       id: 'potato',
       titleRu: 'Куст картофеля',
-      assetUrl: './img/berry/missing-potato.png',
       profit: 7,
       unlockCost: 3250,
       widthPx: 26,
@@ -112,7 +106,6 @@
     {
       id: 'tomato',
       titleRu: 'Куст помидоров',
-      assetUrl: './img/berry/missing-tomato.png',
       profit: 8,
       unlockCost: 4250,
       widthPx: 26,
