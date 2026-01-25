@@ -129,9 +129,13 @@
     ];
     const spacing = 4;
     const midGap = 3;
-    const startX = bounds.minX + 3;
-    const startY = bounds.minY + 3;
     const rowOffsets = [0, spacing, spacing + midGap, spacing + midGap + spacing];
+    const colCount = layoutGrid[0]?.length || 0;
+    const rowCount = layoutGrid.length;
+    const layoutWidth = spacing * Math.max(0, colCount - 1);
+    const layoutHeight = rowOffsets.length ? rowOffsets[rowOffsets.length - 1] : spacing * Math.max(0, rowCount - 1);
+    const startX = center.x - Math.round(layoutWidth / 2);
+    const startY = center.y - Math.round(layoutHeight / 2);
     const slotByNumber = new Map();
 
     layoutGrid.forEach((row, rowIndex) => {

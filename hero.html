@@ -11,18 +11,48 @@
 <script src="./buildings-config.js"></script>
 <script>
 /* ---------- карта ---------- */
-const map = JSON.parse(localStorage.getItem('map') || '[]');
-const GRID_H = map.length;
-const GRID_W = map[0] ? map[0].length : 0;
+let map = [];
+let GRID_H = 0;
+let GRID_W = 0;
 const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
 const buildingDefs = buildingsConfig.buildings || [];
 const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
-const buildingLayout = buildingsConfig.getBuildingLayout(map);
+let buildingLayout = [];
 
 /* ---------- положение героя ---------- */
 let charXPct = 50;
-let charYPct = (GRID_H / 2) / GRID_W * 100;
+let charYPct = 50;
 let facing   = 1;
+
+function loadMap({ initial = false } = {}){
+  const parsed = JSON.parse(localStorage.getItem('map') || '[]');
+  const nextMap = Array.isArray(parsed) ? parsed : [];
+  const nextH = nextMap.length;
+  const nextW = nextMap[0] ? nextMap[0].length : 0;
+  if(!initial && GRID_W && GRID_H && nextW && nextH){
+    let shift = { x: 0, y: 0 };
+    try {
+      shift = JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}');
+    } catch (err) {
+      shift = { x: 0, y: 0 };
+    }
+    const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+    const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+    const gridX = (charXPct / 100) * GRID_W + shiftX;
+    const gridY = (charYPct / 100) * GRID_W + shiftY;
+    charXPct = (gridX / nextW) * 100;
+    charYPct = (gridY / nextW) * 100;
+  }
+  map = nextMap;
+  GRID_H = nextH;
+  GRID_W = nextW;
+  buildingLayout = buildingsConfig.getBuildingLayout(map);
+  if(initial && GRID_W){
+    charXPct = 50;
+    charYPct = (GRID_H / 2) / GRID_W * 100;
+  }
+}
+loadMap({ initial: true });
 
 /* скорость */
 const SPEED_SCALE = 1;
@@ -123,7 +153,7 @@ requestAnimationFrame(frame);
 
 window.addEventListener('storage', (event) => {
   if(event.key === 'map'){
-    location.reload();
+    loadMap();
   }
 });
 </script>

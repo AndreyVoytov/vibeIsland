@@ -209,11 +209,11 @@ const outCub=t=>1-(1-t)**3, lerp=(a,b,t)=>a+(b-a)*t;
 function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
 
 /* карта / герой */
-const map = JSON.parse(localStorage.getItem('map') || '[]');
-const GRID_W = map[0]?.length || 0;
+let map = [];
+let GRID_W = 0;
 function getHero(){ return JSON.parse(localStorage.getItem('heroState') || '{"charXPct":50,"charYPct":50,"facing":1,"isMoving":false}'); }
 const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
-const buildingLayout = buildingsConfig.getBuildingLayout(map);
+let buildingLayout = [];
 const buildingDefs = buildingsConfig.buildings || [];
 const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
 
@@ -238,6 +238,7 @@ function getActiveBuildingCells(){
   return cells;
 }
 
+
 /* канвас */
 const cvs=document.getElementById('berriesCanvas'),ctx=cvs.getContext('2d');
 let cw=0,ch=0; const pct2px=p=>p*cw/100;
@@ -256,11 +257,11 @@ function resize(){
 addEventListener('resize',resize); resize();
 
 /* геометрия острова */
-const land=[]; map.forEach((row,y)=>row.forEach((c,x)=>c&&land.push({x,y})));
 const TARGET_BUSHES_AT_CURRENT_MAP = 30;
-const BUSH_DENSITY = land.length ? (TARGET_BUSHES_AT_CURRENT_MAP / land.length) : 0.05;
-const MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
-const cellPct = GRID_W ? (100/GRID_W) : 0;
+let land = [];
+let BUSH_DENSITY = 0.05;
+let MAX_UNPICKED_BUSHES = 1;
+let cellPct = 0;
 const center=(x,y)=>({xPct:(x+0.5)*cellPct, yPct:(y+0.5)*cellPct});
 function getHeroRect(hxPct,hyPct){ return { left: hxPct-HERO_PIVOT.left*cellPct, right: hxPct+HERO_PIVOT.right*cellPct, top: hyPct-HERO_PIVOT.up*cellPct, bottom: hyPct+HERO_PIVOT.down*cellPct }; }
 function isInHeroRect(xPct,yPct,hxPct,hyPct){ const r=getHeroRect(hxPct,hyPct); return (xPct>=r.left && xPct<=r.right && yPct>=r.top && yPct<=r.bottom); }
@@ -271,11 +272,14 @@ function bushTouchesHero(bxPct,byPct,hxPct,hyPct,radPct=BUSH_R_PCT){
   const dx=pct2px(bxPct-cx), dy=pct2px(byPct-cy);
   return Math.hypot(dx,dy)<=pct2px(radPct);
 }
-const islandBounds=(()=>{ if(!land.length) return {minXPct:0,maxXPct:100,minYPct:0,maxYPct:100};
+let islandBounds = { minXPct: 0, maxXPct: 100, minYPct: 0, maxYPct: 100 };
+
+function getIslandBounds(landCells, cellSize){
+  if(!landCells.length) return { minXPct: 0, maxXPct: 100, minYPct: 0, maxYPct: 100 };
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  land.forEach(({x,y})=>{if(x<minX)minX=x;if(y<minY)minY=y;if(x>maxX)maxX=x;if(y>maxY)maxY=y;});
-  return {minXPct:minX*cellPct,maxXPct:(maxX+1)*cellPct,minYPct:minY*cellPct,maxYPct:(maxY+1)*cellPct};
-})();
+  landCells.forEach(({x,y})=>{if(x<minX)minX=x;if(y<minY)minY=y;if(x>maxX)maxX=x;if(y>maxY)maxY=y;});
+  return { minXPct: minX*cellSize, maxXPct:(maxX+1)*cellSize, minYPct:minY*cellSize, maxYPct:(maxY+1)*cellSize };
+}
 function clampToIsland(xPct,yPct,radPct=0){ const b=islandBounds;
   return {
     xPct:Math.max(b.minXPct+radPct,Math.min(b.maxXPct-radPct,xPct)),
@@ -287,6 +291,70 @@ function clampToIsland(xPct,yPct,radPct=0){ const b=islandBounds;
    5) сущности
 ========================= */
 const bushes=[], busy=new Set();
+
+function loadMapData({ initial = false } = {}){
+  const parsed = JSON.parse(localStorage.getItem('map') || '[]');
+  const nextMap = Array.isArray(parsed) ? parsed : [];
+  const prevCellPct = cellPct;
+  const prevGridW = GRID_W;
+  map = nextMap;
+  GRID_W = map[0]?.length || 0;
+  cellPct = GRID_W ? (100/GRID_W) : 0;
+  land = [];
+  map.forEach((row,y)=>row.forEach((c,x)=>c&&land.push({x,y})));
+  BUSH_DENSITY = land.length ? (TARGET_BUSHES_AT_CURRENT_MAP / land.length) : 0.05;
+  MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
+  islandBounds = getIslandBounds(land, cellPct);
+  buildingLayout = buildingsConfig.getBuildingLayout(map);
+
+  if(!initial && prevGridW && GRID_W && prevCellPct){
+    let shift = { x: 0, y: 0 };
+    try {
+      shift = JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}');
+    } catch (err) {
+      shift = { x: 0, y: 0 };
+    }
+    const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+    const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+    if(shiftX || shiftY || prevCellPct !== cellPct){
+      const nextBusy = new Set();
+      bushes.forEach((b) => {
+        const oldGridX = b.gridX;
+        const oldGridY = b.gridY;
+        const newGridX = oldGridX + shiftX;
+        const newGridY = oldGridY + shiftY;
+        const oldCenterX = (oldGridX + 0.5) * prevCellPct;
+        const oldCenterY = (oldGridY + 0.5) * prevCellPct;
+        const newCenterX = (newGridX + 0.5) * cellPct;
+        const newCenterY = (newGridY + 0.5) * cellPct;
+        const dx = newCenterX - oldCenterX;
+        const dy = newCenterY - oldCenterY;
+        b.gridX = newGridX;
+        b.gridY = newGridY;
+        b.xPct += dx;
+        b.yPct += dy;
+        b.berries.forEach((be) => {
+          be.xPct += dx;
+          be.yPct += dy;
+          be.x0 += dx;
+          be.y0 += dy;
+          be.tx += dx;
+          be.ty += dy;
+        });
+        b.leafs.forEach((leaf) => {
+          leaf.xPct += dx;
+          leaf.yPct += dy;
+        });
+        if(b.stage === 'growing' || b.stage === 'ripe'){
+          nextBusy.add(`${b.gridX},${b.gridY}`);
+        }
+      });
+      busy.clear();
+      nextBusy.forEach((key) => busy.add(key));
+    }
+  }
+}
+loadMapData({ initial: true });
 
 function mkBerry(onBush,xPct,yPct,def){
   return {
@@ -815,7 +883,7 @@ function getWiggleOffset(){
 
 window.addEventListener('storage', (event) => {
   if(event.key === 'map'){
-    location.reload();
+    loadMapData();
   }
 });
 </script>
