@@ -103,16 +103,19 @@
       x: Math.round((bounds.minX + bounds.maxX) / 2),
       y: Math.round((bounds.minY + bounds.maxY) / 2),
     };
+    const gridStep = 5;
     const islandWidth = bounds.maxX - bounds.minX + 1;
     const islandHeight = bounds.maxY - bounds.minY + 1;
-    const radius = Math.max(3, Math.floor(Math.min(islandWidth, islandHeight) / 2) - 2);
+    const maxGridRadius = Math.max(
+      1,
+      Math.floor(Math.max(islandWidth, islandHeight) / gridStep),
+    );
 
     const placed = [];
     const used = new Set();
     const rest = buildings.filter((item) => item.id !== 'campfire');
 
     function isValidCell(x, y) {
-      if (x === center.x || y === center.y) return false;
       if (!map[y] || !map[y][x]) return false;
       const key = `${x},${y}`;
       return !used.has(key);
@@ -123,33 +126,50 @@
       return { x, y };
     }
 
-    function findNearestCell(startX, startY) {
-      if (isValidCell(startX, startY)) return claimCell(startX, startY);
-      for (let r = 1; r <= 4; r += 1) {
-        for (let dy = -r; dy <= r; dy += 1) {
-          for (let dx = -r; dx <= r; dx += 1) {
-            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-            const x = startX + dx;
-            const y = startY + dy;
-            if (isValidCell(x, y)) return claimCell(x, y);
+    function getOrderedGridOffsets(radius) {
+      if (radius !== 1) {
+        const offsets = [];
+        for (let gy = -radius; gy <= radius; gy += 1) {
+          for (let gx = -radius; gx <= radius; gx += 1) {
+            if (Math.max(Math.abs(gx), Math.abs(gy)) !== radius) continue;
+            offsets.push({ gx, gy });
           }
         }
+        return offsets;
       }
-      return null;
+      return [
+        { gx: -1, gy: -1 },
+        { gx: 1, gy: -1 },
+        { gx: 1, gy: 1 },
+        { gx: -1, gy: 1 },
+        { gx: 0, gy: -1 },
+        { gx: 1, gy: 0 },
+        { gx: 0, gy: 1 },
+        { gx: -1, gy: 0 },
+      ];
+    }
+
+    function getGridPositions() {
+      const positions = [];
+      for (let radius = 1; radius <= maxGridRadius; radius += 1) {
+        const offsets = getOrderedGridOffsets(radius);
+        offsets.forEach(({ gx, gy }) => {
+          const x = center.x + gx * gridStep;
+          const y = center.y + gy * gridStep;
+          if (isValidCell(x, y)) {
+            positions.push(claimCell(x, y));
+          }
+        });
+      }
+      return positions;
     }
 
     placed.push({ id: 'campfire', x: center.x, y: center.y });
     used.add(`${center.x},${center.y}`);
 
-    const count = rest.length || 1;
-    const angleOffset = Math.PI / count;
+    const gridPositions = getGridPositions();
     rest.forEach((item, index) => {
-      const angle = angleOffset + (index / count) * Math.PI * 2;
-      let x = center.x + Math.round(Math.cos(angle) * radius);
-      let y = center.y + Math.round(Math.sin(angle) * radius);
-      if (x === center.x) x += x > center.x ? 1 : -1;
-      if (y === center.y) y += y > center.y ? 1 : -1;
-      const spot = findNearestCell(x, y);
+      const spot = gridPositions[index];
       if (spot) placed.push({ id: item.id, x: spot.x, y: spot.y });
     });
 
