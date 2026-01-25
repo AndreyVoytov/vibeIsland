@@ -14,18 +14,31 @@
 
   <script src="./buildings-config.js"></script>
   <script>
-    const map = JSON.parse(localStorage.getItem('map') || '[]');
-    const GRID_H = map.length;
-    const GRID_W = map[0] ? map[0].length : 0;
+    let map = [];
+    let GRID_H = 0;
+    let GRID_W = 0;
     const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
     const buildingDefs = buildingsConfig.buildings || [];
     const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
-    const layout = buildingsConfig.getBuildingLayout(map);
+    let layout = [];
 
     const canvas = document.getElementById('buildingsCanvas');
     const ctx = canvas.getContext('2d');
     let cw = 0;
     let ch = 0;
+
+    function loadMap(){
+      try {
+        const stored = JSON.parse(localStorage.getItem('map') || '[]');
+        map = Array.isArray(stored) ? stored : [];
+      } catch (err) {
+        map = [];
+      }
+      GRID_H = map.length;
+      GRID_W = map[0] ? map[0].length : 0;
+      layout = buildingsConfig.getBuildingLayout(map);
+    }
+    loadMap();
 
     function resize(){
       const dpr = window.devicePixelRatio || 1;
@@ -174,10 +187,11 @@
       ctx.clearRect(0, 0, cw, ch);
       const cell = cw / GRID_W || 0;
       const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
+      const wiggle = getWiggleOffset(cell);
       const user = getUserState();
 
       ctx.save();
-      ctx.translate(-cam.x, -cam.y);
+      ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 
       const ordered = layout
         .map((spot) => ({
@@ -197,8 +211,28 @@
       requestAnimationFrame(render);
     }
 
+    function getWiggleOffset(cell){
+      const start = Number(localStorage.getItem('islandWiggleAt') || 0);
+      if(!start) return { x: 0, y: 0 };
+      const duration = 700;
+      const elapsed = performance.now() - start;
+      if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
+      const t = elapsed / duration;
+      const decay = 1 - t;
+      return {
+        x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
+        y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
+      };
+    }
+
     resize();
     window.addEventListener('resize', resize);
+    window.addEventListener('storage', (event) => {
+      if(event.key === 'map'){
+        loadMap();
+        resize();
+      }
+    });
     render();
   </script>
 </body>

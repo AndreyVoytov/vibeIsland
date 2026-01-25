@@ -57,6 +57,20 @@ function easeOutQuad(t){ return 1 - (1-t)*(1-t); }
 function easeInCubic(t){ return t*t*t; }
 
 function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
+function getWiggleOffset(){
+  const start = Number(localStorage.getItem('islandWiggleAt') || 0);
+  if(!start) return { x: 0, y: 0 };
+  const duration = 700;
+  const elapsed = performance.now() - start;
+  if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
+  const t = elapsed / duration;
+  const decay = 1 - t;
+  const cellPx = cell || 0;
+  return {
+    x: Math.sin(t * Math.PI * 4) * cellPx * 0.12 * decay,
+    y: Math.cos(t * Math.PI * 4) * cellPx * 0.08 * decay,
+  };
+}
 
 /* загрузка спрайтов */
 const SPR_DIR = './img/hero/';
@@ -93,10 +107,11 @@ function drawHero(anim){
   const S = headScale * SCALE;
 
   const cam = getCam();
+  const wiggle = getWiggleOffset();
   ctx.save();
   ctx.translate(
-    pct2px(charXPct) - cam.x,
-    pct2px(charYPct) - cam.y - footOffset + cell / 2
+    pct2px(charXPct) - cam.x + wiggle.x,
+    pct2px(charYPct) - cam.y + wiggle.y - footOffset + cell / 2
   );
   ctx.scale(facing * S, S);
 
@@ -248,6 +263,12 @@ addEventListener('resize', resize);
 
 /* ---------- старт ---------- */
 loadSprites(()=>{ resize(); requestAnimationFrame(frame); });
+
+window.addEventListener('storage', (event) => {
+  if(event.key === 'map'){
+    location.reload();
+  }
+});
 </script>
 </body>
 </html>

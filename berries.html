@@ -226,10 +226,12 @@ function getActiveBuildingCells(){
     if(!def) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
+    const anchorX = Math.floor(spot.x);
+    const anchorY = Math.floor(spot.y);
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
     for(let dy = -radius; dy <= radius; dy += 1){
       for(let dx = -radius; dx <= radius; dx += 1){
-        cells.add(`${spot.x + dx},${spot.y + dy}`);
+        cells.add(`${anchorX + dx},${anchorY + dy}`);
       }
     }
   });
@@ -772,10 +774,11 @@ function frame(){
   collectLoop();
 
   const cam = getCam();
+  const wiggle = getWiggleOffset();
   const now = performance.now();
   ctx.clearRect(0,0,cw,ch);
   ctx.save();
-  ctx.translate(-cam.x, -cam.y);
+  ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
   bushes.forEach(b=>{
     const visual = getBushVisualDef(b);
     if(visual.type === 'centered'){
@@ -794,6 +797,27 @@ function frame(){
   requestAnimationFrame(frame);
 }
 frame();
+
+function getWiggleOffset(){
+  const start = Number(localStorage.getItem('islandWiggleAt') || 0);
+  if(!start) return { x: 0, y: 0 };
+  const duration = 700;
+  const elapsed = performance.now() - start;
+  if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
+  const t = elapsed / duration;
+  const decay = 1 - t;
+  const cell = GRID_W ? cw / GRID_W : 0;
+  return {
+    x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
+    y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
+  };
+}
+
+window.addEventListener('storage', (event) => {
+  if(event.key === 'map'){
+    location.reload();
+  }
+});
 </script>
 </body>
 </html>
