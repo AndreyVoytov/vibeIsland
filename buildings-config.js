@@ -109,88 +109,43 @@
     };
     const placed = [];
     const rest = buildings.filter((item) => item.id !== 'campfire');
-    const colliderGap = 1;
 
     const getRadius = (def) => {
       const radius = Number.isFinite(def?.colliderRadius) ? def.colliderRadius : 1;
       return Math.max(1, Math.round(radius));
     };
 
-    const isLandSquare = (x, y, radius) => {
-      for (let dy = -radius; dy <= radius; dy += 1) {
-        const row = map[y + dy];
-        if (!row) return false;
-        for (let dx = -radius; dx <= radius; dx += 1) {
-          if (!row[x + dx]) return false;
-        }
-      }
-      return true;
-    };
-
-    const hasOverlap = (x, y, radius) =>
-      placed.some((spot) => {
-        const dx = Math.abs(spot.x - x);
-        const dy = Math.abs(spot.y - y);
-        const minGap = spot.radius + radius + colliderGap;
-        return dx <= minGap && dy <= minGap;
-      });
-
     const campfireDef = buildings.find((item) => item.id === 'campfire');
     const campfireRadius = getRadius(campfireDef);
     placed.push({ id: 'campfire', x: center.x, y: center.y, radius: campfireRadius });
 
-    const quadrants = {
-      nw: [],
-      ne: [],
-      se: [],
-      sw: [],
-    };
+    const layoutGrid = [
+      [13, 9, 6, 14],
+      [5, 1, 2, 10],
+      [12, 4, 3, 7],
+      [16, 8, 11, 15],
+    ];
+    const spacing = 4;
+    const startX = bounds.minX + 3;
+    const startY = bounds.minY + 3;
+    const slotByNumber = new Map();
 
-    for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
-      const row = map[y] || [];
-      for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
-        if (!row[x]) continue;
-        if (x === center.x || y === center.y) continue;
-        const dx = x - center.x;
-        const dy = y - center.y;
-        const dist = Math.hypot(dx, dy);
-        if (dx < 0 && dy < 0) quadrants.nw.push({ x, y, dist });
-        else if (dx > 0 && dy < 0) quadrants.ne.push({ x, y, dist });
-        else if (dx > 0 && dy > 0) quadrants.se.push({ x, y, dist });
-        else if (dx < 0 && dy > 0) quadrants.sw.push({ x, y, dist });
-      }
-    }
+    layoutGrid.forEach((row, rowIndex) => {
+      row.forEach((slotNumber, colIndex) => {
+        const x = startX + spacing * colIndex;
+        const y = startY + spacing * rowIndex;
+        if (!map[y] || !map[y][x]) return;
+        slotByNumber.set(slotNumber, { x, y });
+      });
+    });
 
-    const compareDistance = (a, b) => {
-      if (a.dist !== b.dist) return a.dist - b.dist;
-      if (a.y !== b.y) return Math.abs(a.y - center.y) - Math.abs(b.y - center.y);
-      return Math.abs(a.x - center.x) - Math.abs(b.x - center.x);
-    };
+    const orderedSlots = Array.from({ length: 16 }, (_, index) => slotByNumber.get(index + 1)).filter(Boolean);
 
-    Object.values(quadrants).forEach((list) => list.sort(compareDistance));
-
-    const quadrantOrder = ['nw', 'ne', 'se', 'sw'];
-    let quadrantIndex = 0;
-
-    rest.forEach((item) => {
+    rest.forEach((item, index) => {
+      const spot = orderedSlots[index];
+      if (!spot) return;
       const radius = getRadius(item);
-      for (let attempts = 0; attempts < quadrantOrder.length; attempts += 1) {
-        const quadrantKey = quadrantOrder[quadrantIndex];
-        quadrantIndex = (quadrantIndex + 1) % quadrantOrder.length;
-        const list = quadrants[quadrantKey];
-        let spot = null;
-        while (list.length) {
-          const candidate = list.shift();
-          if (!isLandSquare(candidate.x, candidate.y, radius)) continue;
-          if (hasOverlap(candidate.x, candidate.y, radius)) continue;
-          spot = candidate;
-          break;
-        }
-        if (spot) {
-          placed.push({ id: item.id, x: spot.x, y: spot.y, radius });
-          break;
-        }
-      }
+      placed.push({ id: item.id, x: spot.x, y: spot.y, radius });
     });
 
     return placed.map(({ id, x, y }) => ({ id, x, y }));
