@@ -25,11 +25,12 @@
     #mapLayer        { z-index:0; display:none; }
     #seaLayer        { z-index:1; }
     #islandLayer     { z-index:2; }
-    #berriesLayer    { z-index:3; }
-    #heroLayer       { z-index:4; background:transparent; }
-    #heroLogicLayer  { z-index:4; width:0; height:0; pointer-events:none; } /* логика, невидима */
-    #controllerLayer { z-index:5; background:transparent; }
-    #uiLayer         { z-index:6; background:transparent; }
+    #buildingsLayer  { z-index:3; }
+    #berriesLayer    { z-index:4; }
+    #heroLayer       { z-index:5; background:transparent; }
+    #heroLogicLayer  { z-index:5; width:0; height:0; pointer-events:none; } /* логика, невидима */
+    #controllerLayer { z-index:6; background:transparent; }
+    #uiLayer         { z-index:7; background:transparent; }
   </style>
 </head>
 <body>
@@ -37,6 +38,7 @@
     <iframe id="mapLayer"        class="layer"></iframe>
     <iframe id="seaLayer"        class="layer"></iframe>
     <iframe id="islandLayer"     class="layer"></iframe>
+    <iframe id="buildingsLayer"  class="layer"></iframe>
     <iframe id="berriesLayer"    class="layer"></iframe>
     <iframe id="heroLayer"       class="layer"></iframe>
     <iframe id="heroLogicLayer"  class="layer"></iframe>
@@ -64,6 +66,7 @@
     mapFrame.onload = () => {
       document.getElementById('seaLayer').src         = 'layoutSea.html';
       document.getElementById('islandLayer').src      = 'layoutIsland.html';
+      document.getElementById('buildingsLayer').src   = 'buildings.html';
       document.getElementById('berriesLayer').src     = 'berries.html';
       document.getElementById('heroLayer').src        = 'heroAnimation.html';
       document.getElementById('heroLogicLayer').src   = 'hero.html';

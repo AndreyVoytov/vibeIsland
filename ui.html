@@ -118,21 +118,65 @@
 
   <script src="./berries-config.js"></script>
   <script src="./ui-config.js"></script>
+  <script src="./buildings-config.js"></script>
   <script>
     const uiConfig = window.UIConfig || { uiAssets: {}, resourceEconomy: [] };
     const berryConfig = window.BerriesConfig || { berries: [] };
-    const resources = berryConfig.berries.map((def, index) => {
+    const buildingConfig = window.BuildingsConfig || { buildings: [] };
+    const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+    function buildBuildingFallback(def){
+      const primitive = def.primitive || {};
+      let svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>";
+      if(primitive.kind === 'campfire'){
+        svg += `<ellipse cx='32' cy='42' rx='22' ry='12' fill='${primitive.glow || 'rgba(255,160,80,0.5)'}'/>`;
+        svg += `<rect x='14' y='36' width='36' height='14' rx='6' fill='${primitive.stone || '#6e7a86'}'/>`;
+        svg += `<path d='M32 18c8 6 10 12 0 22-10-10-8-16 0-22z' fill='${primitive.flame || '#ff8a3d'}'/>`;
+      } else if(primitive.kind === 'whetstone'){
+        svg += `<rect x='12' y='16' width='40' height='32' rx='8' fill='${primitive.base || '#9da3aa'}'/>`;
+        svg += `<rect x='18' y='24' width='28' height='14' rx='6' fill='${primitive.edge || '#dfe5ec'}'/>`;
+      } else if(primitive.kind === 'forge'){
+        svg += `<rect x='10' y='18' width='44' height='36' rx='8' fill='${primitive.base || '#5b3b2d'}'/>`;
+        svg += `<rect x='18' y='10' width='28' height='10' rx='4' fill='${primitive.roof || '#343a40'}'/>`;
+        svg += `<rect x='22' y='30' width='20' height='16' rx='4' fill='${primitive.metal || '#c0c7cf'}'/>`;
+        svg += `<path d='M32 32c6 4 6 8 0 14-6-6-6-10 0-14z' fill='${primitive.fire || '#ff7a35'}'/>`;
+      } else {
+        svg += `<rect x='12' y='16' width='40' height='32' rx='8' fill='${primitive.base || '#2f3a4a'}'/>`;
+        svg += `<rect x='16' y='12' width='32' height='8' rx='4' fill='${primitive.marker || '#ff6b6b'}'/>`;
+      }
+      svg += '</svg>';
+      return svgDataUri(svg);
+    }
+
+    const berryResources = berryConfig.berries.map((def, index) => {
       const econ = uiConfig.resourceEconomy.find((item) => item.id === def.id) || {};
+      const profit = typeof econ.profit === 'number' ? econ.profit : index + 1;
       return {
         id: def.id,
         title: def.titleRu || def.id,
         assetUrl: def.assetUrl,
         primitive: def.primitive || {},
-        profit: typeof econ.profit === 'number' ? econ.profit : index + 1,
+        profit,
         unlockCost: typeof econ.unlockCost === 'number' ? econ.unlockCost : 0,
+        detail: `Прибыль: +${profit}`,
       };
     });
 
+    const buildingResources = (buildingConfig.buildings || []).map((def) => ({
+      id: def.id,
+      title: def.titleRu || def.id,
+      assetUrl: def.assetUrl,
+      primitive: def.primitive || {},
+      unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
+      detail: 'Постройка',
+      fallbackUrl: buildBuildingFallback(def),
+    }));
+
+    const resources = [...berryResources, ...buildingResources].sort((a, b) => {
+      const diff = a.unlockCost - b.unlockCost;
+      if(diff !== 0) return diff;
+      return a.title.localeCompare(b.title);
+    });
     const moneyValue = document.getElementById('moneyValue');
     const shopButton = document.getElementById('shopButton');
     const shopPanel = document.getElementById('shopPanel');
@@ -192,9 +236,13 @@
       if(!user.unlockedResources || typeof user.unlockedResources !== 'object'){
         user.unlockedResources = {};
       }
-      if(!Object.values(user.unlockedResources).some(Boolean) && resources[0]){
-        user.unlockedResources[resources[0].id] = true;
-      }
+      const defaultUnlocks = [];
+      const campfire = buildingResources.find((item) => item.id === 'campfire');
+      if(campfire) defaultUnlocks.push(campfire.id);
+      if(berryResources[0]) defaultUnlocks.push(berryResources[0].id);
+      defaultUnlocks.forEach((id) => {
+        user.unlockedResources[id] = true;
+      });
       localStorage.setItem('user', JSON.stringify(user));
       return user;
     }
@@ -323,8 +371,12 @@
       icon.className = 'resource-icon';
       const img = document.createElement('img');
       img.alt = res.title;
-      img.src = res.assetUrl || '';
+      img.src = res.assetUrl || res.fallbackUrl || '';
       img.onerror = () => {
+        if(res.fallbackUrl && img.src !== res.fallbackUrl){
+          img.src = res.fallbackUrl;
+          return;
+        }
         const fallbackAsset = uiConfig.uiAssets.resourceFallback || {};
         const fallbackUrl = fallbackAsset.url || fallbackAsset.fallback;
         if(fallbackUrl && img.src !== fallbackUrl){
@@ -341,7 +393,7 @@
       const title = document.createElement('span');
       title.textContent = res.title;
       const profit = document.createElement('small');
-      profit.textContent = `Прибыль: +${res.profit}`;
+      profit.textContent = res.detail || `Прибыль: +${res.profit}`;
       info.appendChild(title);
       info.appendChild(profit);
 
