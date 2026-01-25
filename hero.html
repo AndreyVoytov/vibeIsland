@@ -127,17 +127,49 @@ function update(dtMs){
   const cell = vw / GRID_W;
   const blockers = getBuildingBlockers();
 
+  let blockedByBuildingX = false;
+  let blockedByBuildingY = false;
+
   if (vx){
     const nx = charXPct + vx;
     const gx = Math.floor(pct2pxX(nx, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)) charXPct = nx;
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
+      if(!blockers.has(`${gx},${gy}`)){
+        charXPct = nx;
+      } else {
+        blockedByBuildingX = true;
+      }
+    }
   }
   if (vy){
     const ny = charYPct + vy;
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(ny, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)) charYPct = ny;
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
+      if(!blockers.has(`${gx},${gy}`)){
+        charYPct = ny;
+      } else {
+        blockedByBuildingY = true;
+      }
+    }
+  }
+
+  if(blockedByBuildingX && Math.abs(vy) > 0.001){
+    const slideY = charYPct + vy;
+    const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
+    const gy = Math.floor(pct2pxY(slideY, vw) / cell);
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)){
+      charYPct = slideY;
+    }
+  }
+  if(blockedByBuildingY && Math.abs(vx) > 0.001){
+    const slideX = charXPct + vx;
+    const gx = Math.floor(pct2pxX(slideX, vw) / cell);
+    const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)){
+      charXPct = slideX;
+    }
   }
 
   if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
