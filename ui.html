@@ -66,8 +66,8 @@
       background:#2c2c2c;border:1px solid rgba(255,255,255,0.08);
     }
     .resource-card.clickable{cursor:pointer;}
-    .resource-card.unlocked{background:linear-gradient(135deg,#b67a1b,#f3c545);}
-    .resource-card.available{background:rgba(155, 240, 140, 0.35);}
+    .resource-card.unlocked{background:linear-gradient(135deg,#9c6a19,#d6ad3a);}
+    .resource-card.available{background:rgba(155, 240, 140, 0.5);}
     .resource-card.locked{background:rgba(140,140,140,0.35);}
 
     .resource-icon{
@@ -86,6 +86,7 @@
       display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;
       background:#2ecc71;color:#0d2b0f;
     }
+    .resource-card.available .unlock-button span{color:rgba(13, 43, 15, 0.55);}
     .unlock-button.locked{background:rgba(220, 80, 80, 0.35);color:rgba(255,255,255,0.5);cursor:not-allowed;}
     .unlock-button img{width:16px;height:16px;}
     .check-icon{width:24px;height:24px;}
@@ -339,6 +340,7 @@
     let joyR = 0;
     const JOY_R_PCT = 8;
     const SPEED_PCT = 0.4;
+    const EXPANSION_DELAY_MS = 1500;
 
     function saveJoystick(){
       localStorage.setItem('controller', JSON.stringify(joystickState));
@@ -437,12 +439,17 @@
       latest.money -= res.unlockCost;
       latest.unlockedResources[res.id] = true;
       setUserState(latest);
-      if(res.category === 'expansion'){
+      const isExpansion = res.category === 'expansion';
+      if(isExpansion){
         togglePanel(false);
       }
       maybeTeleportHeroFromBuilding(res);
       if(typeof res.onUnlock === 'function'){
-        res.onUnlock();
+        if(isExpansion){
+          setTimeout(() => res.onUnlock(), EXPANSION_DELAY_MS);
+        } else {
+          res.onUnlock();
+        }
       }
       renderResources();
       return true;
