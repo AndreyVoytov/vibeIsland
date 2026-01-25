@@ -20,6 +20,7 @@
       assetUrl: './img/building/campfire.png',
       unlockCost: 0,
       collider: false,
+      colliderRadius: 2,
       defaultUnlocked: true,
       primitive: {
         kind: 'campfire',
@@ -35,6 +36,7 @@
       assetUrl: './img/building/whetstone.png',
       unlockCost: 500,
       collider: true,
+      colliderRadius: 2,
       primitive: {
         kind: 'whetstone',
         base: '#9da3aa',
@@ -48,6 +50,7 @@
       assetUrl: './img/building/forge.png',
       unlockCost: 1000,
       collider: true,
+      colliderRadius: 2,
       primitive: {
         kind: 'forge',
         base: '#5b3b2d',
@@ -62,6 +65,7 @@
       assetUrl: `./img/building/drill-${index + 1}.png`,
       unlockCost: 1500 + index * 500,
       collider: true,
+      colliderRadius: 2,
       primitive: {
         kind: 'drill',
         base: '#2f3a4a',
@@ -103,7 +107,7 @@
       x: Math.round((bounds.minX + bounds.maxX) / 2),
       y: Math.round((bounds.minY + bounds.maxY) / 2),
     };
-    const gridStep = 5;
+    const gridStep = 4;
     const islandWidth = bounds.maxX - bounds.minX + 1;
     const islandHeight = bounds.maxY - bounds.minY + 1;
     const maxGridRadius = Math.max(

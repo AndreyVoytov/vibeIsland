@@ -53,7 +53,12 @@ function getBuildingBlockers(){
     if(!def || !def.collider) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
-    blockers.add(`${spot.x},${spot.y}`);
+    const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
+    for(let dy = -radius; dy <= radius; dy += 1){
+      for(let dx = -radius; dx <= radius; dx += 1){
+        blockers.add(`${spot.x + dx},${spot.y + dy}`);
+      }
+    }
   });
   return blockers;
 }
