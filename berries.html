@@ -15,7 +15,6 @@
 <!-- конфиг ягод -->
 <script src="./berries-config.js"></script>
 <script src="./buildings-config.js"></script>
-<script src="./ui-config.js"></script>
 
 <script>
 /* =========================
@@ -38,9 +37,6 @@ const BERRIES_LIST = (window.BerriesConfig && Array.isArray(window.BerriesConfig
 const getResourceWeight = (window.BerriesConfig && typeof window.BerriesConfig.getResourceWeight === 'function')
   ? window.BerriesConfig.getResourceWeight
   : (/*index*/)=>1;
-
-const uiConfig = window.UIConfig || { resourceEconomy: [] };
-const resourceEconomy = Array.isArray(uiConfig.resourceEconomy) ? uiConfig.resourceEconomy : [];
 
 function getUserState(){
   let user = {};
@@ -72,7 +68,7 @@ function getUnlockedResourceIds(){
 }
 
 function getResourceProfitById(id){
-  const found = resourceEconomy.find((entry)=>entry.id === id);
+  const found = BERRIES_LIST.find((entry)=>entry.id === id);
   if(found && typeof found.profit === 'number') return found.profit;
   return 1;
 }
