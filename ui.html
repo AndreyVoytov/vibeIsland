@@ -119,10 +119,12 @@
   <script src="./berries-config.js"></script>
   <script src="./ui-config.js"></script>
   <script src="./buildings-config.js"></script>
+  <script src="./enlarge-config.js"></script>
   <script>
     const uiConfig = window.UIConfig || { uiAssets: {} };
     const berryConfig = window.BerriesConfig || { berries: [] };
     const buildingConfig = window.BuildingsConfig || { buildings: [] };
+    const enlargeConfig = window.EnlargeConfig || { expansions: [] };
     const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
     function buildBuildingFallback(def){
@@ -168,6 +170,102 @@
       return svgDataUri(svg);
     }
 
+    function buildExpandFallback(def){
+      const svg =
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
+          "<rect x='8' y='8' width='48' height='48' rx='12' fill='#2fb84b'/>" +
+          "<path d='M32 18v28M18 32h28' stroke='#ffffff' stroke-width='6' stroke-linecap='round'/>" +
+        '</svg>';
+      return svgDataUri(svg);
+    }
+
+    function loadMap(){
+      try {
+        const parsed = JSON.parse(localStorage.getItem('map') || '[]');
+        if(!Array.isArray(parsed)) return [];
+        return parsed.map((row) => Array.isArray(row) ? row.slice() : []);
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function normalizeMap(map){
+      const width = Math.max(0, ...map.map((row) => row.length));
+      return map.map((row) => {
+        const next = Array.isArray(row) ? row.slice() : [];
+        while(next.length < width) next.push(0);
+        return next;
+      });
+    }
+
+    function getIslandBounds(map){
+      const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      for(let y = 0; y < map.length; y += 1){
+        const row = map[y] || [];
+        for(let x = 0; x < row.length; x += 1){
+          if(!row[x]) continue;
+          bounds.minX = Math.min(bounds.minX, x);
+          bounds.minY = Math.min(bounds.minY, y);
+          bounds.maxX = Math.max(bounds.maxX, x);
+          bounds.maxY = Math.max(bounds.maxY, y);
+        }
+      }
+      if(!Number.isFinite(bounds.minX)) return null;
+      return bounds;
+    }
+
+    function applyPadding(map, { top = 0, right = 0, bottom = 0, left = 0 }){
+      let padded = map.map((row) => {
+        const next = row.slice();
+        for(let i = 0; i < left; i += 1) next.unshift(0);
+        for(let i = 0; i < right; i += 1) next.push(0);
+        return next;
+      });
+      const width = padded[0] ? padded[0].length : 0;
+      for(let i = 0; i < top; i += 1){
+        padded.unshift(Array.from({ length: width }, () => 0));
+      }
+      for(let i = 0; i < bottom; i += 1){
+        padded.push(Array.from({ length: width }, () => 0));
+      }
+      return padded;
+    }
+
+    function expandIsland(map){
+      if(!Array.isArray(map) || !map.length) return map;
+      let nextMap = normalizeMap(map);
+      const bounds = getIslandBounds(nextMap);
+      if(!bounds) return nextMap;
+      const width = nextMap[0]?.length || 0;
+      const height = nextMap.length;
+      const padding = {
+        top: bounds.minY === 0 ? 1 : 0,
+        bottom: bounds.maxY === height - 1 ? 1 : 0,
+        left: bounds.minX === 0 ? 1 : 0,
+        right: bounds.maxX === width - 1 ? 1 : 0,
+      };
+      if(padding.top || padding.right || padding.bottom || padding.left){
+        nextMap = applyPadding(nextMap, padding);
+      }
+      const expanded = nextMap.map((row) => row.slice());
+      const h = nextMap.length;
+      const w = nextMap[0]?.length || 0;
+      for(let y = 0; y < h; y += 1){
+        for(let x = 0; x < w; x += 1){
+          if(!nextMap[y]?.[x]) continue;
+          for(let dy = -1; dy <= 1; dy += 1){
+            for(let dx = -1; dx <= 1; dx += 1){
+              const ny = y + dy;
+              const nx = x + dx;
+              if(ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
+              expanded[ny][nx] = 1;
+            }
+          }
+        }
+      }
+      return expanded;
+    }
+
     const berryResources = berryConfig.berries.map((def, index) => {
       const profit = typeof def.profit === 'number' ? def.profit : index + 1;
       return {
@@ -192,7 +290,23 @@
       fallbackUrl: buildBuildingFallback(def),
     }));
 
-    const resources = [...berryResources, ...buildingResources].sort((a, b) => {
+    const expansionResources = (enlargeConfig.expansions || []).map((def) => ({
+      id: def.id,
+      title: def.titleRu || def.id,
+      assetUrl: def.assetUrl,
+      primitive: def.primitive || { kind: 'expand' },
+      unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
+      detail: 'Расширение острова +1',
+      fallbackUrl: buildExpandFallback(def),
+      onUnlock: () => {
+        const current = loadMap();
+        const expanded = expandIsland(current);
+        localStorage.setItem('map', JSON.stringify(expanded));
+        localStorage.setItem('islandWiggleAt', Date.now().toString());
+      },
+    }));
+
+    const resources = [...berryResources, ...buildingResources, ...expansionResources].sort((a, b) => {
       const diff = a.unlockCost - b.unlockCost;
       if(diff !== 0) return diff;
       return a.title.localeCompare(b.title);
@@ -278,6 +392,9 @@
       latest.money -= res.unlockCost;
       latest.unlockedResources[res.id] = true;
       setUserState(latest);
+      if(typeof res.onUnlock === 'function'){
+        res.onUnlock();
+      }
       renderResources();
       return true;
     }

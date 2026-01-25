@@ -9,7 +9,7 @@
 <body>
 <script>
 /* статическая карта 20×36: квадрат 18×18 посередине */
-const map = [
+const defaultMap = [
   /* 0-8 */  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
               [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
               [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -50,7 +50,10 @@ const map = [
               [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 ];
 
-localStorage.setItem('map', JSON.stringify(map));
+const existingMap = localStorage.getItem('map');
+if(!existingMap || existingMap === '[]'){
+  localStorage.setItem('map', JSON.stringify(defaultMap));
+}
 </script>
 </body>
 </html>

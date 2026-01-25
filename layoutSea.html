@@ -14,10 +14,23 @@
 <canvas id="seaCanvas"></canvas>
 
 <script>
-const map = JSON.parse(localStorage.getItem('map') || '[]');
-const GRID_H = map.length;
-const GRID_W = map[0] ? map[0].length : 0;
-const H_PCT = GRID_W ? (GRID_H/GRID_W) * 100 : 100;
+let map = [];
+let GRID_H = 0;
+let GRID_W = 0;
+let H_PCT = 100;
+
+function loadMap(){
+  try {
+    const stored = JSON.parse(localStorage.getItem('map') || '[]');
+    map = Array.isArray(stored) ? stored : [];
+  } catch (err) {
+    map = [];
+  }
+  GRID_H = map.length;
+  GRID_W = map[0] ? map[0].length : 0;
+  H_PCT = GRID_W ? (GRID_H / GRID_W) * 100 : 100;
+}
+loadMap();
 
 function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
 
@@ -173,7 +186,16 @@ function resize(){
   cw = width;
   ch = height;
 }
-addEventListener('resize',resize); resize(); spawnSharks(); requestAnimationFrame(frame);
+addEventListener('resize',resize);
+window.addEventListener('storage', (event) => {
+  if(event.key === 'map'){
+    loadMap();
+    spawnSharks();
+  }
+});
+resize();
+spawnSharks();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>

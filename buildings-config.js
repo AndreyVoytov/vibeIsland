@@ -75,6 +75,8 @@
     })),
   ];
 
+  const layoutOffset = { x: -0.5, y: -0.5 };
+
   function getIslandBounds(map) {
     const bounds = {
       minX: Infinity,
@@ -126,14 +128,16 @@
       [16, 8, 11, 15],
     ];
     const spacing = 4;
+    const midGap = 3;
     const startX = bounds.minX + 3;
     const startY = bounds.minY + 3;
+    const rowOffsets = [0, spacing, spacing + midGap, spacing + midGap + spacing];
     const slotByNumber = new Map();
 
     layoutGrid.forEach((row, rowIndex) => {
       row.forEach((slotNumber, colIndex) => {
         const x = startX + spacing * colIndex;
-        const y = startY + spacing * rowIndex;
+        const y = startY + (rowOffsets[rowIndex] ?? spacing * rowIndex);
         if (!map[y] || !map[y][x]) return;
         slotByNumber.set(slotNumber, { x, y });
       });
@@ -148,11 +152,16 @@
       placed.push({ id: item.id, x: spot.x, y: spot.y, radius });
     });
 
-    return placed.map(({ id, x, y }) => ({ id, x, y }));
+    return placed.map(({ id, x, y }) => ({
+      id,
+      x: x + layoutOffset.x,
+      y: y + layoutOffset.y,
+    }));
   }
 
   global.BuildingsConfig = {
     buildings,
     getBuildingLayout,
+    layoutOffset,
   };
 })(window);

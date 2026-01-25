@@ -14,11 +14,37 @@
 <canvas id="islandCanvas"></canvas>
 
 <script>
-const map = JSON.parse(localStorage.getItem('map') || '[]');
-const GRID_H = map.length;
-const GRID_W = map[0] ? map[0].length : 0;
+let map = [];
+let GRID_H = 0;
+let GRID_W = 0;
+
+function loadMap(){
+  try {
+    const stored = JSON.parse(localStorage.getItem('map') || '[]');
+    map = Array.isArray(stored) ? stored : [];
+  } catch (err) {
+    map = [];
+  }
+  GRID_H = map.length;
+  GRID_W = map[0] ? map[0].length : 0;
+}
+loadMap();
 
 function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
+function getWiggleOffset(){
+  const start = Number(localStorage.getItem('islandWiggleAt') || 0);
+  if(!start) return { x: 0, y: 0 };
+  const duration = 700;
+  const elapsed = performance.now() - start;
+  if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
+  const t = elapsed / duration;
+  const decay = 1 - t;
+  const cell = GRID_W ? cw / GRID_W : 0;
+  return {
+    x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
+    y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
+  };
+}
 
 /* canvas */
 const canvas = document.getElementById('islandCanvas');
@@ -45,7 +71,7 @@ const TILE_IMG_ROUNDED = true; // clip to rounded rect same as primitive tiles
    * Можно заменить на картинку, указав URL (если содержит 'images', будет использовано изображение).
    */
 
-function drawIslandUnderShadow(cam){
+function drawIslandUnderShadow(cam, wiggle){
   // Find island bounding box in canvas space
   let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
   const cell = cw/GRID_W || 0;
@@ -65,7 +91,7 @@ function drawIslandUnderShadow(cam){
 
   const useShadowImg = (typeof SHADOW_ASSET_URL==='string') && SHADOW_ASSET_URL.includes('images');
   ctx.save();
-  ctx.translate(-cam.x, -cam.y);
+  ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 
   if(useShadowImg){
     const img = drawIslandUnderShadow._img || (drawIslandUnderShadow._img = new Image());
@@ -96,10 +122,10 @@ function drawIslandUnderShadow(cam){
 }
 
 /* остров: перекрывающиеся тайлы + «срез» или картинка тайла */
-function drawIsland(cam){
+function drawIsland(cam, wiggle){
   const cell = cw/GRID_W || 0, radius = cell*0.22, overlap = cell*0.12;
 
-  ctx.save(); ctx.translate(-cam.x,-cam.y);
+  ctx.save(); ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 
   // мягкая тень каждого тайла (стала чуть мягче и круглее)
   ctx.fillStyle='rgba(0,0,0,0.16)';
@@ -220,8 +246,9 @@ function frame(){
   ctx.clearRect(0,0,cw,ch);
 
   const cam = getCam();
-  drawIslandUnderShadow(cam);
-  drawIsland(cam);
+  const wiggle = getWiggleOffset();
+  drawIslandUnderShadow(cam, wiggle);
+  drawIsland(cam, wiggle);
 
   requestAnimationFrame(frame);
 }
@@ -239,7 +266,14 @@ function resize(){
   cw = width;
   ch = height;
 }
-addEventListener('resize',resize); resize(); requestAnimationFrame(frame);
+addEventListener('resize',resize);
+window.addEventListener('storage', (event) => {
+  if(event.key === 'map'){
+    loadMap();
+  }
+});
+resize();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>

@@ -53,10 +53,12 @@ function getBuildingBlockers(){
     if(!def || !def.collider) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
+    const anchorX = Math.floor(spot.x);
+    const anchorY = Math.floor(spot.y);
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
     for(let dy = -radius; dy <= radius; dy += 1){
       for(let dx = -radius; dx <= radius; dx += 1){
-        blockers.add(`${spot.x + dx},${spot.y + dy}`);
+        blockers.add(`${anchorX + dx},${anchorY + dy}`);
       }
     }
   });
@@ -118,6 +120,12 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+window.addEventListener('storage', (event) => {
+  if(event.key === 'map'){
+    location.reload();
+  }
+});
 </script>
 </body>
 </html>
