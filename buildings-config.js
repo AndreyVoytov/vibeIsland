@@ -121,6 +121,7 @@
 
     function isValidCell(x, y) {
       if (!map[y] || !map[y][x]) return false;
+      if (x === center.x || y === center.y) return false;
       const key = `${x},${y}`;
       return !used.has(key);
     }
