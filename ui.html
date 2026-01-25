@@ -120,7 +120,7 @@
   <script src="./ui-config.js"></script>
   <script src="./buildings-config.js"></script>
   <script>
-    const uiConfig = window.UIConfig || { uiAssets: {}, resourceEconomy: [] };
+    const uiConfig = window.UIConfig || { uiAssets: {} };
     const berryConfig = window.BerriesConfig || { berries: [] };
     const buildingConfig = window.BuildingsConfig || { buildings: [] };
     const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -149,15 +149,14 @@
     }
 
     const berryResources = berryConfig.berries.map((def, index) => {
-      const econ = uiConfig.resourceEconomy.find((item) => item.id === def.id) || {};
-      const profit = typeof econ.profit === 'number' ? econ.profit : index + 1;
+      const profit = typeof def.profit === 'number' ? def.profit : index + 1;
       return {
         id: def.id,
         title: def.titleRu || def.id,
         assetUrl: def.assetUrl,
         primitive: def.primitive || {},
         profit,
-        unlockCost: typeof econ.unlockCost === 'number' ? econ.unlockCost : 0,
+        unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
         detail: `Прибыль: +${profit}`,
       };
     });
