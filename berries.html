@@ -677,16 +677,17 @@ function drawBerry(be){
   if(be.onBush && be.def && be.def.bushType === 'centered') return;
   const s = be.onBush ? be.scale : 1;
   const def = be.def || { widthPx:24,heightPx:24,assetUrl:'',primitive:{base:'#e11',highlight:'rgba(255,255,255,0.6)'} };
+  const monolithScale = def.bushType === 'centered' ? 1 / 2.5 : 1;
 
   const rec = getBerryImgRec(getBerryAssetUrl(def));
   if(rec && rec.ok && canDrawImg(rec.img)){
-    const w = (def.widthPx || 24) * s;
-    const h = (def.heightPx || 24) * s;
+    const w = (def.widthPx || 24) * s * monolithScale;
+    const h = (def.heightPx || 24) * s * monolithScale;
     ctx.drawImage(rec.img, pct2px(be.xPct)-w/2, pct2px(be.yPct)-h/2, w, h);
     return;
   }
 
-  const r = pct2px(BERRY_R_PCT) * s;
+  const r = pct2px(BERRY_R_PCT) * s * monolithScale;
   const primitive = def.primitive || {};
   if(primitive.kind === 'mushroom'){
     ctx.save();
