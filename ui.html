@@ -148,6 +148,26 @@
       return svgDataUri(svg);
     }
 
+    function buildResourceFallback(def){
+      const primitive = def.primitive || {};
+      let svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>";
+      if(primitive.kind === 'mushroom'){
+        svg += `<rect x='10' y='34' width='44' height='20' rx='10' fill='${primitive.stem || '#e1d2bf'}'/>`;
+        svg += `<path d='M12 34c4-14 36-14 40 0' fill='${primitive.cap || '#f4eee6'}'/>`;
+        svg += `<circle cx='24' cy='28' r='4' fill='${primitive.spots || 'rgba(255,255,255,0.8)'}'/>`;
+        svg += `<circle cx='40' cy='26' r='3' fill='${primitive.spots || 'rgba(255,255,255,0.8)'}'/>`;
+      } else if(primitive.kind === 'beet'){
+        svg += `<circle cx='32' cy='36' r='14' fill='${primitive.root || '#9b1b30'}'/>`;
+        svg += `<path d='M32 14c6 2 10 6 12 12-6-2-14-2-24 0 2-6 6-10 12-12z' fill='${primitive.leaf || '#2f9b52'}'/>`;
+        svg += `<circle cx='26' cy='32' r='4' fill='${primitive.highlight || 'rgba(255,255,255,0.4)'}'/>`;
+      } else {
+        svg += `<circle cx='32' cy='32' r='20' fill='${primitive.base || '#e11'}'/>`;
+        svg += `<circle cx='24' cy='26' r='6' fill='${primitive.highlight || 'rgba(255,255,255,0.5)'}'/>`;
+      }
+      svg += '</svg>';
+      return svgDataUri(svg);
+    }
+
     const berryResources = berryConfig.berries.map((def, index) => {
       const profit = typeof def.profit === 'number' ? def.profit : index + 1;
       return {
@@ -155,6 +175,7 @@
         title: def.titleRu || def.id,
         assetUrl: def.assetUrl,
         primitive: def.primitive || {},
+        fallbackUrl: buildResourceFallback(def),
         profit,
         unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
         detail: `Прибыль: +${profit}`,
