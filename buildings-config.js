@@ -36,7 +36,7 @@
       assetUrl: './img/building/whetstone.png',
       unlockCost: 500,
       collider: true,
-      colliderRadius: 2,
+      colliderRadius: 1,
       primitive: {
         kind: 'whetstone',
         base: '#9da3aa',
@@ -50,7 +50,7 @@
       assetUrl: './img/building/forge.png',
       unlockCost: 1000,
       collider: true,
-      colliderRadius: 2,
+      colliderRadius: 1,
       primitive: {
         kind: 'forge',
         base: '#5b3b2d',
@@ -65,7 +65,7 @@
       assetUrl: `./img/building/drill-${index + 1}.png`,
       unlockCost: 1500 + index * 500,
       collider: true,
-      colliderRadius: 2,
+      colliderRadius: 1,
       primitive: {
         kind: 'drill',
         base: '#2f3a4a',
@@ -107,75 +107,54 @@
       x: Math.round((bounds.minX + bounds.maxX) / 2),
       y: Math.round((bounds.minY + bounds.maxY) / 2),
     };
-    const gridStep = 4;
-    const islandWidth = bounds.maxX - bounds.minX + 1;
-    const islandHeight = bounds.maxY - bounds.minY + 1;
-    const maxGridRadius = Math.max(
-      1,
-      Math.floor(Math.max(islandWidth, islandHeight) / gridStep),
-    );
-
     const placed = [];
-    const used = new Set();
     const rest = buildings.filter((item) => item.id !== 'campfire');
 
-    function isValidCell(x, y) {
-      if (!map[y] || !map[y][x]) return false;
-      if (x === center.x || y === center.y) return false;
-      const key = `${x},${y}`;
-      return !used.has(key);
-    }
-
-    function claimCell(x, y) {
-      used.add(`${x},${y}`);
-      return { x, y };
-    }
-
-    function getOrderedGridOffsets(radius) {
-      if (radius !== 1) {
-        const offsets = [];
-        for (let gy = -radius; gy <= radius; gy += 1) {
-          for (let gx = -radius; gx <= radius; gx += 1) {
-            if (Math.max(Math.abs(gx), Math.abs(gy)) !== radius) continue;
-            offsets.push({ gx, gy });
-          }
-        }
-        return offsets;
-      }
-      return [
-        { gx: -1, gy: -1 },
-        { gx: 1, gy: -1 },
-        { gx: 1, gy: 1 },
-        { gx: -1, gy: 1 },
-        { gx: 0, gy: -1 },
-        { gx: 1, gy: 0 },
-        { gx: 0, gy: 1 },
-        { gx: -1, gy: 0 },
-      ];
-    }
-
-    function getGridPositions() {
-      const positions = [];
-      for (let radius = 1; radius <= maxGridRadius; radius += 1) {
-        const offsets = getOrderedGridOffsets(radius);
-        offsets.forEach(({ gx, gy }) => {
-          const x = center.x + gx * gridStep;
-          const y = center.y + gy * gridStep;
-          if (isValidCell(x, y)) {
-            positions.push(claimCell(x, y));
-          }
-        });
-      }
-      return positions;
-    }
-
     placed.push({ id: 'campfire', x: center.x, y: center.y });
-    used.add(`${center.x},${center.y}`);
 
-    const gridPositions = getGridPositions();
-    rest.forEach((item, index) => {
-      const spot = gridPositions[index];
-      if (spot) placed.push({ id: item.id, x: spot.x, y: spot.y });
+    const quadrants = {
+      nw: [],
+      ne: [],
+      se: [],
+      sw: [],
+    };
+
+    for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
+      const row = map[y] || [];
+      for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
+        if (!row[x]) continue;
+        if (x === center.x || y === center.y) continue;
+        const dx = x - center.x;
+        const dy = y - center.y;
+        const dist = Math.hypot(dx, dy);
+        if (dx < 0 && dy < 0) quadrants.nw.push({ x, y, dist });
+        else if (dx > 0 && dy < 0) quadrants.ne.push({ x, y, dist });
+        else if (dx > 0 && dy > 0) quadrants.se.push({ x, y, dist });
+        else if (dx < 0 && dy > 0) quadrants.sw.push({ x, y, dist });
+      }
+    }
+
+    const compareDistance = (a, b) => {
+      if (a.dist !== b.dist) return a.dist - b.dist;
+      if (a.y !== b.y) return a.y - b.y;
+      return a.x - b.x;
+    };
+
+    Object.values(quadrants).forEach((list) => list.sort(compareDistance));
+
+    const quadrantOrder = ['nw', 'ne', 'se', 'sw'];
+    let quadrantIndex = 0;
+
+    rest.forEach((item) => {
+      for (let attempts = 0; attempts < quadrantOrder.length; attempts += 1) {
+        const quadrantKey = quadrantOrder[quadrantIndex];
+        quadrantIndex = (quadrantIndex + 1) % quadrantOrder.length;
+        const spot = quadrants[quadrantKey].shift();
+        if (spot) {
+          placed.push({ id: item.id, x: spot.x, y: spot.y });
+          break;
+        }
+      }
     });
 
     return placed;
