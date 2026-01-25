@@ -109,8 +109,35 @@
     };
     const placed = [];
     const rest = buildings.filter((item) => item.id !== 'campfire');
+    const colliderGap = 1;
 
-    placed.push({ id: 'campfire', x: center.x, y: center.y });
+    const getRadius = (def) => {
+      const radius = Number.isFinite(def?.colliderRadius) ? def.colliderRadius : 1;
+      return Math.max(1, Math.round(radius));
+    };
+
+    const isLandSquare = (x, y, radius) => {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        const row = map[y + dy];
+        if (!row) return false;
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (!row[x + dx]) return false;
+        }
+      }
+      return true;
+    };
+
+    const hasOverlap = (x, y, radius) =>
+      placed.some((spot) => {
+        const dx = Math.abs(spot.x - x);
+        const dy = Math.abs(spot.y - y);
+        const minGap = spot.radius + radius + colliderGap;
+        return dx <= minGap && dy <= minGap;
+      });
+
+    const campfireDef = buildings.find((item) => item.id === 'campfire');
+    const campfireRadius = getRadius(campfireDef);
+    placed.push({ id: 'campfire', x: center.x, y: center.y, radius: campfireRadius });
 
     const quadrants = {
       nw: [],
@@ -135,9 +162,9 @@
     }
 
     const compareDistance = (a, b) => {
-      if (a.dist !== b.dist) return b.dist - a.dist;
-      if (a.y !== b.y) return a.y - b.y;
-      return a.x - b.x;
+      if (a.dist !== b.dist) return a.dist - b.dist;
+      if (a.y !== b.y) return Math.abs(a.y - center.y) - Math.abs(b.y - center.y);
+      return Math.abs(a.x - center.x) - Math.abs(b.x - center.x);
     };
 
     Object.values(quadrants).forEach((list) => list.sort(compareDistance));
@@ -146,18 +173,27 @@
     let quadrantIndex = 0;
 
     rest.forEach((item) => {
+      const radius = getRadius(item);
       for (let attempts = 0; attempts < quadrantOrder.length; attempts += 1) {
         const quadrantKey = quadrantOrder[quadrantIndex];
         quadrantIndex = (quadrantIndex + 1) % quadrantOrder.length;
-        const spot = quadrants[quadrantKey].shift();
+        const list = quadrants[quadrantKey];
+        let spot = null;
+        while (list.length) {
+          const candidate = list.shift();
+          if (!isLandSquare(candidate.x, candidate.y, radius)) continue;
+          if (hasOverlap(candidate.x, candidate.y, radius)) continue;
+          spot = candidate;
+          break;
+        }
         if (spot) {
-          placed.push({ id: item.id, x: spot.x, y: spot.y });
+          placed.push({ id: item.id, x: spot.x, y: spot.y, radius });
           break;
         }
       }
     });
 
-    return placed;
+    return placed.map(({ id, x, y }) => ({ id, x, y }));
   }
 
   global.BuildingsConfig = {

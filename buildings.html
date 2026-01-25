@@ -157,7 +157,8 @@
     }
 
     function drawBuilding(def, position, cell){
-      const size = cell * 0.82 * 5;
+      const radius = Number.isFinite(def && def.colliderRadius) ? Math.max(1, def.colliderRadius) : 2;
+      const size = cell * 0.82 * (radius * 2 + 1);
       const centerX = position.x * cell + cell * 0.5;
       const centerY = position.y * cell + cell * 0.5;
       const imgRec = def && def.assetUrl ? getImageRecord(def.assetUrl) : null;

@@ -226,7 +226,12 @@ function getActiveBuildingCells(){
     if(!def) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
-    cells.add(`${spot.x},${spot.y}`);
+    const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
+    for(let dy = -radius; dy <= radius; dy += 1){
+      for(let dx = -radius; dx <= radius; dx += 1){
+        cells.add(`${spot.x + dx},${spot.y + dy}`);
+      }
+    }
   });
   return cells;
 }
