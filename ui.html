@@ -280,7 +280,9 @@
       };
     });
 
-    const buildingResources = (buildingConfig.buildings || []).map((def) => ({
+    const buildingDefinitions = buildingConfig.buildings || [];
+    const buildingById = new Map(buildingDefinitions.map((item) => [item.id, item]));
+    const buildingResources = buildingDefinitions.map((def) => ({
       id: def.id,
       title: def.titleRu || def.id,
       assetUrl: def.assetUrl,
@@ -288,6 +290,7 @@
       unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
       detail: 'Постройка',
       fallbackUrl: buildBuildingFallback(def),
+      category: 'building',
     }));
 
     const expansionResources = (enlargeConfig.expansions || []).map((def) => ({
@@ -298,6 +301,7 @@
       unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
       detail: 'Расширение острова +1',
       fallbackUrl: buildExpandFallback(def),
+      category: 'expansion',
       onUnlock: () => {
         const current = loadMap();
         const result = expandIsland(current);
@@ -382,8 +386,48 @@
       return user;
     }
 
+    function getHeroState(){
+      let hero = {};
+      try {
+        hero = JSON.parse(localStorage.getItem('heroState') || '{}');
+      } catch (err) {
+        hero = {};
+      }
+      if(typeof hero.charXPct !== 'number' || typeof hero.charYPct !== 'number'){
+        return null;
+      }
+      return hero;
+    }
+
     function setUserState(user){
       localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    function maybeTeleportHeroFromBuilding(res){
+      if(res.category !== 'building') return;
+      const def = buildingById.get(res.id);
+      if(!def || !def.collider) return;
+      const currentMap = loadMap();
+      const gridW = currentMap[0]?.length || 0;
+      if(!gridW) return;
+      const layout = buildingConfig.getBuildingLayout(currentMap);
+      const spot = layout.find((entry) => entry.id === res.id);
+      const campfireSpot = layout.find((entry) => entry.id === 'campfire');
+      if(!spot || !campfireSpot) return;
+      const hero = getHeroState();
+      if(!hero) return;
+      const gridX = (hero.charXPct / 100) * gridW;
+      const gridY = (hero.charYPct / 100) * gridW;
+      const heroCellX = Math.floor(gridX);
+      const heroCellY = Math.floor(gridY);
+      const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
+      const anchorX = Math.floor(spot.x);
+      const anchorY = Math.floor(spot.y);
+      const inZone = Math.abs(heroCellX - anchorX) <= radius && Math.abs(heroCellY - anchorY) <= radius;
+      if(!inZone) return;
+      const xPct = (campfireSpot.x / gridW) * 100;
+      const yPct = (campfireSpot.y / gridW) * 100;
+      localStorage.setItem('heroTeleport', JSON.stringify({ xPct, yPct }));
     }
 
     function attemptUnlock(res){
@@ -393,6 +437,10 @@
       latest.money -= res.unlockCost;
       latest.unlockedResources[res.id] = true;
       setUserState(latest);
+      if(res.category === 'expansion'){
+        togglePanel(false);
+      }
+      maybeTeleportHeroFromBuilding(res);
       if(typeof res.onUnlock === 'function'){
         res.onUnlock();
       }
@@ -589,11 +637,27 @@
       upgradeMarker.classList.toggle('hidden', !canUpgrade);
     }
 
+    function focusCheapestLocked(){
+      const user = getUserState();
+      const cheapest = resources.find((res) => !user.unlockedResources[res.id]);
+      if(!cheapest) return;
+      const entry = resourceCards.get(cheapest.id);
+      if(!entry) return;
+      const card = entry.card;
+      const gapValue = parseFloat(getComputedStyle(resourceList).rowGap || getComputedStyle(resourceList).gap || 0);
+      const offset = Math.max(0, card.offsetTop - card.offsetHeight - (Number.isFinite(gapValue) ? gapValue : 0));
+      resourceList.scrollTop = offset;
+    }
+
     function togglePanel(forceOpen){
       const open = typeof forceOpen === 'boolean' ? forceOpen : !shopPanel.classList.contains('open');
       shopPanel.classList.toggle('open', open);
       shopPanel.setAttribute('aria-hidden', (!open).toString());
       panelOverlay.classList.toggle('open', open);
+      if(open){
+        renderResources();
+        requestAnimationFrame(focusCheapestLocked);
+      }
     }
 
     saveJoystick();
