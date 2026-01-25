@@ -14,6 +14,7 @@
 
 <!-- конфиг ягод -->
 <script src="./berries-config.js"></script>
+<script src="./buildings-config.js"></script>
 <script src="./ui-config.js"></script>
 
 <script>
@@ -184,6 +185,13 @@ function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"
 const map = JSON.parse(localStorage.getItem('map') || '[]');
 const GRID_W = map[0]?.length || 0;
 function getHero(){ return JSON.parse(localStorage.getItem('heroState') || '{"charXPct":50,"charYPct":50,"facing":1,"isMoving":false}'); }
+const buildingsConfig = window.BuildingsConfig || { getBuildingLayout: () => [] };
+const buildingLayout = buildingsConfig.getBuildingLayout(map);
+const buildingCells = new Set(
+  Array.isArray(buildingLayout)
+    ? buildingLayout.map((spot) => `${spot.x},${spot.y}`)
+    : []
+);
 
 /* канвас */
 const cvs=document.getElementById('berriesCanvas'),ctx=cvs.getContext('2d');
@@ -269,6 +277,7 @@ setInterval(()=>{ if(!land.length) return;
 
   for(let i=0;i<30;i++){
     const c=land[Math.random()*land.length|0], key=`${c.x},${c.y}`;
+    if(buildingCells.has(key)) continue;
     if(busy.has(key)) continue;
     busy.add(key);
     bushes.push({
