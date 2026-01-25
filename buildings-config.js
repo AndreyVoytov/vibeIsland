@@ -141,7 +141,8 @@
     layoutGrid.forEach((row, rowIndex) => {
       row.forEach((slotNumber, colIndex) => {
         const x = startX + spacing * colIndex;
-        const y = startY + (rowOffsets[rowIndex] ?? spacing * rowIndex);
+        const baseY = startY + (rowOffsets[rowIndex] ?? spacing * rowIndex);
+        const y = baseY > center.y ? baseY + 2 : baseY;
         if (!map[y] || !map[y][x]) return;
         slotByNumber.set(slotNumber, { x, y });
       });

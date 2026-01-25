@@ -95,8 +95,27 @@ function getBuildingBlockers(){
   return blockers;
 }
 
+function applyHeroTeleport(){
+  const raw = localStorage.getItem('heroTeleport');
+  if(!raw) return;
+  let teleport = null;
+  try {
+    teleport = JSON.parse(raw);
+  } catch (err) {
+    teleport = null;
+  }
+  if(!teleport || typeof teleport.xPct !== 'number' || typeof teleport.yPct !== 'number'){
+    localStorage.removeItem('heroTeleport');
+    return;
+  }
+  charXPct = teleport.xPct;
+  charYPct = teleport.yPct;
+  localStorage.removeItem('heroTeleport');
+}
+
 /* ---------- обновление координат ---------- */
 function update(dtMs){
+  applyHeroTeleport();
   const ctrl = JSON.parse(localStorage.getItem('controller') || '{}');
   const frameScale = dtMs / BASE_FRAME_MS;
   let vx = (ctrl.vxPct || 0) * SPEED_SCALE * frameScale;
