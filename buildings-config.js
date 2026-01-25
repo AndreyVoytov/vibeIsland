@@ -135,7 +135,7 @@
     }
 
     const compareDistance = (a, b) => {
-      if (a.dist !== b.dist) return a.dist - b.dist;
+      if (a.dist !== b.dist) return b.dist - a.dist;
       if (a.y !== b.y) return a.y - b.y;
       return a.x - b.x;
     };
