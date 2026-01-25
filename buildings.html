@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Buildings Layer</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+    canvas{display:block;position:absolute;top:0;left:0;pointer-events:none;background:transparent}
+  </style>
+</head>
+<body>
+  <canvas id="buildingsCanvas"></canvas>
+
+  <script src="./buildings-config.js"></script>
+  <script>
+    const map = JSON.parse(localStorage.getItem('map') || '[]');
+    const GRID_H = map.length;
+    const GRID_W = map[0] ? map[0].length : 0;
+    const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
+    const buildingDefs = buildingsConfig.buildings || [];
+    const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
+    const layout = buildingsConfig.getBuildingLayout(map);
+
+    const canvas = document.getElementById('buildingsCanvas');
+    const ctx = canvas.getContext('2d');
+    let cw = 0;
+    let ch = 0;
+
+    function resize(){
+      const dpr = window.devicePixelRatio || 1;
+      const width = innerWidth;
+      const height = innerHeight;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cw = width;
+      ch = height;
+    }
+
+    const imageCache = new Map();
+    function getImageRecord(url){
+      if(!url) return null;
+      let record = imageCache.get(url);
+      if(record) return record;
+      const img = new Image();
+      record = { img, ok: false };
+      img.onload = () => { record.ok = true; };
+      img.onerror = () => { record.ok = false; };
+      img.src = url;
+      imageCache.set(url, record);
+      return record;
+    }
+
+    function getUserState(){
+      let user = {};
+      try {
+        user = JSON.parse(localStorage.getItem('user') || '{}');
+      } catch (err) {
+        user = {};
+      }
+      if(!user.unlockedResources || typeof user.unlockedResources !== 'object'){
+        user.unlockedResources = {};
+      }
+      return user;
+    }
+
+    function drawRoundedRect(x, y, w, h, r){
+      if(ctx.roundRect){
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+        ctx.fill();
+        return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.fill();
+    }
+
+    function drawPrimitive(def, centerX, centerY, size){
+      const primitive = def.primitive || {};
+      const half = size / 2;
+      const baseX = centerX - half;
+      const baseY = centerY - half;
+      const radius = size * 0.18;
+
+      ctx.save();
+      if(primitive.kind === 'campfire'){
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = primitive.glow || 'rgba(255,160,80,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY + size * 0.1, size * 0.5, size * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = primitive.stone || '#6e7a86';
+        drawRoundedRect(baseX + size * 0.15, baseY + size * 0.55, size * 0.7, size * 0.25, radius);
+
+        ctx.fillStyle = primitive.base || '#5b4636';
+        drawRoundedRect(baseX + size * 0.2, baseY + size * 0.65, size * 0.6, size * 0.18, radius * 0.6);
+
+        ctx.fillStyle = primitive.flame || '#ff8a3d';
+        ctx.beginPath();
+        ctx.moveTo(centerX, baseY + size * 0.2);
+        ctx.quadraticCurveTo(baseX + size * 0.75, baseY + size * 0.45, centerX, baseY + size * 0.7);
+        ctx.quadraticCurveTo(baseX + size * 0.25, baseY + size * 0.45, centerX, baseY + size * 0.2);
+        ctx.fill();
+        ctx.restore();
+        return;
+      }
+
+      if(primitive.kind === 'whetstone'){
+        ctx.fillStyle = primitive.base || '#9da3aa';
+        drawRoundedRect(baseX + size * 0.12, baseY + size * 0.2, size * 0.76, size * 0.6, radius);
+        ctx.fillStyle = primitive.edge || '#dfe5ec';
+        drawRoundedRect(baseX + size * 0.22, baseY + size * 0.32, size * 0.56, size * 0.3, radius * 0.6);
+        ctx.fillStyle = primitive.accent || '#6e747c';
+        ctx.fillRect(baseX + size * 0.2, baseY + size * 0.65, size * 0.6, size * 0.06);
+        ctx.restore();
+        return;
+      }
+
+      if(primitive.kind === 'forge'){
+        ctx.fillStyle = primitive.base || '#5b3b2d';
+        drawRoundedRect(baseX + size * 0.1, baseY + size * 0.25, size * 0.8, size * 0.65, radius);
+        ctx.fillStyle = primitive.roof || '#343a40';
+        drawRoundedRect(baseX + size * 0.2, baseY + size * 0.15, size * 0.6, size * 0.18, radius * 0.7);
+        ctx.fillStyle = primitive.metal || '#c0c7cf';
+        drawRoundedRect(baseX + size * 0.28, baseY + size * 0.45, size * 0.44, size * 0.28, radius * 0.6);
+        ctx.fillStyle = primitive.fire || '#ff7a35';
+        ctx.beginPath();
+        ctx.moveTo(centerX, baseY + size * 0.48);
+        ctx.quadraticCurveTo(baseX + size * 0.62, baseY + size * 0.58, centerX, baseY + size * 0.7);
+        ctx.quadraticCurveTo(baseX + size * 0.38, baseY + size * 0.58, centerX, baseY + size * 0.48);
+        ctx.fill();
+        ctx.restore();
+        return;
+      }
+
+      ctx.fillStyle = primitive.base || '#2f3a4a';
+      drawRoundedRect(baseX + size * 0.1, baseY + size * 0.2, size * 0.8, size * 0.65, radius);
+      ctx.fillStyle = primitive.accent || '#59687a';
+      drawRoundedRect(baseX + size * 0.22, baseY + size * 0.35, size * 0.56, size * 0.2, radius * 0.6);
+      ctx.fillStyle = primitive.marker || '#ff6b6b';
+      drawRoundedRect(baseX + size * 0.2, baseY + size * 0.12, size * 0.6, size * 0.12, radius * 0.4);
+      ctx.restore();
+    }
+
+    function drawBuilding(def, position, cell){
+      const size = cell * 0.82;
+      const centerX = position.x * cell + cell * 0.5;
+      const centerY = position.y * cell + cell * 0.5;
+      const imgRec = def && def.assetUrl ? getImageRecord(def.assetUrl) : null;
+
+      if(imgRec && imgRec.ok && imgRec.img.complete && imgRec.img.naturalWidth > 0){
+        ctx.drawImage(imgRec.img, centerX - size / 2, centerY - size / 2, size, size);
+        return;
+      }
+      drawPrimitive(def, centerX, centerY, size);
+    }
+
+    function render(){
+      ctx.clearRect(0, 0, cw, ch);
+      const cell = cw / GRID_W || 0;
+      const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
+      const user = getUserState();
+
+      ctx.save();
+      ctx.translate(-cam.x, -cam.y);
+
+      const ordered = layout
+        .map((spot) => ({
+          spot,
+          def: buildingById.get(spot.id),
+        }))
+        .filter((entry) => entry.def)
+        .sort((a, b) => a.spot.y - b.spot.y);
+
+      ordered.forEach(({ spot, def }) => {
+        const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
+        if(!unlocked) return;
+        drawBuilding(def, spot, cell);
+      });
+
+      ctx.restore();
+      requestAnimationFrame(render);
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
+    render();
+  </script>
+</body>
+</html>

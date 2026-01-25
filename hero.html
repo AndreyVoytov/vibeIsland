@@ -8,11 +8,16 @@
   <style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style>
 </head>
 <body>
+<script src="./buildings-config.js"></script>
 <script>
 /* ---------- карта ---------- */
 const map = JSON.parse(localStorage.getItem('map') || '[]');
 const GRID_H = map.length;
 const GRID_W = map[0] ? map[0].length : 0;
+const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
+const buildingDefs = buildingsConfig.buildings || [];
+const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
+const buildingLayout = buildingsConfig.getBuildingLayout(map);
 
 /* ---------- положение героя ---------- */
 let charXPct = 50;
@@ -27,6 +32,32 @@ const BASE_FRAME_MS = 1000 / 60;
 function pct2pxX(p, gameW){ return p * gameW / 100; }
 function pct2pxY(p, gameW){ return p * gameW / 100; } // ось Y тоже в % от ширины
 
+function getUserState(){
+  let user = {};
+  try {
+    user = JSON.parse(localStorage.getItem('user') || '{}');
+  } catch (err) {
+    user = {};
+  }
+  if(!user.unlockedResources || typeof user.unlockedResources !== 'object'){
+    user.unlockedResources = {};
+  }
+  return user;
+}
+
+function getBuildingBlockers(){
+  const user = getUserState();
+  const blockers = new Set();
+  buildingLayout.forEach((spot) => {
+    const def = buildingById.get(spot.id);
+    if(!def || !def.collider) return;
+    const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
+    if(!unlocked) return;
+    blockers.add(`${spot.x},${spot.y}`);
+  });
+  return blockers;
+}
+
 /* ---------- обновление координат ---------- */
 function update(dtMs){
   const ctrl = JSON.parse(localStorage.getItem('controller') || '{}');
@@ -38,18 +69,19 @@ function update(dtMs){
   /* коллизии по ногам (как и было) */
   const vw   = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const cell = vw / GRID_W;
+  const blockers = getBuildingBlockers();
 
   if (vx){
     const nx = charXPct + vx;
     const gx = Math.floor(pct2pxX(nx, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charXPct = nx;
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)) charXPct = nx;
   }
   if (vy){
     const ny = charYPct + vy;
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(ny, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]) charYPct = ny;
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)) charYPct = ny;
   }
 
   if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
