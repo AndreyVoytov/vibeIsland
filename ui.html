@@ -309,7 +309,7 @@
       assetUrl: def.assetUrl,
       primitive: def.primitive || {},
       unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
-      detail: 'Постройка',
+      detail: def.detail || 'Постройка',
       fallbackUrl: buildBuildingFallback(def),
       category: 'building',
     }));

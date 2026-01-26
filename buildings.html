@@ -20,6 +20,7 @@
     const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
     const buildingDefs = buildingsConfig.buildings || [];
     const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
+    const campfireUpgradeIds = ['campfire-upgrade-3', 'campfire-upgrade-2', 'campfire-upgrade-1'];
     let layout = [];
 
     const canvas = document.getElementById('buildingsCanvas');
@@ -193,11 +194,22 @@
       ctx.save();
       ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 
+      const getCampfireDef = () => {
+        for(const upgradeId of campfireUpgradeIds){
+          if(user.unlockedResources[upgradeId]){
+            return buildingById.get(upgradeId) || buildingById.get('campfire');
+          }
+        }
+        return buildingById.get('campfire');
+      };
+
       const ordered = layout
-        .map((spot) => ({
-          spot,
-          def: buildingById.get(spot.id),
-        }))
+        .map((spot) => {
+          if(spot.id === 'campfire'){
+            return { spot, def: getCampfireDef() };
+          }
+          return { spot, def: buildingById.get(spot.id) };
+        })
         .filter((entry) => entry.def)
         .sort((a, b) => a.spot.y - b.spot.y);
 

@@ -31,6 +31,57 @@
       },
     },
     {
+      id: 'campfire-upgrade-1',
+      titleRu: 'Костёр II',
+      assetUrl: '',
+      unlockCost: 1500,
+      collider: false,
+      colliderRadius: 2.2,
+      campfireUpgrade: true,
+      detail: 'Апгрейд костра',
+      primitive: {
+        kind: 'campfire',
+        base: '#6a4f3d',
+        stone: '#808a96',
+        flame: '#ff9f4a',
+        glow: 'rgba(255,180,110,0.6)',
+      },
+    },
+    {
+      id: 'campfire-upgrade-2',
+      titleRu: 'Костёр III',
+      assetUrl: '',
+      unlockCost: 2500,
+      collider: false,
+      colliderRadius: 2.4,
+      campfireUpgrade: true,
+      detail: 'Апгрейд костра',
+      primitive: {
+        kind: 'campfire',
+        base: '#75533f',
+        stone: '#8a96a3',
+        flame: '#ffb057',
+        glow: 'rgba(255,195,130,0.62)',
+      },
+    },
+    {
+      id: 'campfire-upgrade-3',
+      titleRu: 'Костёр IV',
+      assetUrl: '',
+      unlockCost: 4500,
+      collider: false,
+      colliderRadius: 2.6,
+      campfireUpgrade: true,
+      detail: 'Апгрейд костра',
+      primitive: {
+        kind: 'campfire',
+        base: '#815944',
+        stone: '#99a3ae',
+        flame: '#ffc066',
+        glow: 'rgba(255,210,150,0.65)',
+      },
+    },
+    {
       id: 'whetstone',
       titleRu: 'Точильный камень',
       assetUrl: './img/building/whetstone.png',
@@ -110,7 +161,7 @@
       y: Math.round((bounds.minY + bounds.maxY) / 2),
     };
     const placed = [];
-    const rest = buildings.filter((item) => item.id !== 'campfire');
+    const rest = buildings.filter((item) => item.id !== 'campfire' && !item.campfireUpgrade);
 
     const getRadius = (def) => {
       const radius = Number.isFinite(def?.colliderRadius) ? def.colliderRadius : 1;
