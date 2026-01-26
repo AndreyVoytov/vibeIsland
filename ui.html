@@ -41,14 +41,28 @@
 
     .panel-overlay{
       position:absolute;inset:0;background:rgba(0,0,0,0.35);opacity:0;
-      pointer-events:none;transition:0.2s ease;
+      pointer-events:none;transition:0.2s ease;z-index:8;
     }
     .panel-overlay.open{opacity:1;pointer-events:auto;}
+    .idle-panel{
+      position:absolute;left:50%;top:18%;transform:translate(-50%, -10px);
+      width:min(320px, calc(100% - 24px));
+      background:var(--panel-bg);border-radius:18px;border:1px solid var(--panel-border);
+      box-shadow:var(--card-shadow);padding:16px;display:flex;flex-direction:column;gap:10px;
+      opacity:0;pointer-events:none;transition:0.2s ease;text-align:center;z-index:10;
+    }
+    .idle-panel.open{opacity:1;pointer-events:auto;transform:translate(-50%, 0);}
+    .idle-panel h3{margin:0;font-size:18px;}
+    .idle-panel p{margin:0;color:rgba(255,255,255,0.8);font-size:13px;}
+    .idle-panel button{
+      border:none;border-radius:12px;padding:8px 12px;font-weight:600;cursor:pointer;
+      background:linear-gradient(135deg,#f4dfb5,#e4c18d);color:#2b1b0a;
+    }
     .shop-panel{
       position:absolute;left:50%;bottom:84px;width:min(320px, calc(100% - 24px));max-height:70%;
       background:var(--panel-bg);border-radius:18px;border:1px solid var(--panel-border);
       box-shadow:var(--card-shadow);display:flex;flex-direction:column;overflow:hidden;
-      pointer-events:none;transform:translate(-50%, 12px);opacity:0;transition:0.2s ease;
+      pointer-events:none;transform:translate(-50%, 12px);opacity:0;transition:0.2s ease;z-index:9;
     }
     .shop-panel.open{transform:translate(-50%, 0);opacity:1;pointer-events:auto;}
     .panel-header{
@@ -107,6 +121,12 @@
     </button>
 
     <div id="panelOverlay" class="panel-overlay" data-ui-control></div>
+    <div id="idleOverlay" class="panel-overlay" data-ui-control></div>
+    <div id="idlePanel" class="idle-panel" aria-hidden="true" data-ui-control>
+      <h3>Доход за время отдыха</h3>
+      <p id="idleDetail">Вы получили +0</p>
+      <button id="idleClose" type="button">Забрать</button>
+    </div>
     <div id="shopPanel" class="shop-panel ui-control" aria-hidden="true" data-ui-control>
       <div class="panel-header">
         <span>Магазин ресурсов</span>
@@ -322,6 +342,10 @@
     const shopPanel = document.getElementById('shopPanel');
     const closePanel = document.getElementById('closePanel');
     const panelOverlay = document.getElementById('panelOverlay');
+    const idleOverlay = document.getElementById('idleOverlay');
+    const idlePanel = document.getElementById('idlePanel');
+    const idleDetail = document.getElementById('idleDetail');
+    const idleClose = document.getElementById('idleClose');
     const resourceList = document.getElementById('resourceList');
     const upgradeMarker = document.getElementById('upgradeMarker');
     const resourceCards = new Map();
@@ -403,6 +427,58 @@
 
     function setUserState(user){
       localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    function getMostExpensiveResourceProfit(){
+      let chosen = null;
+      berryResources.forEach((res) => {
+        if(!chosen || res.unlockCost > chosen.unlockCost){
+          chosen = res;
+        }
+      });
+      return chosen ? chosen.profit : 0;
+    }
+
+    function calculateIdleIncome(){
+      const lastActiveAt = Number(localStorage.getItem('lastActiveAt') || 0);
+      if(!Number.isFinite(lastActiveAt) || lastActiveAt <= 0){
+        return { income: 0, secondsAway: 0 };
+      }
+      const secondsAway = Math.max(0, (Date.now() - lastActiveAt) / 1000);
+      const cappedSeconds = Math.min(secondsAway, 3600 * 3);
+      const baseProfit = getMostExpensiveResourceProfit();
+      if(baseProfit <= 0 || cappedSeconds <= 0){
+        return { income: 0, secondsAway };
+      }
+      const income = Math.floor((baseProfit * 5 * cappedSeconds) / 15);
+      return { income, secondsAway: cappedSeconds };
+    }
+
+    function showIdlePanel(income){
+      idleDetail.textContent = `Вы получили +${income}`;
+      idlePanel.classList.add('open');
+      idleOverlay.classList.add('open');
+      idlePanel.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideIdlePanel(){
+      idlePanel.classList.remove('open');
+      idleOverlay.classList.remove('open');
+      idlePanel.setAttribute('aria-hidden', 'true');
+    }
+
+    function setLastActiveAt(){
+      localStorage.setItem('lastActiveAt', Date.now().toString());
+    }
+
+    function applyIdleIncome(){
+      const result = calculateIdleIncome();
+      if(result.income <= 0) return;
+      const user = getUserState();
+      user.money += result.income;
+      setUserState(user);
+      showIdlePanel(result.income);
+      renderResources();
     }
 
     function maybeTeleportHeroFromBuilding(res){
@@ -679,10 +755,22 @@
     shopButton.addEventListener('click', () => togglePanel());
     closePanel.addEventListener('click', () => togglePanel(false));
     panelOverlay.addEventListener('click', () => togglePanel(false));
+    idleClose.addEventListener('click', hideIdlePanel);
+    idleOverlay.addEventListener('click', hideIdlePanel);
+
+    applyIdleIncome();
+    setLastActiveAt();
 
     renderResources();
     setInterval(renderResources, 400);
     window.addEventListener('storage', renderResources);
+    window.addEventListener('pagehide', setLastActiveAt);
+    window.addEventListener('beforeunload', setLastActiveAt);
+    document.addEventListener('visibilitychange', () => {
+      if(document.visibilityState === 'hidden'){
+        setLastActiveAt();
+      }
+    });
   </script>
 </body>
 </html>
