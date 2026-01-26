@@ -60,7 +60,7 @@ function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"
 function getWiggleOffset(){
   const start = Number(localStorage.getItem('islandWiggleAt') || 0);
   if(!start) return { x: 0, y: 0 };
-  const duration = 700;
+  const duration = 3500;
   const elapsed = performance.now() - start;
   if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
   const t = elapsed / duration;
