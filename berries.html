@@ -197,6 +197,8 @@ const BERRY_R_PCT = 1.2, BUSH_R_PCT = 3.7;
 const BUSH_TOP_GROW_MULT = 1.2;
 const PICK_OUT_MS = 200, PICK_IN_MS = 200, PICK_OUT_DIST_PCT = 1;
 const PICK_TARGET_UP_CELLS = 2.2;
+const DEFAULT_MIN_SPAWN_RADIUS = 0;
+const DEFAULT_MAX_SPAWN_RADIUS = 10;
 
 /* хитбокс ног героя */
 const HERO_PIVOT = { left: 1.7, right: 1.7, up: 4, down: -0.5 };
@@ -214,6 +216,7 @@ let GRID_W = 0;
 function getHero(){ return JSON.parse(localStorage.getItem('heroState') || '{"charXPct":50,"charYPct":50,"facing":1,"isMoving":false}'); }
 const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
 let buildingLayout = [];
+let campfireCenter = null;
 const buildingDefs = buildingsConfig.buildings || [];
 const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
 
@@ -238,6 +241,35 @@ function getActiveBuildingCells(){
   return cells;
 }
 
+function getSpawnRadius(def){
+  const minSpawnRadius = Number.isFinite(def?.minSpawnRadius) ? def.minSpawnRadius : DEFAULT_MIN_SPAWN_RADIUS;
+  const maxSpawnRadius = Number.isFinite(def?.maxSpawnRadius) ? def.maxSpawnRadius : DEFAULT_MAX_SPAWN_RADIUS;
+  const safeMin = Math.max(0, minSpawnRadius);
+  const safeMax = Math.max(safeMin, maxSpawnRadius);
+  return { min: safeMin, max: safeMax };
+}
+
+function getIslandBoundsCells(landCells){
+  if(!landCells.length) return null;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  landCells.forEach(({x,y})=>{if(x<minX)minX=x;if(y<minY)minY=y;if(x>maxX)maxX=x;if(y>maxY)maxY=y;});
+  return { minX, minY, maxX, maxY };
+}
+
+function resolveCampfireCenter(){
+  const campfireSpot = buildingLayout.find((spot) => spot.id === 'campfire');
+  if(campfireSpot){
+    const offset = buildingsConfig.layoutOffset || { x: 0, y: 0 };
+    const offsetX = Number.isFinite(offset.x) ? offset.x : 0;
+    const offsetY = Number.isFinite(offset.y) ? offset.y : 0;
+    return { x: campfireSpot.x - offsetX, y: campfireSpot.y - offsetY };
+  }
+  const bounds = getIslandBoundsCells(land);
+  if(bounds){
+    return { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 };
+  }
+  return null;
+}
 
 /* канвас */
 const cvs=document.getElementById('berriesCanvas'),ctx=cvs.getContext('2d');
@@ -306,6 +338,7 @@ function loadMapData({ initial = false } = {}){
   MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
   islandBounds = getIslandBounds(land, cellPct);
   buildingLayout = buildingsConfig.getBuildingLayout(map);
+  campfireCenter = resolveCampfireCenter();
 
   if(!initial && prevGridW && GRID_W && prevCellPct){
     let shift = { x: 0, y: 0 };
@@ -388,16 +421,22 @@ setInterval(()=>{ if(!land.length) return;
   const unpicked=bushes.filter(b=>b.stage==='growing'||b.stage==='ripe').length;
   if(unpicked>=MAX_UNPICKED_BUSHES) return;
   const buildingCells = getActiveBuildingCells();
+  const berryDef = pickBerryDef();
+  const spawnRadius = getSpawnRadius(berryDef);
 
   for(let i=0;i<30;i++){
     const c=land[Math.random()*land.length|0], key=`${c.x},${c.y}`;
+    if(campfireCenter){
+      const dist = Math.hypot(c.x - campfireCenter.x, c.y - campfireCenter.y);
+      if(dist < spawnRadius.min || dist > spawnRadius.max) continue;
+    }
     if(buildingCells.has(key)) continue;
     if(busy.has(key)) continue;
     busy.add(key);
     bushes.push({
       gridX:c.x, gridY:c.y, ...center(c.x,c.y),
       stage:'growing', t0:performance.now(), scale:0,
-      berries:[], leafs:[], berryDef:null
+      berries:[], leafs:[], berryDef
     });
     break;
   }
