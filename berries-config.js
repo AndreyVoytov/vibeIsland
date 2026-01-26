@@ -118,6 +118,8 @@
       bushType: 'centered',
       bushScale: 1.25,
       resourceType: 'extractable',
+      collider: true,
+      colliderRadius: 1,
       extractStages: [1, 0.82, 0.66, 0.5],
       extractHarvestMs: 700,
       primitive: {
@@ -144,6 +146,8 @@
       bushType: 'centered',
       bushScale: 1.15,
       resourceType: 'extractable',
+      collider: true,
+      colliderRadius: 1,
       extractStages: [1, 0.84, 0.68, 0.52],
       extractHarvestMs: 700,
       primitive: {

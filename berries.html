@@ -61,6 +61,13 @@ function buildResourceFallback(def){
       svg += `<circle cx='32' cy='26' r='18' fill='${foliage}'/>`;
       svg += `<circle cx='24' cy='20' r='10' fill='${accent}' opacity='0.9'/>`;
     }
+  } else if(primitive.kind === 'log'){
+    const bark = primitive.bark || '#6d4a2f';
+    const core = primitive.core || '#c89a5b';
+    svg += `<rect x='10' y='26' width='44' height='12' rx='6' fill='${bark}'/>`;
+    svg += `<circle cx='16' cy='32' r='6' fill='${core}'/>`;
+    svg += `<circle cx='48' cy='32' r='6' fill='${core}'/>`;
+    svg += `<circle cx='16' cy='32' r='3' fill='rgba(255,255,255,0.35)'/>`;
   } else {
     svg += `<circle cx='32' cy='32' r='20' fill='${primitive.base || '#e11'}'/>`;
     svg += `<circle cx='24' cy='26' r='6' fill='${primitive.highlight || 'rgba(255,255,255,0.5)'}'/>`;
@@ -212,6 +219,8 @@ const PICK_OUT_MS = 200, PICK_IN_MS = 200, PICK_OUT_DIST_PCT = 1;
 const PICK_TARGET_UP_CELLS = 2.2;
 const DEFAULT_MIN_SPAWN_RADIUS = 0;
 const DEFAULT_MAX_SPAWN_RADIUS = 10;
+const EXTRACT_PARTICLE_COUNT = 3;
+const RESOURCE_COLLIDER_PADDING = 1;
 
 /* хитбокс ног героя */
 const HERO_PIVOT = { left: 1.7, right: 1.7, up: 4, down: -0.5 };
@@ -233,7 +242,7 @@ let campfireCenter = null;
 const buildingDefs = buildingsConfig.buildings || [];
 const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
 
-function getActiveBuildingCells(){
+function getActiveBuildingCells(padding = 0){
   const user = getUserState();
   const cells = new Set();
   if(!Array.isArray(buildingLayout)) return cells;
@@ -245,8 +254,9 @@ function getActiveBuildingCells(){
     const anchorX = Math.floor(spot.x);
     const anchorY = Math.floor(spot.y);
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-    for(let dy = -radius; dy <= radius; dy += 1){
-      for(let dx = -radius; dx <= radius; dx += 1){
+    const expanded = Math.max(0, Math.round(radius) + Math.max(0, Math.round(padding)));
+    for(let dy = -expanded; dy <= expanded; dy += 1){
+      for(let dx = -expanded; dx <= expanded; dx += 1){
         cells.add(`${anchorX + dx},${anchorY + dy}`);
       }
     }
@@ -336,6 +346,7 @@ function clampToIsland(xPct,yPct,radPct=0){ const b=islandBounds;
    5) сущности
 ========================= */
 const bushes=[], busy=new Set();
+const resourceColliderCells = new Set();
 
 function loadMapData({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
@@ -397,6 +408,7 @@ function loadMapData({ initial = false } = {}){
       });
       busy.clear();
       nextBusy.forEach((key) => busy.add(key));
+      rebuildResourceColliderCells();
     }
   }
 }
@@ -431,11 +443,82 @@ function getExtractHarvestMs(def){
   return 700;
 }
 
+function getResourceColliderRadius(def){
+  if(!def || !def.collider) return 0;
+  const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
+  return Math.max(1, Math.round(radius));
+}
+
+function collectColliderCells(gridX, gridY, radius, padding = 0){
+  const cells = [];
+  const expanded = Math.max(0, Math.round(radius) + Math.max(0, Math.round(padding)));
+  for(let dy = -expanded; dy <= expanded; dy += 1){
+    for(let dx = -expanded; dx <= expanded; dx += 1){
+      cells.push(`${gridX + dx},${gridY + dy}`);
+    }
+  }
+  return cells;
+}
+
+function registerResourceCollider(bush){
+  if(!bush || !isExtractable(bush.berryDef)) return;
+  const radius = getResourceColliderRadius(bush.berryDef);
+  if(!radius) return;
+  const cells = collectColliderCells(bush.gridX, bush.gridY, radius, RESOURCE_COLLIDER_PADDING);
+  cells.forEach((key) => resourceColliderCells.add(key));
+  bush.colliderCells = cells;
+}
+
+function unregisterResourceCollider(bush){
+  if(!bush || !Array.isArray(bush.colliderCells)) return;
+  bush.colliderCells.forEach((key) => resourceColliderCells.delete(key));
+  bush.colliderCells = null;
+}
+
+function rebuildResourceColliderCells(){
+  resourceColliderCells.clear();
+  bushes.forEach((b) => {
+    if(!isExtractable(b.berryDef)) return;
+    const radius = getResourceColliderRadius(b.berryDef);
+    if(!radius) return;
+    const cells = collectColliderCells(b.gridX, b.gridY, radius, RESOURCE_COLLIDER_PADDING);
+    cells.forEach((key) => resourceColliderCells.add(key));
+    b.colliderCells = cells;
+  });
+}
+
 function getExtractStageScale(b){
   if(!b || !isExtractable(b.berryDef)) return 1;
   const stages = getExtractStages(b.berryDef);
   const idx = clamp(typeof b.extractStage === 'number' ? b.extractStage : 0, 0, stages.length - 1);
   return stages[idx] || 1;
+}
+
+function getExtractParticleDef(def){
+  if(!def) return { id: 'log', widthPx: 20, heightPx: 12, primitive: { kind: 'log' } };
+  if(def.__extractParticleDef) return def.__extractParticleDef;
+  const primitive = def.primitive || {};
+  if(primitive.kind === 'tree'){
+    const bark = primitive.trunk || '#6d4a2f';
+    def.__extractParticleDef = {
+      id: def.id,
+      widthPx: 20,
+      heightPx: 12,
+      primitive: {
+        kind: 'log',
+        bark,
+        core: '#c89a5b',
+      },
+    };
+  } else {
+    def.__extractParticleDef = {
+      id: def.id,
+      widthPx: 18,
+      heightPx: 18,
+      primitive,
+    };
+  }
+  return def.__extractParticleDef;
 }
 
 function getBushVisualDef(bush){
@@ -454,9 +537,10 @@ function getBushVisualDef(bush){
 setInterval(()=>{ if(!land.length) return;
   const unpicked=bushes.filter(b=>b.stage==='growing'||b.stage==='ripe').length;
   if(unpicked>=MAX_UNPICKED_BUSHES) return;
-  const buildingCells = getActiveBuildingCells();
   const berryDef = pickBerryDef();
   const spawnRadius = getSpawnRadius(berryDef);
+  const extractable = isExtractable(berryDef);
+  const buildingCells = getActiveBuildingCells(extractable ? RESOURCE_COLLIDER_PADDING : 0);
 
   for(let i=0;i<30;i++){
     const c=land[Math.random()*land.length|0], key=`${c.x},${c.y}`;
@@ -465,13 +549,23 @@ setInterval(()=>{ if(!land.length) return;
       if(dist < spawnRadius.min || dist > spawnRadius.max) continue;
     }
     if(buildingCells.has(key)) continue;
+    if(extractable){
+      const colliderRadius = getResourceColliderRadius(berryDef);
+      const colliderCells = colliderRadius ? collectColliderCells(c.x, c.y, colliderRadius, RESOURCE_COLLIDER_PADDING) : [];
+      if(colliderCells.some((cell) => buildingCells.has(cell))) continue;
+      if(colliderCells.some((cell) => resourceColliderCells.has(cell))) continue;
+    }
     if(busy.has(key)) continue;
     busy.add(key);
-    bushes.push({
+    const bush = {
       gridX:c.x, gridY:c.y, ...center(c.x,c.y),
       stage:'growing', t0:performance.now(), scale:0,
       berries:[], leafs:[], berryDef
-    });
+    };
+    bushes.push(bush);
+    if(extractable){
+      registerResourceCollider(bush);
+    }
     break;
   }
 }, SPAWN_MS);
@@ -479,6 +573,40 @@ setInterval(()=>{ if(!land.length) return;
 /* =========================
    7) логика
 ========================= */
+function updateFlyingParticles(b, now){
+  b.berries.forEach((be) => {
+    if(!be.flying) return;
+    const k = outCub(clamp((now - be.tFly0) / be.flyDur, 0, 1));
+    be.xPct = be.x0 + (be.tx - be.x0) * k;
+    be.yPct = be.y0 + (be.ty - be.y0) * k;
+    if(k >= 1) be.flying = false;
+  });
+}
+
+function spawnExtractParticles(b, now){
+  const particleDef = getExtractParticleDef(b.berryDef);
+  const count = Number.isFinite(b.berryDef?.extractParticleCount) ? b.berryDef.extractParticleCount : EXTRACT_PARTICLE_COUNT;
+  for(let i = 0; i < count; i++){
+    const a = rnd(0, Math.PI * 2);
+    const d = rnd(SCATTER_MIN_PCT, SCATTER_MAX_PCT);
+    const v = vec(a);
+    const to = clampToIsland(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT);
+    const be = mkBerry(false, b.xPct, b.yPct, particleDef);
+    Object.assign(be, {
+      x0: b.xPct,
+      y0: b.yPct,
+      tx: to.xPct,
+      ty: to.yPct,
+      flying: true,
+      tFly0: now,
+      flyDur: BERRY_FLY_MS,
+      onBush: false,
+      scale: 1,
+    });
+    b.berries.push(be);
+  }
+}
+
 function updBush(b){
   const now=performance.now();
 
@@ -517,6 +645,7 @@ function updBush(b){
 
   if(b.stage==='ripe'){
     if(isExtractable(b.berryDef)){
+      updateFlyingParticles(b, now);
       const h = getHero();
       const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
       const touch = bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
@@ -529,18 +658,16 @@ function updBush(b){
       const harvestMs = getExtractHarvestMs(b.berryDef);
       if(now - b.harvestStart < harvestMs) return;
 
-      const profit = getResourceProfitById(b.berryDef && b.berryDef.id);
-      const user = getUserState();
-      user.money = (user.money || 0) + profit;
-      setUserState(user);
+      spawnExtractParticles(b, now);
       localStorage.setItem('heroAction', JSON.stringify({chopAt: now}));
 
       const stages = getExtractStages(b.berryDef);
       b.extractStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
       b.harvestStart = 0;
       if(b.extractStage >= stages.length){
-        b.stage = 'dead';
+        b.stage = 'exploded';
         busy.delete(`${b.gridX},${b.gridY}`);
+        unregisterResourceCollider(b);
       }
       return;
     }
@@ -580,14 +707,7 @@ function updBush(b){
       return now-l.t0 < LEAF_LIFE_MS;
     });
 
-    b.berries.forEach(be=>{
-      if(be.flying){
-        const k=outCub(clamp((now-be.tFly0)/be.flyDur,0,1));
-        be.xPct=be.x0+(be.tx-be.x0)*k;
-        be.yPct=be.y0+(be.ty-be.y0)*k;
-        if(k>=1) be.flying=false;
-      }
-    });
+    updateFlyingParticles(b, now);
 
     if(!b.leafs.length && b.berries.every(be=>!be.alive)) b.stage='dead';
   }
@@ -621,6 +741,7 @@ function collectUnderBuildings(){
       if(isExtractable(b.berryDef)){
         b.stage = 'dead';
         busy.delete(key);
+        unregisterResourceCollider(b);
         return;
       }
       b.berries.forEach(collectBerryInstant);
