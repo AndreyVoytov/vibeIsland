@@ -192,9 +192,10 @@
     }
 
     function buildExpandFallback(def){
+      const surfaceColor = def?.surfaceColor || '#2fb84b';
       const svg =
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
-          "<rect x='8' y='8' width='48' height='48' rx='12' fill='#2fb84b'/>" +
+          `<rect x='8' y='8' width='48' height='48' rx='12' fill='${surfaceColor}'/>` +
           "<path d='M32 18v28M18 32h28' stroke='#ffffff' stroke-width='6' stroke-linecap='round'/>" +
         '</svg>';
       return svgDataUri(svg);
@@ -252,7 +253,7 @@
       return padded;
     }
 
-    function expandIsland(map){
+    function expandIsland(map, surfaceColor){
       if(!Array.isArray(map) || !map.length) return { map, shift: { x: 0, y: 0 } };
       let nextMap = normalizeMap(map);
       const bounds = getIslandBounds(nextMap);
@@ -271,6 +272,7 @@
       const expanded = nextMap.map((row) => row.slice());
       const h = nextMap.length;
       const w = nextMap[0]?.length || 0;
+      const expansionValue = surfaceColor || 1;
       for(let y = 0; y < h; y += 1){
         for(let x = 0; x < w; x += 1){
           if(!nextMap[y]?.[x]) continue;
@@ -279,7 +281,9 @@
               const ny = y + dy;
               const nx = x + dx;
               if(ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
-              expanded[ny][nx] = 1;
+              if(!expanded[ny]?.[nx]){
+                expanded[ny][nx] = expansionValue;
+              }
             }
           }
         }
@@ -325,7 +329,7 @@
       category: 'expansion',
       onUnlock: () => {
         const current = loadMap();
-        const result = expandIsland(current);
+        const result = expandIsland(current, def.surfaceColor);
         localStorage.setItem('mapShift', JSON.stringify(result.shift || { x: 0, y: 0 }));
         localStorage.setItem('map', JSON.stringify(result.map));
         localStorage.setItem('islandWiggleAt', Date.now().toString());
