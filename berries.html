@@ -48,6 +48,19 @@ function buildResourceFallback(def){
     svg += `<circle cx='32' cy='36' r='14' fill='${primitive.root || '#9b1b30'}'/>`;
     svg += `<path d='M32 14c6 2 10 6 12 12-6-2-14-2-24 0 2-6 6-10 12-12z' fill='${primitive.leaf || '#2f9b52'}'/>`;
     svg += `<circle cx='26' cy='32' r='4' fill='${primitive.highlight || 'rgba(255,255,255,0.4)'}'/>`;
+  } else if(primitive.kind === 'tree'){
+    const trunk = primitive.trunk || '#6d4a2f';
+    const foliage = primitive.foliage || '#2f7b3d';
+    const accent = primitive.accent || '#4aa25e';
+    if(primitive.form === 'pine'){
+      svg += `<rect x='29' y='32' width='6' height='18' rx='2' fill='${trunk}'/>`;
+      svg += `<path d='M32 8 L14 34 L50 34 Z' fill='${foliage}'/>`;
+      svg += `<path d='M32 16 L18 36 L46 36 Z' fill='${accent}' opacity='0.9'/>`;
+    } else {
+      svg += `<rect x='28' y='34' width='8' height='18' rx='2' fill='${trunk}'/>`;
+      svg += `<circle cx='32' cy='26' r='18' fill='${foliage}'/>`;
+      svg += `<circle cx='24' cy='20' r='10' fill='${accent}' opacity='0.9'/>`;
+    }
   } else {
     svg += `<circle cx='32' cy='32' r='20' fill='${primitive.base || '#e11'}'/>`;
     svg += `<circle cx='24' cy='26' r='6' fill='${primitive.highlight || 'rgba(255,255,255,0.5)'}'/>`;
@@ -404,6 +417,27 @@ function mkLeaf(xPct,yPct){
   return { xPct,yPct, vxPct:v.x*spd, vyPct:v.y*spd, rot:rnd(0,Math.PI*2), angVel:rnd(-10,10)*(Math.PI/180), t0:performance.now() };
 }
 
+function isExtractable(def){
+  return def && def.resourceType === 'extractable';
+}
+
+function getExtractStages(def){
+  if(!def || !Array.isArray(def.extractStages) || !def.extractStages.length) return [1];
+  return def.extractStages;
+}
+
+function getExtractHarvestMs(def){
+  if(def && Number.isFinite(def.extractHarvestMs)) return def.extractHarvestMs;
+  return 700;
+}
+
+function getExtractStageScale(b){
+  if(!b || !isExtractable(b.berryDef)) return 1;
+  const stages = getExtractStages(b.berryDef);
+  const idx = clamp(typeof b.extractStage === 'number' ? b.extractStage : 0, 0, stages.length - 1);
+  return stages[idx] || 1;
+}
+
 function getBushVisualDef(bush){
   const def = bush.berryDef || {};
   return {
@@ -452,6 +486,11 @@ function updBush(b){
     b.scale = outBack(clamp((now-b.t0)/BUSH_GROW_MS,0,1));
     if(b.scale>=1){
       b.stage='ripe';
+      if(isExtractable(b.berryDef)){
+        b.extractStage = 0;
+        b.harvestStart = 0;
+        return;
+      }
       const n=rndi(...BERRIES_MIN_MAX);
 
 	  //Спавн с разными ягодами на кусте, оставим на потом
@@ -477,6 +516,34 @@ function updBush(b){
   }
 
   if(b.stage==='ripe'){
+    if(isExtractable(b.berryDef)){
+      const h = getHero();
+      const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
+      const touch = bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
+      const canHarvest = touch || dist <= pct2px(BURST_R_PCT);
+      if(!canHarvest){
+        b.harvestStart = 0;
+        return;
+      }
+      if(!b.harvestStart) b.harvestStart = now;
+      const harvestMs = getExtractHarvestMs(b.berryDef);
+      if(now - b.harvestStart < harvestMs) return;
+
+      const profit = getResourceProfitById(b.berryDef && b.berryDef.id);
+      const user = getUserState();
+      user.money = (user.money || 0) + profit;
+      setUserState(user);
+      localStorage.setItem('heroAction', JSON.stringify({chopAt: now}));
+
+      const stages = getExtractStages(b.berryDef);
+      b.extractStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
+      b.harvestStart = 0;
+      if(b.extractStage >= stages.length){
+        b.stage = 'dead';
+        busy.delete(`${b.gridX},${b.gridY}`);
+      }
+      return;
+    }
     b.berries.forEach(be=>{ be.scale = clamp((now-be.t0)/BERRIES_GROW_MS,0,1); });
 
     const h=getHero();
@@ -551,6 +618,11 @@ function collectUnderBuildings(){
     const key = `${b.gridX},${b.gridY}`;
     if(!buildingCells.has(key)) return;
     if(b.stage === 'growing' || b.stage === 'ripe'){
+      if(isExtractable(b.berryDef)){
+        b.stage = 'dead';
+        busy.delete(key);
+        return;
+      }
       b.berries.forEach(collectBerryInstant);
       b.stage = 'dead';
       busy.delete(key);
@@ -685,6 +757,45 @@ function drawMushroomPrimitive(x, y, w, h, primitive){
   ctx.restore();
 }
 
+function drawTreePrimitive(x, y, w, h, primitive){
+  const trunk = primitive.trunk || '#6d4a2f';
+  const bark = primitive.bark || trunk;
+  const foliage = primitive.foliage || '#2f7b3d';
+  const accent = primitive.accent || '#4aa25e';
+
+  ctx.save();
+  if(primitive.form === 'pine'){
+    ctx.fillStyle = trunk;
+    ctx.fillRect(x - w * 0.08, y + h * 0.1, w * 0.16, h * 0.35);
+    ctx.fillStyle = foliage;
+    ctx.beginPath();
+    ctx.moveTo(x, y - h * 0.45);
+    ctx.lineTo(x - w * 0.45, y + h * 0.15);
+    ctx.lineTo(x + w * 0.45, y + h * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(x, y - h * 0.3);
+    ctx.lineTo(x - w * 0.35, y + h * 0.2);
+    ctx.lineTo(x + w * 0.35, y + h * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillStyle = bark;
+    ctx.fillRect(x - w * 0.09, y + h * 0.1, w * 0.18, h * 0.38);
+    ctx.fillStyle = foliage;
+    ctx.beginPath();
+    ctx.ellipse(x, y - h * 0.05, w * 0.4, h * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.ellipse(x - w * 0.2, y - h * 0.2, w * 0.2, h * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawBeetPrimitive(x, y, w, h, primitive){
   const root = primitive.root || '#8a1227';
   const leaf = primitive.leaf || '#2f9b52';
@@ -733,8 +844,9 @@ function drawBushCentered(b, now, visual){
   const { sx, sy } = getCenteredBushScale(now, b);
   const base = pct2px(BUSH_R_PCT);
   const scale = typeof visual.scale === 'number' ? visual.scale : 1;
-  const w = base * 6 * sx * scale;
-  const h = base * 5 * sy * scale;
+  const extractScale = getExtractStageScale(b);
+  const w = base * 6 * sx * scale * extractScale;
+  const h = base * 5 * sy * scale * extractScale;
   const x = pct2px(b.xPct);
   const y = pct2px(b.yPct);
   const rec = getBushImgRec(visual.assetUrl);
@@ -747,6 +859,10 @@ function drawBushCentered(b, now, visual){
   const primitive = visual.primitive || {};
   if(primitive.kind === 'beet'){
     drawBeetPrimitive(x, y, w, h, primitive);
+    return;
+  }
+  if(primitive.kind === 'tree'){
+    drawTreePrimitive(x, y, w, h, primitive);
     return;
   }
   drawMushroomPrimitive(x, y, w, h, primitive);
