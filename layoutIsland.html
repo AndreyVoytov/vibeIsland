@@ -66,6 +66,19 @@ const TILE_ASSET_URL = './img/tiles/1.png'; // e.g. './images/tile.png' — if c
 const TILE_IMG_OPACITY = 1.0;
 const TILE_IMG_ROUNDED = true; // clip to rounded rect same as primitive tiles
 // === end config ===
+const DEFAULT_SURFACE_COLOR = '#2fb84b';
+
+function getTileSurfaceColor(value){
+  if(!value) return null;
+  if(typeof value === 'string') return value;
+  if(typeof value === 'object' && value.surfaceColor) return value.surfaceColor;
+  return DEFAULT_SURFACE_COLOR;
+}
+
+function isCustomSurface(value){
+  const surface = getTileSurfaceColor(value);
+  return surface && surface !== DEFAULT_SURFACE_COLOR;
+}
 
 /* большая «тень» под островом (замена: глубокий тёмно-синий скруглённый прямоугольник)
    * Можно заменить на картинку, указав URL (если содержит 'images', будет использовано изображение).
@@ -142,10 +155,22 @@ function drawIsland(cam, wiggle){
     const img = drawIsland._tileImg || (drawIsland._tileImg = new Image());
     if(!img.src) img.src = TILE_ASSET_URL;
     for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
+      const cellValue = map[y]?.[x];
+      const surfaceColor = getTileSurfaceColor(cellValue);
       const sx = x*cell - overlap/2;
       const sy = y*cell - overlap/2;
       const ww = cell + overlap;
       const hh = cell + overlap;
+      if(isCustomSurface(cellValue)){
+        ctx.save();
+        ctx.fillStyle = surfaceColor || DEFAULT_SURFACE_COLOR;
+        ctx.beginPath();
+        if(ctx.roundRect) ctx.roundRect(sx, sy, ww, hh, radius);
+        else { ctx.rect(sx, sy, ww, hh); }
+        ctx.fill();
+        ctx.restore();
+        continue;
+      }
       ctx.save();
       ctx.globalAlpha = TILE_IMG_OPACITY;
       if(TILE_IMG_ROUNDED && ctx.roundRect){
@@ -157,15 +182,16 @@ function drawIsland(cam, wiggle){
         ctx.drawImage(img, sx, sy, ww, hh + 10);
       }else{
         // заглушка пока картинка грузится
-        ctx.fillStyle = '#2fb84b';
+        ctx.fillStyle = DEFAULT_SURFACE_COLOR;
         ctx.fillRect(sx, sy, ww, hh);
       }
       ctx.restore();
     }
   }else{
     // верхняя поверхность — зелёная трава (примитивы)
-    ctx.fillStyle='#2fb84b';
     for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
+      const surfaceColor = getTileSurfaceColor(map[y]?.[x]) || DEFAULT_SURFACE_COLOR;
+      ctx.fillStyle = surfaceColor;
       ctx.beginPath();
       if(ctx.roundRect) ctx.roundRect(x*cell - overlap/2, y*cell - overlap/2, cell+overlap, cell+overlap, radius);
       else { ctx.rect(x*cell - overlap/2, y*cell - overlap/2, cell+overlap, cell+overlap); }
@@ -174,7 +200,7 @@ function drawIsland(cam, wiggle){
 
     // Детальный «срез»: тёмно-зелёная кромка, затем зелёная кромка, затем коричневая земля и тонкая белая пена
     const dkG = '#1f8a3a';  // тёмно-зелёный
-    const ltG = '#2fb84b';  // светло-зелёный (та же трава)
+    const ltG = DEFAULT_SURFACE_COLOR;  // светло-зелёный (та же трава)
     const earth = '#8a5a2b'; // коричневый
     const foam  = 'rgba(255,255,255,0.85)';
 
