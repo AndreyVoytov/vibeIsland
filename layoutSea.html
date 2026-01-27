@@ -44,6 +44,13 @@ function getCellSizePct(){
 function getExpansionOffsetPct(){
   return getExpansionLevel() * getCellSizePct();
 }
+function isLandAtPct(xPct, yPct){
+  if(!GRID_W || !GRID_H) return false;
+  const gx = Math.floor((xPct / 100) * GRID_W);
+  const gy = Math.floor((yPct / H_PCT) * GRID_H);
+  if(gx < 0 || gx >= GRID_W || gy < 0 || gy >= GRID_H) return false;
+  return Boolean(map[gy]?.[gx]);
+}
 
 /* canvas */
 const canvas = document.getElementById('seaCanvas');
@@ -107,6 +114,7 @@ function spawnSharks(){
         const d = distPointRect(sx, sy, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
         if(d < (SHARK_SAFE_FACTOR * R + expansionOffset)) safe = false;
       }
+      if(isLandAtPct(sx, sy)) safe = false;
       ok = safe;
     }
     const phase = Math.random()*Math.PI*2;
@@ -125,6 +133,7 @@ function spawnSharks(){
 function updateSharks(dt){
   const bbox = getIslandBBoxPct();
   const expansionOffset = getExpansionOffsetPct();
+  const nudgeStep = Math.max(getCellSizePct() * 0.75, 0.5);
   sharks.forEach(s=>{
     s.angle += s.angSpeed * dt;
     const x = s.sxPct + Math.cos(s.angle) * s.R;
@@ -145,6 +154,20 @@ function updateSharks(dt){
         const push = (minD - d);
         s.xPct += vx * push;
         s.yPct += vy * push;
+      }
+    }
+    if(isLandAtPct(s.xPct, s.yPct)){
+      const cx = bbox ? (bbox.xPct + bbox.wPct / 2) : 50;
+      const cy = bbox ? (bbox.yPct + bbox.hPct / 2) : (H_PCT / 2);
+      let tries = 0;
+      while(tries++ < 30 && isLandAtPct(s.xPct, s.yPct)){
+        let vx = s.xPct - cx;
+        let vy = s.yPct - cy;
+        const len = Math.hypot(vx, vy) || 1;
+        vx /= len;
+        vy /= len;
+        s.xPct = Math.max(0, Math.min(100, s.xPct + vx * nudgeStep));
+        s.yPct = Math.max(0, Math.min(H_PCT, s.yPct + vy * nudgeStep));
       }
     }
   });
