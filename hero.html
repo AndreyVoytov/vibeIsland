@@ -153,6 +153,8 @@ function update(dtMs){
 
   let blockedByBuildingX = false;
   let blockedByBuildingY = false;
+  let movedX = false;
+  let movedY = false;
 
   if (vx){
     const nx = charXPct + vx;
@@ -161,6 +163,7 @@ function update(dtMs){
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
       if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
         charXPct = nx;
+        movedX = true;
       } else {
         blockedByBuildingX = true;
       }
@@ -173,26 +176,29 @@ function update(dtMs){
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
       if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
         charYPct = ny;
+        movedY = true;
       } else {
         blockedByBuildingY = true;
       }
     }
   }
 
-  if(blockedByBuildingX && Math.abs(vy) > 0.001){
+  if(blockedByBuildingX && !movedY && Math.abs(vy) > 0.001){
     const slideY = charYPct + vy;
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(slideY, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
       charYPct = slideY;
+      movedY = true;
     }
   }
-  if(blockedByBuildingY && Math.abs(vx) > 0.001){
+  if(blockedByBuildingY && !movedX && Math.abs(vx) > 0.001){
     const slideX = charXPct + vx;
     const gx = Math.floor(pct2pxX(slideX, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
       charXPct = slideX;
+      movedX = true;
     }
   }
 
