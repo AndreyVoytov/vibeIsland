@@ -376,7 +376,7 @@ function drawSpeechBubble(text, heroPos, cam = { x: 0, y: 0 }, wiggle = { x: 0, 
   const bubbleHeight = lines.length * lineHeight + padding * 2;
 
   const x = pct2px(heroPos.xPct) - cam.x + wiggle.x;
-  const y = pct2px(heroPos.yPct) - cam.y + wiggle.y - bubbleHeight - pct2px(6);
+  const y = pct2px(heroPos.yPct) - cam.y + wiggle.y - bubbleHeight - pct2px(10);
 
   ctx.fillStyle = 'rgba(255,255,255,0.95)';
   ctx.strokeStyle = 'rgba(0,0,0,0.2)';
@@ -412,7 +412,7 @@ function checkTriggers(){
     const def = scenarioById.get(state.id);
     if(!def) return;
     if(!isOnLand(state)) return;
-    const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 2;
+    const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 3;
     const dx = (state.gridX + 0.5) - heroPos.gridX;
     const dy = (state.gridY + 0.5) - heroPos.gridY;
     if(Math.hypot(dx, dy) > radius) return;
