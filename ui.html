@@ -382,6 +382,9 @@
         const result = expandIsland(current, def.surfaceColor);
         localStorage.setItem('mapShift', JSON.stringify(result.shift || { x: 0, y: 0 }));
         localStorage.setItem('map', JSON.stringify(result.map));
+        const expansionLevel = Number(localStorage.getItem('islandExpansionLevel') || '0');
+        const nextLevel = Number.isFinite(expansionLevel) ? Math.max(0, Math.floor(expansionLevel) + 1) : 1;
+        localStorage.setItem('islandExpansionLevel', nextLevel.toString());
         localStorage.setItem('islandWiggleAt', Date.now().toString());
       },
     }));
