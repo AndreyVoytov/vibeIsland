@@ -45,7 +45,6 @@ const sharks = [];
 const SHARK_N = 5;
 const SHARK_WANDER_R = 7;     // радиус блуждания (в % ширины)
 const SHARK_SAFE_FACTOR = 1.5; // спавн не ближе чем 1.5*R к тайлам
-const SHARK_EXPANSION_OFFSET_CELLS = 1;
 const SHARK_ANG_SPEED_MIN = 0.0006;
 const SHARK_ANG_SPEED_MAX = 0.0016;
 
@@ -76,47 +75,12 @@ function getIslandBBoxPct(){
   return {xPct, yPct, wPct, hPct};
 }
 
-function getIslandBoundsGrid(){
-  if(!GRID_W || !GRID_H) return null;
-  let minGX=Infinity, minGY=Infinity, maxGX=-Infinity, maxGY=-Infinity;
-  for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++){
-    if(map[y]?.[x]){
-      if(x<minGX) minGX=x;
-      if(y<minGY) minGY=y;
-      if(x>maxGX) maxGX=x;
-      if(y>maxGY) maxGY=y;
-    }
-  }
-  if(!isFinite(minGX)) return null;
-  return { minGX, minGY, maxGX, maxGY };
-}
-
-function getExpansionLevel(){
-  const stored = Number(localStorage.getItem('islandExpansionLevel') || NaN);
-  if(Number.isFinite(stored)) return Math.max(0, Math.floor(stored));
-  const bounds = getIslandBoundsGrid();
-  if(!bounds) return 0;
-  const width = bounds.maxGX - bounds.minGX + 1;
-  const height = bounds.maxGY - bounds.minGY + 1;
-  const baseSize = 18;
-  const minSize = Math.min(width, height);
-  return Math.max(0, Math.floor((minSize - baseSize) / 2));
-}
-
-function getExpansionSafeOffsetPct(){
-  if(!GRID_W) return 0;
-  const cellPct = 100 / GRID_W;
-  const level = getExpansionLevel();
-  return level * SHARK_EXPANSION_OFFSET_CELLS * cellPct;
-}
-
 // случайное число в [a,b]
 function rand(a,b){ return a + Math.random()*(b-a); }
 
 function spawnSharks(){
   sharks.length = 0;
   const bbox = getIslandBBoxPct();
-  const extraSafe = getExpansionSafeOffsetPct();
   for(let i=0;i<SHARK_N;i++){
     let tries = 0;
     let sx=0, sy=0, ok=false;
@@ -129,7 +93,7 @@ function spawnSharks(){
       let safe = true;
       if(bbox){
         const d = distPointRect(sx, sy, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
-        if(d < SHARK_SAFE_FACTOR * R + extraSafe) safe = false;
+        if(d < SHARK_SAFE_FACTOR * R) safe = false;
       }
       ok = safe;
     }
@@ -148,7 +112,6 @@ function spawnSharks(){
 
 function updateSharks(dt){
   const bbox = getIslandBBoxPct();
-  const extraSafe = getExpansionSafeOffsetPct();
   sharks.forEach(s=>{
     s.angle += s.angSpeed * dt;
     const x = s.sxPct + Math.cos(s.angle) * s.R;
@@ -158,7 +121,7 @@ function updateSharks(dt){
     // на всякий случай мягко отталкиваемся, если кто-то оказался слишком близко (численно)
     if(bbox){
       const d = distPointRect(s.xPct, s.yPct, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
-      const minD = SHARK_SAFE_FACTOR * s.R * 0.98 + extraSafe;
+      const minD = SHARK_SAFE_FACTOR * s.R * 0.98;
       if(d < minD){
         // вектор от центра прямоугольника к акуле
         const cx = bbox.xPct + bbox.wPct/2;

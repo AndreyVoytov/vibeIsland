@@ -275,31 +275,14 @@
       }
     }
 
-    const SCENARIO_SHORE_RADIUS = 2;
-    const SCENARIO_LAND_BUFFER = 1;
-
-    function isNearLand(map, x, y, radius){
-      const limit = Number.isFinite(radius) ? Math.max(1, radius) : 1;
-      for(let dy = -limit; dy <= limit; dy += 1){
-        for(let dx = -limit; dx <= limit; dx += 1){
+    function hasLandNeighbor(map, x, y){
+      for(let dy = -1; dy <= 1; dy += 1){
+        for(let dx = -1; dx <= 1; dx += 1){
           if(dx === 0 && dy === 0) continue;
           if(map[y + dy]?.[x + dx]) return true;
         }
       }
       return false;
-    }
-
-    function fillLandPatch(map, x, y, radius, value){
-      const limit = Number.isFinite(radius) ? Math.max(0, radius) : 0;
-      for(let dy = -limit; dy <= limit; dy += 1){
-        for(let dx = -limit; dx <= limit; dx += 1){
-          const ny = y + dy;
-          const nx = x + dx;
-          if(!map[ny] || typeof map[ny][nx] === 'undefined') continue;
-          if(map[ny][nx]) continue;
-          map[ny][nx] = value;
-        }
-      }
     }
 
     function applyScenarioObjectsToMap(map, shift, surfaceColor){
@@ -311,22 +294,11 @@
         const gridY = (Number.isFinite(obj.gridY) ? obj.gridY : 0) + (shift?.y || 0);
         if(!map[gridY] || typeof map[gridY][gridX] === 'undefined') return;
         if(map[gridY][gridX]) return;
-        if(isNearLand(map, gridX, gridY, SCENARIO_SHORE_RADIUS)){
-          fillLandPatch(map, gridX, gridY, SCENARIO_LAND_BUFFER, expansionValue);
+        if(hasLandNeighbor(map, gridX, gridY)){
           map[gridY][gridX] = expansionValue;
         }
       });
       return map;
-    }
-
-    function estimateExpansionLevel(map){
-      const bounds = getIslandBounds(map);
-      if(!bounds) return 0;
-      const width = bounds.maxX - bounds.minX + 1;
-      const height = bounds.maxY - bounds.minY + 1;
-      const baseSize = 18;
-      const minSize = Math.min(width, height);
-      return Math.max(0, Math.floor((minSize - baseSize) / 2));
     }
 
     function expandIsland(map, surfaceColor){
@@ -410,9 +382,6 @@
         const result = expandIsland(current, def.surfaceColor);
         localStorage.setItem('mapShift', JSON.stringify(result.shift || { x: 0, y: 0 }));
         localStorage.setItem('map', JSON.stringify(result.map));
-        const currentLevel = Number(localStorage.getItem('islandExpansionLevel') || NaN);
-        const baseLevel = Number.isFinite(currentLevel) ? currentLevel : estimateExpansionLevel(current);
-        localStorage.setItem('islandExpansionLevel', String(baseLevel + 1));
         localStorage.setItem('islandWiggleAt', Date.now().toString());
       },
     }));
