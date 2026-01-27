@@ -242,6 +242,10 @@ function applyPadding(mapData, padding){
   return padded;
 }
 
+function getTriggerRadius(def){
+  return Number.isFinite(def?.triggerRadiusCells) ? def.triggerRadiusCells : 3;
+}
+
 function triggerRadiusTouchesLand(state, radius){
   if(!Number.isFinite(radius)) return false;
   const rounded = Math.max(1, Math.round(radius));
@@ -256,14 +260,28 @@ function triggerRadiusTouchesLand(state, radius){
   return false;
 }
 
-function spawnScenarioLand(){
+function isHeroWithinTrigger(state, def, heroPos){
+  if(!heroPos) return false;
+  const radius = getTriggerRadius(def);
+  const dx = (state.gridX + 0.5) - heroPos.gridX;
+  const dy = (state.gridY + 0.5) - heroPos.gridY;
+  return Math.hypot(dx, dy) <= radius;
+}
+
+function canSyncTrigger(state, def, heroPos){
+  const radius = getTriggerRadius(def);
+  if(!triggerRadiusTouchesLand(state, radius)) return false;
+  return isHeroWithinTrigger(state, def, heroPos);
+}
+
+function spawnScenarioLand(heroPos){
   if(!map.length) return;
   const seeds = [];
   scenarioState.forEach((state) => {
     const def = scenarioById.get(state.id);
     if(!def) return;
-    const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 3;
-    if(!triggerRadiusTouchesLand(state, radius)) return;
+    if(state.triggered) return;
+    if(!canSyncTrigger(state, def, heroPos)) return;
     seeds.push({ x: state.gridX, y: state.gridY });
   });
   if(!seeds.length) return;
@@ -460,11 +478,8 @@ function checkTriggers(){
     if(state.triggered) return;
     const def = scenarioById.get(state.id);
     if(!def) return;
+    if(!canSyncTrigger(state, def, heroPos)) return;
     if(!isOnLand(state)) return;
-    const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 3;
-    const dx = (state.gridX + 0.5) - heroPos.gridX;
-    const dy = (state.gridY + 0.5) - heroPos.gridY;
-    if(Math.hypot(dx, dy) > radius) return;
     state.triggered = true;
     if(def.transformOnApproach){
       state.transformed = true;
@@ -477,7 +492,8 @@ function checkTriggers(){
 
 function frame(now){
   ctx.clearRect(0, 0, cw, ch);
-  spawnScenarioLand();
+  const heroPos = getHeroGridPosition();
+  spawnScenarioLand(heroPos);
   const cam = getCam();
   const wiggle = getWiggleOffset();
   ctx.save();
