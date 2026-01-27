@@ -306,9 +306,15 @@
       const step = getInwardStep(def);
       const y0 = state.gridY;
       const x0 = state.gridX;
-      const y1 = y0 + step.y * cellsAhead;
-      const x1 = x0 + step.x * cellsAhead;
-      return Boolean(map[y0]?.[x0] || map[y1]?.[x1]);
+      const y1 = y0 + step.y * (def.triggerRadiusCells - 1);
+      const x1 = x0;
+	  const y2 = y0 - step.y * (def.triggerRadiusCells - 1);
+      const x2 = x0;
+	  const y3 = y0;
+      const x3 = x0 + step.x * (def.triggerRadiusCells  - 1);
+	  const y4 = y0;
+      const x4 = x0 - step.x * (def.triggerRadiusCells  - 1);
+      return Boolean(map[y0]?.[x0] || map[y1]?.[x1] || map[y2]?.[x2] || map[y3]?.[x3] || map[y4]?.[x4]);
     }
 
     function applyScenarioObjectsToMap(map, shift, surfaceColor){
