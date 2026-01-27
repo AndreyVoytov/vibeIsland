@@ -95,6 +95,29 @@ function getBuildingBlockers(){
   return blockers;
 }
 
+let resourceBlockersCache = new Set();
+let resourceBlockersUpdatedAt = 0;
+
+function getResourceBlockers(){
+  const updatedAt = Number(localStorage.getItem('resourceColliderUpdatedAt') || 0);
+  if(updatedAt && updatedAt === resourceBlockersUpdatedAt){
+    return resourceBlockersCache;
+  }
+  resourceBlockersUpdatedAt = updatedAt;
+  const raw = localStorage.getItem('resourceColliderCells');
+  if(!raw){
+    resourceBlockersCache = new Set();
+    return resourceBlockersCache;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    resourceBlockersCache = new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    resourceBlockersCache = new Set();
+  }
+  return resourceBlockersCache;
+}
+
 function applyHeroTeleport(){
   const raw = localStorage.getItem('heroTeleport');
   if(!raw) return;
@@ -126,6 +149,7 @@ function update(dtMs){
   const vw   = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const cell = vw / GRID_W;
   const blockers = getBuildingBlockers();
+  const resourceBlockers = getResourceBlockers();
 
   let blockedByBuildingX = false;
   let blockedByBuildingY = false;
@@ -135,7 +159,7 @@ function update(dtMs){
     const gx = Math.floor(pct2pxX(nx, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
-      if(!blockers.has(`${gx},${gy}`)){
+      if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
         charXPct = nx;
       } else {
         blockedByBuildingX = true;
@@ -147,7 +171,7 @@ function update(dtMs){
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(ny, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
-      if(!blockers.has(`${gx},${gy}`)){
+      if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
         charYPct = ny;
       } else {
         blockedByBuildingY = true;
@@ -159,7 +183,7 @@ function update(dtMs){
     const slideY = charYPct + vy;
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(slideY, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)){
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
       charYPct = slideY;
     }
   }
@@ -167,7 +191,7 @@ function update(dtMs){
     const slideX = charXPct + vx;
     const gx = Math.floor(pct2pxX(slideX, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`)){
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
       charXPct = slideX;
     }
   }
