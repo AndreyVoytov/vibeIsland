@@ -46,6 +46,7 @@ const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
 const COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
 const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
 const SCENARIO_STATE_KEY = 'scenarioObjectsState';
+const SCENARIO_SHORE_RADIUS = 2;
 
 function loadMap({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
@@ -223,6 +224,22 @@ function isOnLand(state){
   return Boolean(map[state.gridY]?.[state.gridX]);
 }
 
+function isNearLandCell(x, y, radius){
+  const limit = Number.isFinite(radius) ? Math.max(1, radius) : 1;
+  for(let dy = -limit; dy <= limit; dy += 1){
+    for(let dx = -limit; dx <= limit; dx += 1){
+      if(dx === 0 && dy === 0) continue;
+      if(map[y + dy]?.[x + dx]) return true;
+    }
+  }
+  return false;
+}
+
+function isNearShore(state){
+  if(isOnLand(state)) return true;
+  return isNearLandCell(state.gridX, state.gridY, SCENARIO_SHORE_RADIUS);
+}
+
 function drawPrimitive(x, y, w, h, def, floating){
   ctx.save();
   ctx.fillStyle = '#cfd8dc';
@@ -305,7 +322,7 @@ function rebuildScenarioColliderCells(){
   scenarioState.forEach((state) => {
     const def = scenarioById.get(state.id);
     if(!def) return;
-    if(!isOnLand(state)) return;
+    if(!isNearShore(state)) return;
     const radius = Number.isFinite(def.colliderRadius) ? Math.max(1, Math.round(def.colliderRadius)) : 1;
     for(let dy = -radius; dy <= radius; dy += 1){
       for(let dx = -radius; dx <= radius; dx += 1){
@@ -411,7 +428,7 @@ function checkTriggers(){
     if(state.triggered) return;
     const def = scenarioById.get(state.id);
     if(!def) return;
-    if(!isOnLand(state)) return;
+    if(!isNearShore(state)) return;
     const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 2;
     const dx = (state.gridX + 0.5) - heroPos.gridX;
     const dy = (state.gridY + 0.5) - heroPos.gridY;
