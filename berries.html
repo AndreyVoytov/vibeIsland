@@ -221,6 +221,8 @@ const DEFAULT_MIN_SPAWN_RADIUS = 0;
 const DEFAULT_MAX_SPAWN_RADIUS = 10;
 const EXTRACT_PARTICLE_COUNT = 3;
 const RESOURCE_COLLIDER_PADDING = 1;
+const RESOURCE_FARMING_PADDING = RESOURCE_COLLIDER_PADDING + 1;
+const COLLIDER_SPAWN_HERO_BUFFER_CELLS = 2;
 const OFFLINE_FILL_WINDOW_MS = 60 * 60 * 1000;
 const RESOURCE_LAST_SEEN_KEY = 'resourceLastSeenAt';
 
@@ -272,6 +274,15 @@ function getSpawnRadius(def){
   const safeMin = Math.max(0, minSpawnRadius);
   const safeMax = Math.max(safeMin, maxSpawnRadius);
   return { min: safeMin, max: safeMax };
+}
+
+function getHeroGridPosition(){
+  if(!GRID_W || !cellPct) return null;
+  const hero = getHero();
+  const gridX = Math.floor(hero.charXPct / cellPct);
+  const gridY = Math.floor(hero.charYPct / cellPct);
+  if(!Number.isFinite(gridX) || !Number.isFinite(gridY)) return null;
+  return { gridX, gridY };
 }
 
 function getIslandBoundsCells(landCells){
@@ -498,6 +509,21 @@ function getResourceColliderCells(gridX, gridY, def, stageIndex = 0, padding = 0
   return collectColliderCells(gridX, gridY, box.radiusX, box.radiusY, padding);
 }
 
+function heroTouchesResourceCollider(bush){
+  if(!bush || !isExtractable(bush.berryDef)) return false;
+  const heroPos = getHeroGridPosition();
+  if(!heroPos) return false;
+  const cells = getResourceColliderCells(
+    bush.gridX,
+    bush.gridY,
+    bush.berryDef,
+    typeof bush.extractStage === 'number' ? bush.extractStage : 0,
+    RESOURCE_FARMING_PADDING,
+  );
+  if(!cells.length) return false;
+  return cells.includes(`${heroPos.gridX},${heroPos.gridY}`);
+}
+
 function registerResourceCollider(bush){
   if(!bush || !isExtractable(bush.berryDef)) return;
   const cells = getResourceColliderCells(
@@ -644,12 +670,17 @@ function spawnBush(berryDef){
   const spawnRadius = getSpawnRadius(berryDef);
   const extractable = isExtractable(berryDef);
   const buildingCells = getActiveBuildingCells(extractable ? RESOURCE_COLLIDER_PADDING : 0);
+  const heroPos = extractable ? getHeroGridPosition() : null;
 
   for(let i=0;i<30;i++){
     const c=land[Math.random()*land.length|0], key=`${c.x},${c.y}`;
     if(campfireCenter){
       const dist = Math.hypot(c.x - campfireCenter.x, c.y - campfireCenter.y);
       if(dist < spawnRadius.min || dist > spawnRadius.max) continue;
+    }
+    if(heroPos){
+      const distToHero = Math.hypot(c.x - heroPos.gridX, c.y - heroPos.gridY);
+      if(distToHero <= COLLIDER_SPAWN_HERO_BUFFER_CELLS) continue;
     }
     if(buildingCells.has(key)) continue;
     const spawnCells = getResourceSpawnCells(c.x, c.y, berryDef, 0);
@@ -787,7 +818,8 @@ function updBush(b){
       updateFlyingParticles(b, now);
       const h = getHero();
       const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
-      const touch = bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
+      const touch = heroTouchesResourceCollider(b)
+        || bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
       const canHarvest = touch || dist <= pct2px(BURST_R_PCT);
       if(!canHarvest){
         b.harvestStart = 0;
