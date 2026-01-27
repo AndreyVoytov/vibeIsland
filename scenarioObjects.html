@@ -220,8 +220,34 @@ function shouldUseImage(url){
   return typeof url === 'string' && (url.includes('images') || url.startsWith('data:image'));
 }
 
-function isOnLand(state){
-  return Boolean(map[state.gridY]?.[state.gridX]);
+function getInwardStep(def){
+  const inward = {
+    east:      { x: -1, y:  0 },
+    west:      { x:  1, y:  0 },
+    north:     { x:  0, y:  1 },
+    south:     { x:  0, y: -1 },
+    northEast: { x: -1, y:  1 },
+    northWest: { x:  1, y:  1 },
+    southEast: { x: -1, y: -1 },
+    southWest: { x:  1, y: -1 },
+  };
+  return inward[def?.direction] || { x: 0, y: 0 };
+}
+
+function isOnLand(state, cellsAhead = 1){
+  const def = scenarioById.get(state.id);
+  const step = getInwardStep(def);
+
+  const y0 = state.gridY;
+  const x0 = state.gridX;
+
+  // “на клетку дальше” (в сторону острова)
+  const y1 = y0 + step.y * cellsAhead;
+  const x1 = x0 + step.x * cellsAhead;
+
+  // считаем “на земле”, если либо текущая клетка земля,
+  // либо клетка на 1 вперед (в сторону острова) земля
+  return Boolean(map[y0]?.[x0] || map[y1]?.[x1]);
 }
 
 function applyPadding(mapData, padding){
@@ -366,7 +392,7 @@ function drawScenarioObject(state, now){
   const yPct = (state.gridY + 0.5) * cellPct;
   const baseX = pct2px(xPct);
   const baseY = pct2px(yPct);
-  const floating = !isOnLand(state);
+  const floating = !isOnLand(state, def.triggerRadiusCells);
   const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
   const x = baseX;
   const y = baseY + floatOffset;
