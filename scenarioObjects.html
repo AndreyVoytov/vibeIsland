@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Scenario Objects</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+    canvas{display:block;position:absolute;top:0;left:0;pointer-events:none;background:transparent}
+  </style>
+</head>
+<body>
+<canvas id="scenarioCanvas"></canvas>
+
+<script src="./scenario-objects-config.js"></script>
+<script>
+const canvas = document.getElementById('scenarioCanvas');
+const ctx = canvas.getContext('2d');
+let cw = 0;
+let ch = 0;
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  const width = innerWidth;
+  const height = innerHeight;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cw = width;
+  ch = height;
+}
+addEventListener('resize', resize);
+resize();
+
+let map = [];
+let GRID_W = 0;
+let GRID_H = 0;
+let cellPct = 0;
+
+const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
+const scenarioObjects = Array.isArray(scenarioConfig.objects) ? scenarioConfig.objects : [];
+const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
+
+const COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
+const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
+const SCENARIO_STATE_KEY = 'scenarioObjectsState';
+
+function loadMap({ initial = false } = {}){
+  const parsed = JSON.parse(localStorage.getItem('map') || '[]');
+  const nextMap = Array.isArray(parsed) ? parsed : [];
+  const nextGridW = nextMap[0]?.length || 0;
+  const nextGridH = nextMap.length;
+  if(!initial && GRID_W && GRID_H && nextGridW && nextGridH){
+    let shift = { x: 0, y: 0 };
+    try {
+      shift = JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}');
+    } catch (err) {
+      shift = { x: 0, y: 0 };
+    }
+    const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+    const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+    if(shiftX || shiftY){
+      scenarioState.forEach((state) => {
+        state.gridX += shiftX;
+        state.gridY += shiftY;
+      });
+      persistScenarioState();
+    }
+  }
+  map = nextMap;
+  GRID_W = nextGridW;
+  GRID_H = nextGridH;
+  cellPct = GRID_W ? (100 / GRID_W) : 0;
+}
+
+function getIslandBounds(){
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for(let y = 0; y < GRID_H; y += 1){
+    for(let x = 0; x < GRID_W; x += 1){
+      if(map[y]?.[x]){
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+  if(!Number.isFinite(minX)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
+function computeInitialPositions(){
+  const bounds = getIslandBounds();
+  if(!bounds) return [];
+  const centerX = Math.round((bounds.minX + bounds.maxX) / 2);
+  const centerY = Math.round((bounds.minY + bounds.maxY) / 2);
+  const dirMap = {
+    east: { x: 1, y: 0 },
+    west: { x: -1, y: 0 },
+    north: { x: 0, y: -1 },
+    south: { x: 0, y: 1 },
+    northEast: { x: 1, y: -1 },
+    northWest: { x: -1, y: -1 },
+    southEast: { x: 1, y: 1 },
+    southWest: { x: -1, y: 1 },
+  };
+  return scenarioObjects.map((def) => {
+    const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 2;
+    const dir = dirMap[def.direction] || dirMap.east;
+    const gridX = dir.x === 0
+      ? centerX
+      : (dir.x > 0 ? bounds.maxX + distance : bounds.minX - distance);
+    const gridY = dir.y === 0
+      ? centerY
+      : (dir.y > 0 ? bounds.maxY + distance : bounds.minY - distance);
+    return {
+      id: def.id,
+      gridX,
+      gridY,
+      triggered: false,
+      transformed: false,
+    };
+  });
+}
+
+function loadScenarioState(){
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(SCENARIO_STATE_KEY) || '[]');
+  } catch (err) {
+    stored = [];
+  }
+  if(!Array.isArray(stored)) stored = [];
+  const byId = new Map(stored.map((item) => [item.id, item]));
+  const initial = computeInitialPositions();
+  const next = [];
+  scenarioObjects.forEach((def, index) => {
+    const existing = byId.get(def.id) || initial[index];
+    if(!existing) return;
+    next.push({
+      id: def.id,
+      gridX: Number.isFinite(existing.gridX) ? existing.gridX : 0,
+      gridY: Number.isFinite(existing.gridY) ? existing.gridY : 0,
+      triggered: Boolean(existing.triggered),
+      transformed: Boolean(existing.transformed),
+    });
+  });
+  return next;
+}
+
+function persistScenarioState(){
+  localStorage.setItem(SCENARIO_STATE_KEY, JSON.stringify(scenarioState));
+}
+
+function pct2px(p){ return p * cw / 100; }
+
+function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
+
+function getWiggleOffset(){
+  const start = Number(localStorage.getItem('islandWiggleAt') || 0);
+  if(!start) return { x: 0, y: 0 };
+  const duration = 3500;
+  const elapsed = performance.now() - start;
+  if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
+  const t = elapsed / duration;
+  const decay = 1 - t;
+  const cell = GRID_W ? cw / GRID_W : 0;
+  return {
+    x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
+    y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
+  };
+}
+
+function getHeroState(){
+  return JSON.parse(localStorage.getItem('heroState') || '{"charXPct":50,"charYPct":50,"facing":1,"isMoving":false}');
+}
+
+function getHeroGridPosition(){
+  if(!cellPct) return null;
+  const hero = getHeroState();
+  return {
+    gridX: Math.floor(hero.charXPct / cellPct),
+    gridY: Math.floor(hero.charYPct / cellPct),
+    xPct: hero.charXPct,
+    yPct: hero.charYPct,
+  };
+}
+
+const imageCache = new Map();
+function getImageRec(url){
+  if(!url) return null;
+  let rec = imageCache.get(url);
+  if(rec) return rec;
+  const img = new Image();
+  rec = { img, ok: false, loaded: false };
+  img.onload = () => { rec.ok = true; rec.loaded = true; };
+  img.onerror = () => { rec.ok = false; rec.loaded = true; };
+  img.src = url;
+  imageCache.set(url, rec);
+  return rec;
+}
+
+function resolveVisual(def, state){
+  if(state.transformed && def.transformOnApproach){
+    return {
+      assetUrl: def.transformOnApproach.assetUrl || def.assetUrl,
+      fallbackUrl: def.transformOnApproach.fallbackUrl || def.fallbackUrl,
+    };
+  }
+  return { assetUrl: def.assetUrl, fallbackUrl: def.fallbackUrl };
+}
+
+function shouldUseImage(url){
+  return typeof url === 'string' && (url.includes('images') || url.startsWith('data:image'));
+}
+
+function isOnLand(state){
+  return Boolean(map[state.gridY]?.[state.gridX]);
+}
+
+function drawPrimitive(x, y, w, h, def, floating){
+  ctx.save();
+  ctx.fillStyle = '#cfd8dc';
+  ctx.strokeStyle = '#8a9aa5';
+  ctx.lineWidth = 2;
+  if(ctx.roundRect){
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - h / 2, w, h, Math.min(w, h) * 0.2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x - w / 2, y - h / 2, w, h);
+    ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+  }
+  if(floating){
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(x, y + h * 0.35, w * 0.35, h * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawScenarioObject(state, now){
+  const def = scenarioById.get(state.id);
+  if(!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
+  const xPct = (state.gridX + 0.5) * cellPct;
+  const yPct = (state.gridY + 0.5) * cellPct;
+  const baseX = pct2px(xPct);
+  const baseY = pct2px(yPct);
+  const floating = !isOnLand(state);
+  const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
+  const x = baseX;
+  const y = baseY + floatOffset;
+
+  const width = Number.isFinite(def.widthPx) ? def.widthPx : 60;
+  const height = Number.isFinite(def.heightPx) ? def.heightPx : 60;
+
+  if(floating){
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(x, y + height * 0.35, width * 0.4, height * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.ellipse(x, y + height * 0.35, width * 0.35, height * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const visual = resolveVisual(def, state);
+  const assetUrl = shouldUseImage(visual.assetUrl) ? visual.assetUrl : '';
+  const fallbackUrl = shouldUseImage(visual.fallbackUrl) ? visual.fallbackUrl : '';
+  const assetRec = assetUrl ? getImageRec(assetUrl) : null;
+  const fallbackRec = fallbackUrl ? getImageRec(fallbackUrl) : null;
+
+  if(assetRec && assetRec.ok && assetRec.loaded){
+    ctx.drawImage(assetRec.img, x - width / 2, y - height / 2, width, height);
+    return;
+  }
+  if(fallbackRec && fallbackRec.ok && fallbackRec.loaded){
+    ctx.drawImage(fallbackRec.img, x - width / 2, y - height / 2, width, height);
+    return;
+  }
+  drawPrimitive(x, y, width, height, def, floating);
+}
+
+let scenarioState = [];
+let activeDialogue = null;
+
+function rebuildScenarioColliderCells(){
+  const cells = new Set();
+  scenarioState.forEach((state) => {
+    const def = scenarioById.get(state.id);
+    if(!def) return;
+    if(!isOnLand(state)) return;
+    const radius = Number.isFinite(def.colliderRadius) ? Math.max(1, Math.round(def.colliderRadius)) : 1;
+    for(let dy = -radius; dy <= radius; dy += 1){
+      for(let dx = -radius; dx <= radius; dx += 1){
+        cells.add(`${state.gridX + dx},${state.gridY + dy}`);
+      }
+    }
+  });
+  localStorage.setItem(COLLIDER_CELLS_KEY, JSON.stringify([...cells]));
+  localStorage.setItem(COLLIDER_UPDATED_KEY, String(Date.now()));
+}
+
+function startDialogue(lines){
+  if(!Array.isArray(lines) || !lines.length) return;
+  activeDialogue = {
+    lines,
+    index: 0,
+    phase: 'show',
+    phaseStart: performance.now(),
+  };
+}
+
+function updateDialogue(now){
+  if(!activeDialogue) return;
+  const duration = activeDialogue.phase === 'show' ? 3000 : 1000;
+  if(now - activeDialogue.phaseStart < duration) return;
+  if(activeDialogue.phase === 'show'){
+    activeDialogue.phase = 'pause';
+    activeDialogue.phaseStart = now;
+    return;
+  }
+  activeDialogue.index += 1;
+  if(activeDialogue.index >= activeDialogue.lines.length){
+    activeDialogue = null;
+    return;
+  }
+  activeDialogue.phase = 'show';
+  activeDialogue.phaseStart = now;
+}
+
+function getActiveDialogueText(){
+  if(!activeDialogue || activeDialogue.phase !== 'show') return null;
+  return activeDialogue.lines[activeDialogue.index];
+}
+
+function drawSpeechBubble(text, heroPos){
+  if(!text || !heroPos) return;
+  const padding = 12;
+  const maxWidth = Math.min(cw * 0.7, 280);
+  ctx.save();
+  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lines = [];
+  const words = text.split(' ');
+  let line = '';
+  words.forEach((word) => {
+    const testLine = line ? `${line} ${word}` : word;
+    if(ctx.measureText(testLine).width > maxWidth - padding * 2){
+      if(line) lines.push(line);
+      line = word;
+    } else {
+      line = testLine;
+    }
+  });
+  if(line) lines.push(line);
+  const lineHeight = 18;
+  const bubbleWidth = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width)) + padding * 2);
+  const bubbleHeight = lines.length * lineHeight + padding * 2;
+
+  const x = pct2px(heroPos.xPct);
+  const y = pct2px(heroPos.yPct) - bubbleHeight - pct2px(6);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.lineWidth = 1;
+  if(ctx.roundRect){
+    ctx.beginPath();
+    ctx.roundRect(x - bubbleWidth / 2, y, bubbleWidth, bubbleHeight, 12);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x - bubbleWidth / 2, y, bubbleWidth, bubbleHeight);
+  }
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y + bubbleHeight);
+  ctx.lineTo(x + 8, y + bubbleHeight);
+  ctx.lineTo(x, y + bubbleHeight + 10);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#1f1f1f';
+  lines.forEach((lineText, index) => {
+    ctx.fillText(lineText, x, y + padding + lineHeight * (index + 0.5));
+  });
+  ctx.restore();
+}
+
+function checkTriggers(){
+  if(activeDialogue) return;
+  const heroPos = getHeroGridPosition();
+  if(!heroPos) return;
+  scenarioState.forEach((state) => {
+    if(state.triggered) return;
+    const def = scenarioById.get(state.id);
+    if(!def) return;
+    if(!isOnLand(state)) return;
+    const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 2;
+    const dx = (state.gridX + 0.5) - heroPos.gridX;
+    const dy = (state.gridY + 0.5) - heroPos.gridY;
+    if(Math.hypot(dx, dy) > radius) return;
+    state.triggered = true;
+    if(def.transformOnApproach){
+      state.transformed = true;
+    }
+    persistScenarioState();
+    rebuildScenarioColliderCells();
+    startDialogue(def.dialog || []);
+  });
+}
+
+function frame(now){
+  ctx.clearRect(0, 0, cw, ch);
+  const cam = getCam();
+  const wiggle = getWiggleOffset();
+  ctx.save();
+  ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
+  scenarioState.forEach((state) => drawScenarioObject(state, now));
+  ctx.restore();
+
+  updateDialogue(now);
+  checkTriggers();
+  const heroPos = getHeroGridPosition();
+  const text = getActiveDialogueText();
+  drawSpeechBubble(text, heroPos);
+
+  requestAnimationFrame(frame);
+}
+
+function init(){
+  loadMap({ initial: true });
+  scenarioState = loadScenarioState();
+  persistScenarioState();
+  rebuildScenarioColliderCells();
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('storage', (event) => {
+  if(event.key === 'map'){
+    loadMap();
+    rebuildScenarioColliderCells();
+  }
+});
+
+init();
+</script>
+</body>
+</html>

@@ -266,6 +266,41 @@
       return padded;
     }
 
+    function loadScenarioObjectsState(){
+      try {
+        const stored = JSON.parse(localStorage.getItem('scenarioObjectsState') || '[]');
+        return Array.isArray(stored) ? stored : [];
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function hasLandNeighbor(map, x, y){
+      for(let dy = -1; dy <= 1; dy += 1){
+        for(let dx = -1; dx <= 1; dx += 1){
+          if(dx === 0 && dy === 0) continue;
+          if(map[y + dy]?.[x + dx]) return true;
+        }
+      }
+      return false;
+    }
+
+    function applyScenarioObjectsToMap(map, shift, surfaceColor){
+      const scenarioObjects = loadScenarioObjectsState();
+      if(!scenarioObjects.length) return map;
+      const expansionValue = surfaceColor || 1;
+      scenarioObjects.forEach((obj) => {
+        const gridX = (Number.isFinite(obj.gridX) ? obj.gridX : 0) + (shift?.x || 0);
+        const gridY = (Number.isFinite(obj.gridY) ? obj.gridY : 0) + (shift?.y || 0);
+        if(!map[gridY] || typeof map[gridY][gridX] === 'undefined') return;
+        if(map[gridY][gridX]) return;
+        if(hasLandNeighbor(map, gridX, gridY)){
+          map[gridY][gridX] = expansionValue;
+        }
+      });
+      return map;
+    }
+
     function expandIsland(map, surfaceColor){
       if(!Array.isArray(map) || !map.length) return { map, shift: { x: 0, y: 0 } };
       let nextMap = normalizeMap(map);
@@ -301,7 +336,9 @@
           }
         }
       }
-      return { map: expanded, shift: { x: padding.left, y: padding.top } };
+      const shift = { x: padding.left, y: padding.top };
+      applyScenarioObjectsToMap(expanded, shift, surfaceColor);
+      return { map: expanded, shift };
     }
 
     const berryResources = berryConfig.berries.map((def, index) => {
