@@ -36,6 +36,8 @@ let charXPct = 50;
 let charYPct = (GRID_H / 2) / GRID_W * 100;
 let facing   = 1;
 
+const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
+
 /* ---------- анимация шага / ожидания ---------- */
 let phase = 0;
 let lastAnimT = performance.now();
@@ -205,6 +207,60 @@ function drawHero(anim){
   function drawCap(){ drawFlip(spr.cap, O.cap.x*charR, O.cap.y*charR - bounce*1.4, spr.cap.width, spr.cap.height); }
 }
 
+function drawSpeechBubble(text, cam = { x: 0, y: 0 }, wiggle = { x: 0, y: 0 }){
+  if(!text) return;
+  const padding = 12;
+  const maxWidth = Math.min(cw * 0.7, 280);
+  ctx.save();
+  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lines = [];
+  const words = text.split(' ');
+  let line = '';
+  words.forEach((word) => {
+    const testLine = line ? `${line} ${word}` : word;
+    if(ctx.measureText(testLine).width > maxWidth - padding * 2){
+      if(line) lines.push(line);
+      line = word;
+    } else {
+      line = testLine;
+    }
+  });
+  if(line) lines.push(line);
+  const lineHeight = 18;
+  const bubbleWidth = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width)) + padding * 2);
+  const bubbleHeight = lines.length * lineHeight + padding * 2;
+  const extraOffset = cell * 2.5;
+
+  const x = pct2px(charXPct) - cam.x + wiggle.x;
+  const y = pct2px(charYPct) - cam.y + wiggle.y - bubbleHeight - pct2px(10) - extraOffset;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.lineWidth = 1;
+  if(ctx.roundRect){
+    ctx.beginPath();
+    ctx.roundRect(x - bubbleWidth / 2, y, bubbleWidth, bubbleHeight, 12);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x - bubbleWidth / 2, y, bubbleWidth, bubbleHeight);
+  }
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y + bubbleHeight);
+  ctx.lineTo(x + 8, y + bubbleHeight);
+  ctx.lineTo(x, y + bubbleHeight + 10);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#1f1f1f';
+  lines.forEach((lineText, index) => {
+    ctx.fillText(lineText, x, y + padding + lineHeight * (index + 0.5));
+  });
+  ctx.restore();
+}
+
 /* ---------- цикл ---------- */
 function frame(){
   const state = JSON.parse(localStorage.getItem('heroState') || 'null');
@@ -239,6 +295,12 @@ function frame(){
 
   ctx.clearRect(0,0,cw,ch);
   drawHero({isMoving, phase, chopBlend});
+  const dialogueText = localStorage.getItem(DIALOGUE_TEXT_KEY) || '';
+  if(dialogueText){
+    const cam = getCam();
+    const wiggle = getWiggleOffset();
+    drawSpeechBubble(dialogueText, cam, wiggle);
+  }
 
   requestAnimationFrame(frame);
 }

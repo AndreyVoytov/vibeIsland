@@ -11,7 +11,7 @@
       widthPx: 90,
       heightPx: 48,
       colliderRadius: 1,
-      triggerRadiusCells: 3,
+      triggerRadiusCells: 8,
       dialog: [
         'Крыло… значит, самолёт точно упал здесь.',
         'Нужно собраться. Я один, но остров живой.',
@@ -27,7 +27,7 @@
       widthPx: 72,
       heightPx: 54,
       colliderRadius: 1,
-      triggerRadiusCells: 3,
+      triggerRadiusCells: 8,
       dialog: [
         'Чемодан уцелел. Внутри — немного сухих вещей.',
         'Если найду ещё обломки, может быть, соберу укрытие.',
@@ -43,7 +43,7 @@
       widthPx: 70,
       heightPx: 50,
       colliderRadius: 1,
-      triggerRadiusCells: 3,
+      triggerRadiusCells: 8,
       dialog: [
         'Ящик с припасами… или это всё, что осталось от груза.',
         'Придётся собирать всё полезное по крупицам.',
@@ -59,7 +59,7 @@
       widthPx: 70,
       heightPx: 70,
       colliderRadius: 1,
-      triggerRadiusCells: 3,
+      triggerRadiusCells: 8,
       dialog: [
         'Круг уцелел. Значит, кого-то ещё могло вынести на берег.',
         'Надо осмотреть остров.',
@@ -75,7 +75,7 @@
       widthPx: 68,
       heightPx: 46,
       colliderRadius: 1,
-      triggerRadiusCells: 3,
+      triggerRadiusCells: 8,
       dialog: [
         'В бутылке старые записи. Этот остров уже видел выживших…',
         'Значит, есть шанс найти следы помощи.',
@@ -95,7 +95,7 @@
       widthPx: 90,
       heightPx: 140,
       colliderRadius: 1,
-      triggerRadiusCells: 4,
+      triggerRadiusCells: 9,
       dialog: [
         'Старый маяк… Если бы он горел, меня бы заметили.',
         'Попробую оживить свет — вдруг кто-то увидит сигнал.',
