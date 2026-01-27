@@ -141,11 +141,14 @@
   <script src="./ui-config.js"></script>
   <script src="./buildings-config.js"></script>
   <script src="./enlarge-config.js"></script>
+  <script src="./scenario-objects-config.js"></script>
   <script>
     const uiConfig = window.UIConfig || { uiAssets: {} };
     const berryConfig = window.BerriesConfig || { berries: [] };
     const buildingConfig = window.BuildingsConfig || { buildings: [] };
     const enlargeConfig = window.EnlargeConfig || { expansions: [] };
+    const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
+    const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
     const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
     function buildBuildingFallback(def){
@@ -285,6 +288,29 @@
       return false;
     }
 
+    function getInwardStep(def){
+      const inward = {
+        east:      { x: -1, y:  0 },
+        west:      { x:  1, y:  0 },
+        north:     { x:  0, y:  1 },
+        south:     { x:  0, y: -1 },
+        northEast: { x: -1, y:  1 },
+        northWest: { x:  1, y:  1 },
+        southEast: { x: -1, y: -1 },
+        southWest: { x:  1, y: -1 },
+      };
+      return inward[def?.direction] || { x: 0, y: 0 };
+    }
+
+    function isScenarioOnLand(map, state, def, cellsAhead = 1){
+      const step = getInwardStep(def);
+      const y0 = state.gridY;
+      const x0 = state.gridX;
+      const y1 = y0 + step.y * cellsAhead;
+      const x1 = x0 + step.x * cellsAhead;
+      return Boolean(map[y0]?.[x0] || map[y1]?.[x1]);
+    }
+
     function applyScenarioObjectsToMap(map, shift, surfaceColor){
       const scenarioObjects = loadScenarioObjectsState();
       if(!scenarioObjects.length) return map;
@@ -292,9 +318,11 @@
       scenarioObjects.forEach((obj) => {
         const gridX = (Number.isFinite(obj.gridX) ? obj.gridX : 0) + (shift?.x || 0);
         const gridY = (Number.isFinite(obj.gridY) ? obj.gridY : 0) + (shift?.y || 0);
+        const def = scenarioById.get(obj.id);
+        const stateOnMap = { id: obj.id, gridX, gridY };
         if(!map[gridY] || typeof map[gridY][gridX] === 'undefined') return;
         if(map[gridY][gridX]) return;
-        if(hasLandNeighbor(map, gridX, gridY)){
+        if(isScenarioOnLand(map, stateOnMap, def) || hasLandNeighbor(map, gridX, gridY)){
           map[gridY][gridX] = expansionValue;
         }
       });
