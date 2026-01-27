@@ -347,6 +347,17 @@ function clampToIsland(xPct,yPct,radPct=0){ const b=islandBounds;
 ========================= */
 const bushes=[], busy=new Set();
 const resourceColliderCells = new Set();
+let pendingResourceColliderSync = false;
+
+function requestResourceColliderSync(){
+  if(pendingResourceColliderSync) return;
+  pendingResourceColliderSync = true;
+  setTimeout(() => {
+    pendingResourceColliderSync = false;
+    localStorage.setItem('resourceColliderCells', JSON.stringify([...resourceColliderCells]));
+    localStorage.setItem('resourceColliderUpdatedAt', String(Date.now()));
+  }, 0);
+}
 
 function loadMapData({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
@@ -443,48 +454,82 @@ function getExtractHarvestMs(def){
   return 700;
 }
 
-function getResourceColliderRadius(def){
-  if(!def || !def.collider) return 0;
+function getResourceColliderBox(def, stageIndex = 0){
+  if(!def || !def.collider) return null;
+  if(Array.isArray(def.colliderBoxStages) && def.colliderBoxStages.length){
+    const idx = clamp(stageIndex, 0, def.colliderBoxStages.length - 1);
+    const stage = def.colliderBoxStages[idx] || {};
+    const radiusX = Math.max(0, Math.round(Number.isFinite(stage.x) ? stage.x : stage.radiusX || stage[0] || 0));
+    const radiusY = Math.max(0, Math.round(Number.isFinite(stage.y) ? stage.y : stage.radiusY || stage[1] || 0));
+    return { radiusX, radiusY };
+  }
   const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-  return Math.max(1, Math.round(radius));
+  const normalized = Math.max(1, Math.round(radius));
+  return { radiusX: normalized, radiusY: normalized };
 }
 
-function collectColliderCells(gridX, gridY, radius, padding = 0){
+function collectColliderCells(gridX, gridY, radiusX, radiusY, padding = 0){
   const cells = [];
-  const expanded = Math.max(0, Math.round(radius) + Math.max(0, Math.round(padding)));
-  for(let dy = -expanded; dy <= expanded; dy += 1){
-    for(let dx = -expanded; dx <= expanded; dx += 1){
+  const expandedX = Math.max(0, Math.round(radiusX) + Math.max(0, Math.round(padding)));
+  const expandedY = Math.max(0, Math.round(radiusY) + Math.max(0, Math.round(padding)));
+  for(let dy = -expandedY; dy <= expandedY; dy += 1){
+    for(let dx = -expandedX; dx <= expandedX; dx += 1){
       cells.push(`${gridX + dx},${gridY + dy}`);
     }
   }
   return cells;
 }
 
+function getResourceColliderCells(gridX, gridY, def, stageIndex = 0, padding = 0){
+  const box = getResourceColliderBox(def, stageIndex);
+  if(!box) return [];
+  return collectColliderCells(gridX, gridY, box.radiusX, box.radiusY, padding);
+}
+
 function registerResourceCollider(bush){
   if(!bush || !isExtractable(bush.berryDef)) return;
-  const radius = getResourceColliderRadius(bush.berryDef);
-  if(!radius) return;
-  const cells = collectColliderCells(bush.gridX, bush.gridY, radius, RESOURCE_COLLIDER_PADDING);
+  const cells = getResourceColliderCells(
+    bush.gridX,
+    bush.gridY,
+    bush.berryDef,
+    typeof bush.extractStage === 'number' ? bush.extractStage : 0,
+    RESOURCE_COLLIDER_PADDING,
+  );
+  if(!cells.length) return;
   cells.forEach((key) => resourceColliderCells.add(key));
   bush.colliderCells = cells;
+  requestResourceColliderSync();
 }
 
 function unregisterResourceCollider(bush){
   if(!bush || !Array.isArray(bush.colliderCells)) return;
   bush.colliderCells.forEach((key) => resourceColliderCells.delete(key));
   bush.colliderCells = null;
+  requestResourceColliderSync();
+}
+
+function refreshResourceCollider(bush){
+  if(!bush || !isExtractable(bush.berryDef)) return;
+  unregisterResourceCollider(bush);
+  registerResourceCollider(bush);
 }
 
 function rebuildResourceColliderCells(){
   resourceColliderCells.clear();
   bushes.forEach((b) => {
     if(!isExtractable(b.berryDef)) return;
-    const radius = getResourceColliderRadius(b.berryDef);
-    if(!radius) return;
-    const cells = collectColliderCells(b.gridX, b.gridY, radius, RESOURCE_COLLIDER_PADDING);
+    const cells = getResourceColliderCells(
+      b.gridX,
+      b.gridY,
+      b.berryDef,
+      typeof b.extractStage === 'number' ? b.extractStage : 0,
+      RESOURCE_COLLIDER_PADDING,
+    );
+    if(!cells.length) return;
     cells.forEach((key) => resourceColliderCells.add(key));
     b.colliderCells = cells;
   });
+  requestResourceColliderSync();
 }
 
 function getExtractStageScale(b){
@@ -550,8 +595,7 @@ setInterval(()=>{ if(!land.length) return;
     }
     if(buildingCells.has(key)) continue;
     if(extractable){
-      const colliderRadius = getResourceColliderRadius(berryDef);
-      const colliderCells = colliderRadius ? collectColliderCells(c.x, c.y, colliderRadius, RESOURCE_COLLIDER_PADDING) : [];
+      const colliderCells = getResourceColliderCells(c.x, c.y, berryDef, 0, RESOURCE_COLLIDER_PADDING);
       if(colliderCells.some((cell) => buildingCells.has(cell))) continue;
       if(colliderCells.some((cell) => resourceColliderCells.has(cell))) continue;
     }
@@ -668,6 +712,8 @@ function updBush(b){
         b.stage = 'exploded';
         busy.delete(`${b.gridX},${b.gridY}`);
         unregisterResourceCollider(b);
+      } else {
+        refreshResourceCollider(b);
       }
       return;
     }

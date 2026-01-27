@@ -120,6 +120,12 @@
       resourceType: 'extractable',
       collider: true,
       colliderRadius: 2,
+      colliderBoxStages: [
+        { x: 1, y: 1 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 },
+        { x: 0, y: 0 },
+      ],
       extractStages: [1, 0.82, 0.66, 0.5],
       extractHarvestMs: 700,
       primitive: {
@@ -148,6 +154,12 @@
       resourceType: 'extractable',
       collider: true,
       colliderRadius: 2,
+      colliderBoxStages: [
+        { x: 1, y: 1 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 },
+        { x: 0, y: 0 },
+      ],
       extractStages: [1, 0.84, 0.68, 0.52],
       extractHarvestMs: 700,
       primitive: {
