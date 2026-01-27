@@ -46,6 +46,7 @@ const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
 const COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
 const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
 const SCENARIO_STATE_KEY = 'scenarioObjectsState';
+const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
 
 function loadMap({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
@@ -223,6 +224,99 @@ function isOnLand(state){
   return Boolean(map[state.gridY]?.[state.gridX]);
 }
 
+function applyPadding(mapData, padding){
+  const width = mapData[0]?.length || 0;
+  const padded = mapData.map((row) => {
+    const nextRow = row.slice();
+    for(let i = 0; i < padding.left; i += 1) nextRow.unshift(0);
+    for(let i = 0; i < padding.right; i += 1) nextRow.push(0);
+    return nextRow;
+  });
+  const nextWidth = width + padding.left + padding.right;
+  for(let i = 0; i < padding.top; i += 1){
+    padded.unshift(Array.from({ length: nextWidth }, () => 0));
+  }
+  for(let i = 0; i < padding.bottom; i += 1){
+    padded.push(Array.from({ length: nextWidth }, () => 0));
+  }
+  return padded;
+}
+
+function triggerRadiusTouchesLand(state, radius){
+  if(!Number.isFinite(radius)) return false;
+  const rounded = Math.max(1, Math.round(radius));
+  for(let dy = -rounded; dy <= rounded; dy += 1){
+    for(let dx = -rounded; dx <= rounded; dx += 1){
+      if(Math.hypot(dx, dy) > radius) continue;
+      const checkY = state.gridY + dy;
+      const checkX = state.gridX + dx;
+      if(map[checkY]?.[checkX]) return true;
+    }
+  }
+  return false;
+}
+
+function spawnScenarioLand(){
+  if(!map.length) return;
+  const seeds = [];
+  scenarioState.forEach((state) => {
+    const def = scenarioById.get(state.id);
+    if(!def) return;
+    const radius = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells : 3;
+    if(!triggerRadiusTouchesLand(state, radius)) return;
+    seeds.push({ x: state.gridX, y: state.gridY });
+  });
+  if(!seeds.length) return;
+
+  const width = map[0]?.length || 0;
+  const height = map.length;
+  const padding = { left: 0, right: 0, top: 0, bottom: 0 };
+  seeds.forEach(({ x, y }) => {
+    if(x < 0) padding.left = Math.max(padding.left, -x);
+    if(y < 0) padding.top = Math.max(padding.top, -y);
+    if(x >= width) padding.right = Math.max(padding.right, x - width + 1);
+    if(y >= height) padding.bottom = Math.max(padding.bottom, y - height + 1);
+  });
+
+  let nextMap = map;
+  const shift = { x: 0, y: 0 };
+  if(padding.left || padding.right || padding.top || padding.bottom){
+    nextMap = applyPadding(nextMap, padding);
+    shift.x = padding.left;
+    shift.y = padding.top;
+  }
+
+  if(shift.x || shift.y){
+    scenarioState.forEach((state) => {
+      state.gridX += shift.x;
+      state.gridY += shift.y;
+    });
+    seeds.forEach((seed) => {
+      seed.x += shift.x;
+      seed.y += shift.y;
+    });
+    persistScenarioState();
+  }
+
+  let changed = false;
+  seeds.forEach(({ x, y }) => {
+    if(nextMap[y]?.[x]) return;
+    if(!nextMap[y] || typeof nextMap[y][x] === 'undefined') return;
+    nextMap[y][x] = 1;
+    changed = true;
+  });
+
+  if(!changed && !shift.x && !shift.y) return;
+
+  map = nextMap;
+  GRID_W = map[0]?.length || 0;
+  GRID_H = map.length;
+  cellPct = GRID_W ? (100 / GRID_W) : 0;
+  localStorage.setItem('map', JSON.stringify(map));
+  localStorage.setItem('mapShift', JSON.stringify(shift));
+  rebuildScenarioColliderCells();
+}
+
 function drawPrimitive(x, y, w, h, def, floating){
   ctx.save();
   ctx.fillStyle = '#cfd8dc';
@@ -299,6 +393,7 @@ function drawScenarioObject(state, now){
 
 let scenarioState = [];
 let activeDialogue = null;
+let lastDialogueText = '';
 
 function rebuildScenarioColliderCells(){
   const cells = new Set();
@@ -350,57 +445,11 @@ function getActiveDialogueText(){
   return activeDialogue.lines[activeDialogue.index];
 }
 
-function drawSpeechBubble(text, heroPos, cam = { x: 0, y: 0 }, wiggle = { x: 0, y: 0 }){
-  if(!text || !heroPos) return;
-  const padding = 12;
-  const maxWidth = Math.min(cw * 0.7, 280);
-  ctx.save();
-  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const lines = [];
-  const words = text.split(' ');
-  let line = '';
-  words.forEach((word) => {
-    const testLine = line ? `${line} ${word}` : word;
-    if(ctx.measureText(testLine).width > maxWidth - padding * 2){
-      if(line) lines.push(line);
-      line = word;
-    } else {
-      line = testLine;
-    }
-  });
-  if(line) lines.push(line);
-  const lineHeight = 18;
-  const bubbleWidth = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width)) + padding * 2);
-  const bubbleHeight = lines.length * lineHeight + padding * 2;
-
-  const x = pct2px(heroPos.xPct) - cam.x + wiggle.x;
-  const y = pct2px(heroPos.yPct) - cam.y + wiggle.y - bubbleHeight - pct2px(10);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.95)';
-  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-  ctx.lineWidth = 1;
-  if(ctx.roundRect){
-    ctx.beginPath();
-    ctx.roundRect(x - bubbleWidth / 2, y, bubbleWidth, bubbleHeight, 12);
-    ctx.fill();
-    ctx.stroke();
-  } else {
-    ctx.fillRect(x - bubbleWidth / 2, y, bubbleWidth, bubbleHeight);
-  }
-  ctx.beginPath();
-  ctx.moveTo(x - 8, y + bubbleHeight);
-  ctx.lineTo(x + 8, y + bubbleHeight);
-  ctx.lineTo(x, y + bubbleHeight + 10);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#1f1f1f';
-  lines.forEach((lineText, index) => {
-    ctx.fillText(lineText, x, y + padding + lineHeight * (index + 0.5));
-  });
-  ctx.restore();
+function syncDialogueText(text){
+  const next = text || '';
+  if(next === lastDialogueText) return;
+  lastDialogueText = next;
+  localStorage.setItem(DIALOGUE_TEXT_KEY, next);
 }
 
 function checkTriggers(){
@@ -428,6 +477,7 @@ function checkTriggers(){
 
 function frame(now){
   ctx.clearRect(0, 0, cw, ch);
+  spawnScenarioLand();
   const cam = getCam();
   const wiggle = getWiggleOffset();
   ctx.save();
@@ -437,9 +487,8 @@ function frame(now){
 
   updateDialogue(now);
   checkTriggers();
-  const heroPos = getHeroGridPosition();
   const text = getActiveDialogueText();
-  drawSpeechBubble(text, heroPos, cam, wiggle);
+  syncDialogueText(text);
 
   requestAnimationFrame(frame);
 }
@@ -449,6 +498,7 @@ function init(){
   scenarioState = loadScenarioState();
   persistScenarioState();
   rebuildScenarioColliderCells();
+  syncDialogueText(null);
   requestAnimationFrame(frame);
 }
 
