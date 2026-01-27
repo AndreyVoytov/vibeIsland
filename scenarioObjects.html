@@ -350,7 +350,7 @@ function getActiveDialogueText(){
   return activeDialogue.lines[activeDialogue.index];
 }
 
-function drawSpeechBubble(text, heroPos){
+function drawSpeechBubble(text, heroPos, cam = { x: 0, y: 0 }, wiggle = { x: 0, y: 0 }){
   if(!text || !heroPos) return;
   const padding = 12;
   const maxWidth = Math.min(cw * 0.7, 280);
@@ -375,8 +375,8 @@ function drawSpeechBubble(text, heroPos){
   const bubbleWidth = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width)) + padding * 2);
   const bubbleHeight = lines.length * lineHeight + padding * 2;
 
-  const x = pct2px(heroPos.xPct);
-  const y = pct2px(heroPos.yPct) - bubbleHeight - pct2px(6);
+  const x = pct2px(heroPos.xPct) - cam.x + wiggle.x;
+  const y = pct2px(heroPos.yPct) - cam.y + wiggle.y - bubbleHeight - pct2px(6);
 
   ctx.fillStyle = 'rgba(255,255,255,0.95)';
   ctx.strokeStyle = 'rgba(0,0,0,0.2)';
@@ -439,7 +439,7 @@ function frame(now){
   checkTriggers();
   const heroPos = getHeroGridPosition();
   const text = getActiveDialogueText();
-  drawSpeechBubble(text, heroPos);
+  drawSpeechBubble(text, heroPos, cam, wiggle);
 
   requestAnimationFrame(frame);
 }
