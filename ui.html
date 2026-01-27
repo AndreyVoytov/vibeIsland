@@ -323,7 +323,15 @@
         if(!map[gridY] || typeof map[gridY][gridX] === 'undefined') return;
         if(map[gridY][gridX]) return;
         if(isScenarioOnLand(map, stateOnMap, def) || hasLandNeighbor(map, gridX, gridY)){
-          map[gridY][gridX] = expansionValue;
+          for(let dy = -1; dy <= 1; dy += 1){
+            for(let dx = -1; dx <= 1; dx += 1){
+              const ny = gridY + dy;
+              const nx = gridX + dx;
+              if(!map[ny] || typeof map[ny][nx] === 'undefined') continue;
+              if(map[ny][nx]) continue;
+              map[ny][nx] = expansionValue;
+            }
+          }
         }
       });
       return map;
