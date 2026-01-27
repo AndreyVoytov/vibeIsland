@@ -118,6 +118,29 @@ function getResourceBlockers(){
   return resourceBlockersCache;
 }
 
+let scenarioBlockersCache = new Set();
+let scenarioBlockersUpdatedAt = 0;
+
+function getScenarioBlockers(){
+  const updatedAt = Number(localStorage.getItem('scenarioColliderUpdatedAt') || 0);
+  if(updatedAt && updatedAt === scenarioBlockersUpdatedAt){
+    return scenarioBlockersCache;
+  }
+  scenarioBlockersUpdatedAt = updatedAt;
+  const raw = localStorage.getItem('scenarioColliderCells');
+  if(!raw){
+    scenarioBlockersCache = new Set();
+    return scenarioBlockersCache;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    scenarioBlockersCache = new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    scenarioBlockersCache = new Set();
+  }
+  return scenarioBlockersCache;
+}
+
 function applyHeroTeleport(){
   const raw = localStorage.getItem('heroTeleport');
   if(!raw) return;
@@ -150,6 +173,7 @@ function update(dtMs){
   const cell = vw / GRID_W;
   const blockers = getBuildingBlockers();
   const resourceBlockers = getResourceBlockers();
+  const scenarioBlockers = getScenarioBlockers();
 
   let blockedByBuildingX = false;
   let blockedByBuildingY = false;
@@ -161,7 +185,7 @@ function update(dtMs){
     const gx = Math.floor(pct2pxX(nx, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
-      if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
+      if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
         charXPct = nx;
         movedX = true;
       } else {
@@ -174,7 +198,7 @@ function update(dtMs){
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(ny, vw) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
-      if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
+      if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
         charYPct = ny;
         movedY = true;
       } else {
@@ -187,7 +211,7 @@ function update(dtMs){
     const slideY = charYPct + vy;
     const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
     const gy = Math.floor(pct2pxY(slideY, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
       charYPct = slideY;
       movedY = true;
     }
@@ -196,7 +220,7 @@ function update(dtMs){
     const slideX = charXPct + vx;
     const gx = Math.floor(pct2pxX(slideX, vw) / cell);
     const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
-    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`)){
+    if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
       charXPct = slideX;
       movedX = true;
     }

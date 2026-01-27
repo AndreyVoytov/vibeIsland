@@ -285,6 +285,29 @@ function getHeroGridPosition(){
   return { gridX, gridY };
 }
 
+let scenarioBlockersCache = new Set();
+let scenarioBlockersUpdatedAt = 0;
+
+function getScenarioBlockers(){
+  const updatedAt = Number(localStorage.getItem('scenarioColliderUpdatedAt') || 0);
+  if(updatedAt && updatedAt === scenarioBlockersUpdatedAt){
+    return scenarioBlockersCache;
+  }
+  scenarioBlockersUpdatedAt = updatedAt;
+  const raw = localStorage.getItem('scenarioColliderCells');
+  if(!raw){
+    scenarioBlockersCache = new Set();
+    return scenarioBlockersCache;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    scenarioBlockersCache = new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    scenarioBlockersCache = new Set();
+  }
+  return scenarioBlockersCache;
+}
+
 function getIslandBoundsCells(landCells){
   if(!landCells.length) return null;
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
@@ -671,6 +694,7 @@ function spawnBush(berryDef){
   const extractable = isExtractable(berryDef);
   const buildingCells = getActiveBuildingCells(extractable ? RESOURCE_COLLIDER_PADDING : 0);
   const heroPos = extractable ? getHeroGridPosition() : null;
+  const scenarioBlockers = getScenarioBlockers();
 
   for(let i=0;i<30;i++){
     const c=land[Math.random()*land.length|0], key=`${c.x},${c.y}`;
@@ -683,8 +707,10 @@ function spawnBush(berryDef){
       if(distToHero <= COLLIDER_SPAWN_HERO_BUFFER_CELLS) continue;
     }
     if(buildingCells.has(key)) continue;
+    if(scenarioBlockers.has(key)) continue;
     const spawnCells = getResourceSpawnCells(c.x, c.y, berryDef, 0);
     if(spawnCells.some((cell) => buildingCells.has(cell))) continue;
+    if(spawnCells.some((cell) => scenarioBlockers.has(cell))) continue;
     if(spawnCells.some((cell) => resourceSpawnCells.has(cell))) continue;
     if(extractable && spawnCells.some((cell) => resourceColliderCells.has(cell))) continue;
     if(busy.has(key)) continue;
