@@ -48,11 +48,27 @@ const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
 const SCENARIO_STATE_KEY = 'scenarioObjectsState';
 const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
 
+// NEW: список открытых объектов (id[]) — сохраняется и загружается отдельно
+const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
+function loadOpenedIds(){
+  try {
+    const stored = JSON.parse(localStorage.getItem(SCENARIO_OPENED_KEY) || '[]');
+    return new Set(Array.isArray(stored) ? stored.filter((x) => typeof x === 'string') : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+function persistOpenedIds(){
+  localStorage.setItem(SCENARIO_OPENED_KEY, JSON.stringify([...openedIds]));
+}
+let openedIds = loadOpenedIds();
+
 function loadMap({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
   const nextMap = Array.isArray(parsed) ? parsed : [];
   const nextGridW = nextMap[0]?.length || 0;
   const nextGridH = nextMap.length;
+
   if(!initial && GRID_W && GRID_H && nextGridW && nextGridH){
     let shift = { x: 0, y: 0 };
     try {
@@ -70,6 +86,7 @@ function loadMap({ initial = false } = {}){
       persistScenarioState();
     }
   }
+
   map = nextMap;
   GRID_W = nextGridW;
   GRID_H = nextGridH;
@@ -125,6 +142,7 @@ function computeInitialPositions(){
       gridY,
       triggered: false,
       transformed: false,
+      opened: openedIds.has(def.id), // NEW
     };
   });
 }
@@ -140,6 +158,7 @@ function loadScenarioState(){
   const byId = new Map(stored.map((item) => [item.id, item]));
   const initial = computeInitialPositions();
   const next = [];
+
   scenarioObjects.forEach((def, index) => {
     const existing = byId.get(def.id) || initial[index];
     if(!existing) return;
@@ -149,8 +168,22 @@ function loadScenarioState(){
       gridY: Number.isFinite(existing.gridY) ? existing.gridY : 0,
       triggered: Boolean(existing.triggered),
       transformed: Boolean(existing.transformed),
+      // NEW: opened берем из отдельного списка (и подстрахуемся, если вдруг было в state)
+      opened: openedIds.has(def.id) || Boolean(existing.opened),
     });
   });
+
+  // NEW: если под объектом уже есть земля, считаем, что он открыт (синхронизация на случай рассинхрона)
+  let openedChanged = false;
+  next.forEach((s) => {
+    if(map[s.gridY]?.[s.gridX] && !openedIds.has(s.id)){
+      openedIds.add(s.id);
+      s.opened = true;
+      openedChanged = true;
+    }
+  });
+  if(openedChanged) persistOpenedIds();
+
   return next;
 }
 
@@ -241,12 +274,9 @@ function isOnLand(state, cellsAhead = 1){
   const y0 = state.gridY;
   const x0 = state.gridX;
 
-  // “на клетку дальше” (в сторону острова)
   const y1 = y0 + step.y * cellsAhead;
   const x1 = x0 + step.x * cellsAhead;
 
-  // считаем “на земле”, если либо текущая клетка земля,
-  // либо клетка на 1 вперед (в сторону острова) земля
   return Boolean(map[y0]?.[x0] || map[y1]?.[x1]);
 }
 
@@ -268,8 +298,10 @@ function applyPadding(mapData, padding){
   return padded;
 }
 
-function getTriggerRadius(def){
-  return Number.isFinite(def?.triggerRadiusCells) ? def.triggerRadiusCells : 3;
+function getTriggerRadius(def, state){
+  const base = Number.isFinite(def?.triggerRadiusCells) ? def.triggerRadiusCells : 3;
+  const bonus = (state && openedIds && openedIds.has(state.id)) ? 2 : 0;
+  return base + bonus;
 }
 
 function triggerRadiusTouchesLand(state, radius){
@@ -288,42 +320,52 @@ function triggerRadiusTouchesLand(state, radius){
 
 function isHeroWithinTrigger(state, def, heroPos){
   if(!heroPos) return false;
-  const radius = getTriggerRadius(def);
+  const radius = getTriggerRadius(def, state);
   const dx = (state.gridX + 0.5) - heroPos.gridX;
   const dy = (state.gridY + 0.5) - heroPos.gridY;
   return Math.hypot(dx, dy) <= radius;
 }
 
 function canSyncTrigger(state, def, heroPos){
-  const radius = getTriggerRadius(def);
+  const radius = getTriggerRadius(def, state);
   if(!triggerRadiusTouchesLand(state, radius)) return false;
   return isHeroWithinTrigger(state, def, heroPos);
 }
 
-function spawnScenarioLand(heroPos){
+function spawnScenarioLand(){
   if(!map.length) return;
+
+  // NEW: seed содержит id, чтобы открыть конкретный объект
   const seeds = [];
   scenarioState.forEach((state) => {
     const def = scenarioById.get(state.id);
     if(!def) return;
     if(state.triggered) return;
-    if(!canSyncTrigger(state, def, heroPos)) return;
-    seeds.push({ x: state.gridX, y: state.gridY });
+
+    const ahead = Number.isFinite(def?.triggerRadiusCells) ? def.triggerRadiusCells - 1 : 1;
+    if(!isOnLand(state, ahead)) return;
+
+    seeds.push({ id: state.id, x: state.gridX, y: state.gridY });
   });
+
   if(!seeds.length) return;
+
+  const r = 1; // 1 => 3x3 = 9 клеток
 
   const width = map[0]?.length || 0;
   const height = map.length;
+
   const padding = { left: 0, right: 0, top: 0, bottom: 0 };
   seeds.forEach(({ x, y }) => {
-    if(x < 0) padding.left = Math.max(padding.left, -x);
-    if(y < 0) padding.top = Math.max(padding.top, -y);
-    if(x >= width) padding.right = Math.max(padding.right, x - width + 1);
-    if(y >= height) padding.bottom = Math.max(padding.bottom, y - height + 1);
+    if(x - r < 0) padding.left = Math.max(padding.left, -(x - r));
+    if(y - r < 0) padding.top = Math.max(padding.top, -(y - r));
+    if(x + r >= width) padding.right = Math.max(padding.right, (x + r) - width + 1);
+    if(y + r >= height) padding.bottom = Math.max(padding.bottom, (y + r) - height + 1);
   });
 
   let nextMap = map;
   const shift = { x: 0, y: 0 };
+
   if(padding.left || padding.right || padding.top || padding.bottom){
     nextMap = applyPadding(nextMap, padding);
     shift.x = padding.left;
@@ -331,9 +373,9 @@ function spawnScenarioLand(heroPos){
   }
 
   if(shift.x || shift.y){
-    scenarioState.forEach((state) => {
-      state.gridX += shift.x;
-      state.gridY += shift.y;
+    scenarioState.forEach((s) => {
+      s.gridX += shift.x;
+      s.gridY += shift.y;
     });
     seeds.forEach((seed) => {
       seed.x += shift.x;
@@ -343,12 +385,45 @@ function spawnScenarioLand(heroPos){
   }
 
   let changed = false;
-  seeds.forEach(({ x, y }) => {
-    if(nextMap[y]?.[x]) return;
-    if(!nextMap[y] || typeof nextMap[y][x] === 'undefined') return;
-    nextMap[y][x] = 1;
-    changed = true;
+
+  // NEW: отслеживаем, под каким объектом именно "подспавнилась" земля (центральная клетка seed)
+  const openedNow = new Set();
+
+  seeds.forEach(({ id, x, y }) => {
+    let centerBecameLand = false;
+
+    for(let dy = -r; dy <= r; dy += 1){
+      for(let dx = -r; dx <= r; dx += 1){
+        const yy = y + dy;
+        const xx = x + dx;
+        if(!nextMap[yy] || typeof nextMap[yy][xx] === 'undefined') continue;
+
+        const wasLand = Boolean(nextMap[yy][xx]);
+        if(!wasLand){
+          nextMap[yy][xx] = 1;
+          changed = true;
+          if(dx === 0 && dy === 0) centerBecameLand = true;
+        }
+      }
+    }
+
+    if(centerBecameLand) openedNow.add(id);
   });
+
+  // NEW: если под объектом действительно заспавнилась земля — помечаем как открытый и сохраняем список
+  if(openedNow.size){
+    let anyOpenedAdded = false;
+    openedNow.forEach((id) => {
+      if(!openedIds.has(id)){
+        openedIds.add(id);
+        anyOpenedAdded = true;
+      }
+      const st = scenarioState.find((s) => s.id === id);
+      if(st) st.opened = true;
+    });
+    if(anyOpenedAdded) persistOpenedIds();
+    persistScenarioState();
+  }
 
   if(!changed && !shift.x && !shift.y) return;
 
@@ -356,8 +431,10 @@ function spawnScenarioLand(heroPos){
   GRID_W = map[0]?.length || 0;
   GRID_H = map.length;
   cellPct = GRID_W ? (100 / GRID_W) : 0;
+
   localStorage.setItem('map', JSON.stringify(map));
   localStorage.setItem('mapShift', JSON.stringify(shift));
+
   rebuildScenarioColliderCells();
 }
 
@@ -388,10 +465,12 @@ function drawPrimitive(x, y, w, h, def, floating){
 function drawScenarioObject(state, now){
   const def = scenarioById.get(state.id);
   if(!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
+
   const xPct = (state.gridX + 0.5) * cellPct;
   const yPct = (state.gridY + 0.5) * cellPct;
   const baseX = pct2px(xPct);
   const baseY = pct2px(yPct);
+
   const floating = !isOnLand(state, def.triggerRadiusCells);
   const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
   const x = baseX;
@@ -518,8 +597,7 @@ function checkTriggers(){
 
 function frame(now){
   ctx.clearRect(0, 0, cw, ch);
-  const heroPos = getHeroGridPosition();
-  spawnScenarioLand(heroPos);
+  spawnScenarioLand();
   const cam = getCam();
   const wiggle = getWiggleOffset();
   ctx.save();
@@ -537,6 +615,7 @@ function frame(now){
 
 function init(){
   loadMap({ initial: true });
+  openedIds = loadOpenedIds(); // NEW: на случай, если перед init кто-то обновил localStorage
   scenarioState = loadScenarioState();
   persistScenarioState();
   rebuildScenarioColliderCells();
@@ -548,6 +627,12 @@ window.addEventListener('storage', (event) => {
   if(event.key === 'map'){
     loadMap();
     rebuildScenarioColliderCells();
+  }
+  // NEW: если список открытых обновили в другом табе — подтягиваем
+  if(event.key === SCENARIO_OPENED_KEY){
+    openedIds = loadOpenedIds();
+    scenarioState.forEach((s) => { s.opened = openedIds.has(s.id); });
+    persistScenarioState();
   }
 });
 

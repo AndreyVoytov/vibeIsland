@@ -33,7 +33,7 @@
     {
       id: 'campfire-upgrade-1',
       titleRu: 'Костёр II',
-      assetUrl: '',
+      assetUrl: './img/building/campfire2.png',
       unlockCost: 1500,
       collider: false,
       colliderRadius: 2.2,
