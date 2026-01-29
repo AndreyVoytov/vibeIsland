@@ -22,7 +22,13 @@
     const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
     const campfireUpgradeIds = ['campfire-upgrade-3', 'campfire-upgrade-2', 'campfire-upgrade-1'];
     let layout = [];
+
+    // Размер зданий фиксированный (НЕ зависит от размера клетки на экране)
     const BUILDING_CELL_PX = 28;
+
+    // "Виртуальный" шаг мира зданий для смещений от центра (НЕ зависит от GRID_W/GRID_H)
+    // Можно менять, если хочется плотнее/реже размещение относительно центра.
+    const VIRTUAL_CELL_PX = 28;
 
     const canvas = document.getElementById('buildingsCanvas');
     const ctx = canvas.getContext('2d');
@@ -38,6 +44,8 @@
       }
       GRID_H = map.length;
       GRID_W = map[0] ? map[0].length : 0;
+
+      // layout: позиции зданий в КЛЕТКАХ (x,y) — как раньше
       layout = buildingsConfig.getBuildingLayout(map);
     }
     loadMap();
@@ -171,15 +179,28 @@
       ctx.restore();
     }
 
+    /**
+     * ВАЖНОЕ ИЗМЕНЕНИЕ:
+     * - Позиция здания считается относительно ЦЕНТРА карты
+     * - Смещение от центра откладываем в VIRTUAL_CELL_PX (фиксированный шаг),
+     *   поэтому при изменении размера клетки (cell) здания не "съезжают" и не "сжимаются" вместе с сеткой.
+     */
     function drawBuilding(def, position, cell){
       const radius = Number.isFinite(def && def.colliderRadius) ? Math.max(1, def.colliderRadius) : 2;
 
-      // ВАЖНО: размер здания НЕ зависит от cell
+      // размер здания фиксированный (не зависит от cell)
       const size = BUILDING_CELL_PX * 0.82 * (radius * 2 + 1);
 
-      // Позиция — как раньше, по клеткам
-      const centerX = position.x * cell + cell * 0.5;
-      const centerY = position.y * cell + cell * 0.5;
+      // якорь: центр карты в "текущем мире" (зависит от cell)
+      const anchorX = (GRID_W * cell) * 0.5;
+      const anchorY = (GRID_H * cell) * 0.5;
+
+      // смещение от центра карты, но в "виртуальных пикселях" (не зависит от cell)
+      const dx = ((position.x + 0.5) - GRID_W * 0.5) * VIRTUAL_CELL_PX;
+      const dy = ((position.y + 0.5) - GRID_H * 0.5) * VIRTUAL_CELL_PX;
+
+      const centerX = anchorX + dx;
+      const centerY = anchorY + dy;
 
       const imgRec = def && def.assetUrl ? getImageRecord(def.assetUrl) : null;
       if(imgRec && imgRec.ok && imgRec.img.complete && imgRec.img.naturalWidth > 0){
@@ -189,10 +210,12 @@
       drawPrimitive(def, centerX, centerY, size);
     }
 
-
     function render(){
       ctx.clearRect(0, 0, cw, ch);
+
+      // текущий размер клетки (может меняться при изменении GRID_W)
       const cell = cw / GRID_W || 0;
+
       const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
       const wiggle = getWiggleOffset(cell);
       const user = getUserState();
