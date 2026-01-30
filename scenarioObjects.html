@@ -39,44 +39,6 @@ let GRID_W = 0;
 let GRID_H = 0;
 let cellPct = 0;
 
-/* =========================
-   Soft cell shrink (как в island/buildings)
-========================= */
-const SHRINK_FACTOR = 0.6;   // 0..1 (1 = как раньше, 0 = почти не сжимать)
-const MIN_CELL_PX   = 18;    // минимальный размер клетки
-
-function ensureBaseSize(){
-  let bw = Number(localStorage.getItem('islandBaseW') || 0);
-  let bh = Number(localStorage.getItem('islandBaseH') || 0);
-  if(!bw || !bh){
-    bw = GRID_W || 1;
-    bh = GRID_H || 1;
-    localStorage.setItem('islandBaseW', String(bw));
-    localStorage.setItem('islandBaseH', String(bh));
-  }
-  return { bw, bh };
-}
-
-function getCell(){
-  if(!GRID_W || !GRID_H) return 0;
-  const { bw, bh } = ensureBaseSize();
-
-  const effW = bw + Math.max(0, GRID_W - bw) * SHRINK_FACTOR;
-  const effH = bh + Math.max(0, GRID_H - bh) * SHRINK_FACTOR;
-
-  const cell = Math.min(cw / effW, ch / effH);
-  return Math.max(MIN_CELL_PX, cell);
-}
-
-// cellPct должен соответствовать РЕАЛЬНОМУ cell (а не 100/GRID_W)
-function recalcCellPct(){
-  const cell = getCell();
-  if(!cell) { cellPct = 0; return; }
-  const effW = cw / cell; // "эффективная ширина сетки" в клетках
-  cellPct = effW ? (100 / effW) : 0;
-}
-/* ========================= */
-
 const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
 const scenarioObjects = Array.isArray(scenarioConfig.objects) ? scenarioConfig.objects : [];
 const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
@@ -85,7 +47,6 @@ const COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
 const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
 const SCENARIO_STATE_KEY = 'scenarioObjectsState';
 const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
-const SCENARIO_SHIFT_APPLIED_KEY = 'scenarioObjectsShiftApplied';
 
 // NEW: список открытых объектов (id[]) — сохраняется и загружается отдельно
 const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
@@ -101,56 +62,6 @@ function persistOpenedIds(){
   localStorage.setItem(SCENARIO_OPENED_KEY, JSON.stringify([...openedIds]));
 }
 let openedIds = loadOpenedIds();
-let pendingMapShift = null;
-
-function normalizeShift(shift){
-  return {
-    x: Number.isFinite(shift?.x) ? shift.x : 0,
-    y: Number.isFinite(shift?.y) ? shift.y : 0,
-  };
-}
-
-function readMapShift(){
-  try {
-    return normalizeShift(JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}'));
-  } catch (err) {
-    return { x: 0, y: 0 };
-  }
-}
-
-function readAppliedShift(){
-  try {
-    return normalizeShift(JSON.parse(localStorage.getItem(SCENARIO_SHIFT_APPLIED_KEY) || '{"x":0,"y":0}'));
-  } catch (err) {
-    return { x: 0, y: 0 };
-  }
-}
-
-function markShiftApplied(shift){
-  localStorage.setItem(SCENARIO_SHIFT_APPLIED_KEY, JSON.stringify(normalizeShift(shift)));
-}
-
-function updatePendingMapShift(){
-  const shift = readMapShift();
-  const applied = readAppliedShift();
-  if((shift.x || shift.y) && (shift.x !== applied.x || shift.y !== applied.y)){
-    pendingMapShift = shift;
-  } else {
-    pendingMapShift = null;
-  }
-}
-
-function applyPendingMapShift(){
-  if(!pendingMapShift || !scenarioState.length) return false;
-  scenarioState.forEach((state) => {
-    state.gridX += pendingMapShift.x;
-    state.gridY += pendingMapShift.y;
-  });
-  persistScenarioState();
-  markShiftApplied(pendingMapShift);
-  pendingMapShift = null;
-  return true;
-}
 
 function loadMap({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
@@ -158,17 +69,28 @@ function loadMap({ initial = false } = {}){
   const nextGridW = nextMap[0]?.length || 0;
   const nextGridH = nextMap.length;
 
+  if(!initial && GRID_W && GRID_H && nextGridW && nextGridH){
+    let shift = { x: 0, y: 0 };
+    try {
+      shift = JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}');
+    } catch (err) {
+      shift = { x: 0, y: 0 };
+    }
+    const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+    const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+    if(shiftX || shiftY){
+      scenarioState.forEach((state) => {
+        state.gridX += shiftX;
+        state.gridY += shiftY;
+      });
+      persistScenarioState();
+    }
+  }
+
   map = nextMap;
   GRID_W = nextGridW;
   GRID_H = nextGridH;
-
-  // важно: после обновления GRID_* пересчитать cellPct по мягкой формуле
-  recalcCellPct();
-
-  updatePendingMapShift();
-  if(!initial){
-    applyPendingMapShift();
-  }
+  cellPct = GRID_W ? (100 / GRID_W) : 0;
 }
 
 function getIslandBounds(){
@@ -220,7 +142,7 @@ function computeInitialPositions(){
       gridY,
       triggered: false,
       transformed: false,
-      opened: openedIds.has(def.id),
+      opened: openedIds.has(def.id), // NEW
     };
   });
 }
@@ -236,27 +158,22 @@ function loadScenarioState(){
   const byId = new Map(stored.map((item) => [item.id, item]));
   const initial = computeInitialPositions();
   const next = [];
-  const shiftX = pendingMapShift?.x || 0;
-  const shiftY = pendingMapShift?.y || 0;
 
   scenarioObjects.forEach((def, index) => {
     const existing = byId.get(def.id) || initial[index];
     if(!existing) return;
     next.push({
       id: def.id,
-      gridX: (Number.isFinite(existing.gridX) ? existing.gridX : 0) + shiftX,
-      gridY: (Number.isFinite(existing.gridY) ? existing.gridY : 0) + shiftY,
+      gridX: Number.isFinite(existing.gridX) ? existing.gridX : 0,
+      gridY: Number.isFinite(existing.gridY) ? existing.gridY : 0,
       triggered: Boolean(existing.triggered),
       transformed: Boolean(existing.transformed),
+      // NEW: opened берем из отдельного списка (и подстрахуемся, если вдруг было в state)
       opened: openedIds.has(def.id) || Boolean(existing.opened),
     });
   });
 
-  if(pendingMapShift){
-    markShiftApplied(pendingMapShift);
-    pendingMapShift = null;
-  }
-
+  // NEW: если под объектом уже есть земля, считаем, что он открыт (синхронизация на случай рассинхрона)
   let openedChanged = false;
   next.forEach((s) => {
     if(map[s.gridY]?.[s.gridX] && !openedIds.has(s.id)){
@@ -286,10 +203,7 @@ function getWiggleOffset(){
   if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
   const t = elapsed / duration;
   const decay = 1 - t;
-
-  // было: cw / GRID_W
-  const cell = getCell();
-
+  const cell = GRID_W ? cw / GRID_W : 0;
   return {
     x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
     y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
@@ -421,6 +335,7 @@ function canSyncTrigger(state, def, heroPos){
 function spawnScenarioLand(){
   if(!map.length) return;
 
+  // NEW: seed содержит id, чтобы открыть конкретный объект
   const seeds = [];
   scenarioState.forEach((state) => {
     const def = scenarioById.get(state.id);
@@ -470,6 +385,8 @@ function spawnScenarioLand(){
   }
 
   let changed = false;
+
+  // NEW: отслеживаем, под каким объектом именно "подспавнилась" земля (центральная клетка seed)
   const openedNow = new Set();
 
   seeds.forEach(({ id, x, y }) => {
@@ -493,6 +410,7 @@ function spawnScenarioLand(){
     if(centerBecameLand) openedNow.add(id);
   });
 
+  // NEW: если под объектом действительно заспавнилась земля — помечаем как открытый и сохраняем список
   if(openedNow.size){
     let anyOpenedAdded = false;
     openedNow.forEach((id) => {
@@ -512,9 +430,7 @@ function spawnScenarioLand(){
   map = nextMap;
   GRID_W = map[0]?.length || 0;
   GRID_H = map.length;
-
-  // важно: пересчитать cellPct после изменения GRID_*
-  recalcCellPct();
+  cellPct = GRID_W ? (100 / GRID_W) : 0;
 
   localStorage.setItem('map', JSON.stringify(map));
   localStorage.setItem('mapShift', JSON.stringify(shift));
@@ -699,7 +615,7 @@ function frame(now){
 
 function init(){
   loadMap({ initial: true });
-  openedIds = loadOpenedIds();
+  openedIds = loadOpenedIds(); // NEW: на случай, если перед init кто-то обновил localStorage
   scenarioState = loadScenarioState();
   persistScenarioState();
   rebuildScenarioColliderCells();
@@ -712,6 +628,7 @@ window.addEventListener('storage', (event) => {
     loadMap();
     rebuildScenarioColliderCells();
   }
+  // NEW: если список открытых обновили в другом табе — подтягиваем
   if(event.key === SCENARIO_OPENED_KEY){
     openedIds = loadOpenedIds();
     scenarioState.forEach((s) => { s.opened = openedIds.has(s.id); });
