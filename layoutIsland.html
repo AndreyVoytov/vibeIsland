@@ -39,7 +39,7 @@ function getWiggleOffset(){
   if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
   const t = elapsed / duration;
   const decay = 1 - t;
-  const cell = GRID_W ? cw / GRID_W : 0;
+  const cell = getCell();
   return {
     x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
     y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
@@ -50,6 +50,37 @@ function getWiggleOffset(){
 const canvas = document.getElementById('islandCanvas');
 const ctx    = canvas.getContext('2d');
 let cw=0, ch=0;
+
+// === Soft cell shrink (настройки) ===
+const SHRINK_FACTOR = 0.6;   // 0..1 (1 = как сейчас, 0 = вообще не сжимать)
+const MIN_CELL_PX   = 18;    // нижняя граница (чтобы не становилось совсем мелко)
+
+// базовый размер острова (берём один раз и сохраняем)
+function ensureBaseSize(){
+  let bw = Number(localStorage.getItem('islandBaseW') || 0);
+  let bh = Number(localStorage.getItem('islandBaseH') || 0);
+
+  if(!bw || !bh){
+    bw = GRID_W || 1;
+    bh = GRID_H || 1;
+    localStorage.setItem('islandBaseW', String(bw));
+    localStorage.setItem('islandBaseH', String(bh));
+  }
+  return { bw, bh };
+}
+
+// единый расчёт cell для всех слоёв
+function getCell(){
+  if(!GRID_W || !GRID_H) return 0;
+
+  const { bw, bh } = ensureBaseSize();
+
+  const effW = bw + Math.max(0, GRID_W - bw) * SHRINK_FACTOR;
+  const effH = bh + Math.max(0, GRID_H - bh) * SHRINK_FACTOR;
+
+  const cell = Math.min(cw / effW, ch / effH);
+  return Math.max(MIN_CELL_PX, cell);
+}
 
 // === Shadow under island: config ===
 const SHADOW_ASSET_URL = ''; // e.g. './images/island_shadow.png' — if contains 'images', image will be used
@@ -87,7 +118,7 @@ function isCustomSurface(value){
 function drawIslandUnderShadow(cam, wiggle){
   // Find island bounding box in canvas space
   let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
-  const cell = cw/GRID_W || 0;
+  const cell = getCell();
   for(let y=0;y<GRID_H;y++) for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
     minX=Math.min(minX,x*cell); minY=Math.min(minY,y*cell);
     maxX=Math.max(maxX,(x+1)*cell); maxY=Math.max(maxY,(y+1)*cell);
@@ -136,7 +167,7 @@ function drawIslandUnderShadow(cam, wiggle){
 
 /* остров: перекрывающиеся тайлы + «срез» или картинка тайла */
 function drawIsland(cam, wiggle){
-  const cell = cw/GRID_W || 0, radius = cell*0.22, overlap = cell*0.12;
+  const cell = getCell(), radius = cell*0.22, overlap = cell*0.12;
 
   ctx.save(); ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 
