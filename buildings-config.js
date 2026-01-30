@@ -1,16 +1,8 @@
 /* buildings-config.js */
 (function (global) {
   const drillMarkers = [
-    '#ff6b6b',
-    '#ff9f1c',
-    '#ffd93d',
-    '#6bcB77',
-    '#4d96ff',
-    '#845ec2',
-    '#f368e0',
-    '#00c9a7',
-    '#ff9671',
-    '#c34a36',
+    '#ff6b6b', '#ff9f1c', '#ffd93d', '#6bcB77', '#4d96ff',
+    '#845ec2', '#f368e0', '#00c9a7', '#ff9671', '#c34a36',
   ];
 
   const buildings = [
@@ -88,12 +80,7 @@
       unlockCost: 500,
       collider: true,
       colliderRadius: 1,
-      primitive: {
-        kind: 'whetstone',
-        base: '#9da3aa',
-        edge: '#dfe5ec',
-        accent: '#6e747c',
-      },
+      primitive: { kind: 'whetstone', base: '#9da3aa', edge: '#dfe5ec', accent: '#6e747c' },
     },
     {
       id: 'forge',
@@ -102,14 +89,9 @@
       unlockCost: 1000,
       collider: true,
       colliderRadius: 1,
-      primitive: {
-        kind: 'forge',
-        base: '#5b3b2d',
-        metal: '#c0c7cf',
-        roof: '#343a40',
-        fire: '#ff7a35',
-      },
+      primitive: { kind: 'forge', base: '#5b3b2d', metal: '#c0c7cf', roof: '#343a40', fire: '#ff7a35' },
     },
+
     ...drillMarkers.map((marker, index) => ({
       id: `drill-${index + 1}`,
       titleRu: `Дрель ${index + 1}`,
@@ -117,49 +99,97 @@
       unlockCost: 1500 + index * 500,
       collider: true,
       colliderRadius: 1,
-      primitive: {
-        kind: 'drill',
-        base: '#2f3a4a',
-        accent: '#59687a',
-        marker,
-      },
+      primitive: { kind: 'drill', base: '#2f3a4a', accent: '#59687a', marker },
     })),
   ];
 
+  // Сдвиг для совместимости с твоей старой логикой (оставляем как было)
   const layoutOffset = { x: -0.5, y: -0.5 };
 
-  function getIslandBounds(map) {
-    const bounds = {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-    };
+  function collectLandCells(map) {
+    const cells = [];
     for (let y = 0; y < map.length; y += 1) {
       const row = map[y] || [];
       for (let x = 0; x < row.length; x += 1) {
         if (!row[x]) continue;
-        bounds.minX = Math.min(bounds.minX, x);
-        bounds.minY = Math.min(bounds.minY, y);
-        bounds.maxX = Math.max(bounds.maxX, x);
-        bounds.maxY = Math.max(bounds.maxY, y);
+        cells.push({ x, y });
       }
     }
-    if (!Number.isFinite(bounds.minX)) {
-      return null;
+    return cells;
+  }
+
+  function medianSorted(sorted) {
+    if (!sorted.length) return 0;
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  function findNearestLand(map, sx, sy) {
+    if (map[sy]?.[sx]) return { x: sx, y: sy };
+
+    const H = map.length;
+    const W = map[0]?.length || 0;
+    const maxR = Math.max(W, H);
+
+    for (let r = 1; r <= maxR; r += 1) {
+      for (let dy = -r; dy <= r; dy += 1) {
+        const y1 = sy + dy;
+        if (y1 < 0 || y1 >= H) continue;
+
+        const dx = r - Math.abs(dy);
+
+        const xA = sx - dx;
+        if (xA >= 0 && xA < W && map[y1]?.[xA]) return { x: xA, y: y1 };
+
+        const xB = sx + dx;
+        if (xB >= 0 && xB < W && map[y1]?.[xB]) return { x: xB, y: y1 };
+      }
     }
-    return bounds;
+    return null;
+  }
+
+  /**
+   * Центр "ядра" острова:
+   * 1) берём медианы x/y (почти не реагируют на выступы)
+   * 2) отрезаем дальние 30% клеток по расстоянию и усредняем оставшиеся
+   * 3) если попали в воду — переносим в ближайшую землю
+   */
+  function getCoreIslandCenter(map) {
+    const cells = collectLandCells(map);
+    if (!cells.length) return null;
+
+    const xs = cells.map(c => c.x).sort((a, b) => a - b);
+    const ys = cells.map(c => c.y).sort((a, b) => a - b);
+    const mx = medianSorted(xs);
+    const my = medianSorted(ys);
+
+    const keepN = Math.max(20, Math.floor(cells.length * 0.7));
+    const core = cells
+      .map(c => {
+        const dx = c.x - mx;
+        const dy = c.y - my;
+        return { x: c.x, y: c.y, d: dx * dx + dy * dy };
+      })
+      .sort((a, b) => a.d - b.d)
+      .slice(0, keepN);
+
+    let sx = 0, sy = 0;
+    for (const c of core) { sx += c.x; sy += c.y; }
+    let cx = Math.round(sx / core.length);
+    let cy = Math.round(sy / core.length);
+
+    if (!map[cy]?.[cx]) {
+      const near = findNearestLand(map, cx, cy);
+      if (near) { cx = near.x; cy = near.y; }
+    }
+    return { x: cx, y: cy };
   }
 
   function getBuildingLayout(map) {
     if (!Array.isArray(map) || !map.length) return [];
-    const bounds = getIslandBounds(map);
-    if (!bounds) return [];
 
-    const center = {
-      x: Math.round((bounds.minX + bounds.maxX) / 2),
-      y: Math.round((bounds.minY + bounds.maxY) / 2),
-    };
+    const center = getCoreIslandCenter(map);
+    if (!center) return [];
+
     const placed = [];
     const rest = buildings.filter((item) => item.id !== 'campfire' && !item.campfireUpgrade);
 
@@ -170,8 +200,11 @@
 
     const campfireDef = buildings.find((item) => item.id === 'campfire');
     const campfireRadius = getRadius(campfireDef);
+
+    // Костёр всегда в центре ядра острова
     placed.push({ id: 'campfire', x: center.x, y: center.y, radius: campfireRadius });
 
+    // Сетка слотов вокруг костра (как было)
     const layoutGrid = [
       [13, 9, 6, 14],
       [5, 1, 2, 10],
@@ -181,20 +214,26 @@
     const spacing = 4;
     const midGap = 3;
     const rowOffsets = [0, spacing, spacing + midGap, spacing + midGap + spacing];
+
     const colCount = layoutGrid[0]?.length || 0;
     const rowCount = layoutGrid.length;
+
     const layoutWidth = spacing * Math.max(0, colCount - 1);
-    const layoutHeight = rowOffsets.length ? rowOffsets[rowOffsets.length - 1] : spacing * Math.max(0, rowCount - 1);
+    const layoutHeight = rowOffsets.length
+      ? rowOffsets[rowOffsets.length - 1]
+      : spacing * Math.max(0, rowCount - 1);
+
     const startX = center.x - Math.round(layoutWidth / 2);
     const startY = center.y - Math.round(layoutHeight / 2);
-    const slotByNumber = new Map();
 
+    const slotByNumber = new Map();
     layoutGrid.forEach((row, rowIndex) => {
       row.forEach((slotNumber, colIndex) => {
         const x = startX + spacing * colIndex;
         const baseY = startY + (rowOffsets[rowIndex] ?? spacing * rowIndex);
         const y = baseY > center.y ? baseY + 2 : baseY;
-        if (!map[y] || !map[y][x]) return;
+
+        if (!map[y] || !map[y][x]) return; // ставим только на землю
         slotByNumber.set(slotNumber, { x, y });
       });
     });
@@ -208,6 +247,7 @@
       placed.push({ id: item.id, x: spot.x, y: spot.y, radius });
     });
 
+    // финальный offset (как было)
     return placed.map(({ id, x, y }) => ({
       id,
       x: x + layoutOffset.x,
@@ -215,9 +255,5 @@
     }));
   }
 
-  global.BuildingsConfig = {
-    buildings,
-    getBuildingLayout,
-    layoutOffset,
-  };
+  global.BuildingsConfig = { buildings, getBuildingLayout, layoutOffset };
 })(window);

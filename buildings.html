@@ -17,21 +17,23 @@
     let map = [];
     let GRID_H = 0;
     let GRID_W = 0;
+
     const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
     const buildingDefs = buildingsConfig.buildings || [];
     const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
+
     const campfireUpgradeIds = ['campfire-upgrade-3', 'campfire-upgrade-2', 'campfire-upgrade-1'];
     let layout = [];
 
-    // Размер зданий фиксированный (НЕ зависит от размера клетки на экране)
+    // Размер зданий фиксированный (НЕ зависит от cell)
     const BUILDING_CELL_PX = 28;
 
-    // "Виртуальный" шаг мира зданий для смещений от центра (НЕ зависит от GRID_W/GRID_H)
-    // Можно менять, если хочется плотнее/реже размещение относительно центра.
+    // "Виртуальный" шаг мира зданий (смещения от костра)
     const VIRTUAL_CELL_PX = 28;
 
     const canvas = document.getElementById('buildingsCanvas');
     const ctx = canvas.getContext('2d');
+
     let cw = 0;
     let ch = 0;
 
@@ -45,7 +47,7 @@
       GRID_H = map.length;
       GRID_W = map[0] ? map[0].length : 0;
 
-      // layout: позиции зданий в КЛЕТКАХ (x,y) — как раньше
+      // layout: позиции зданий в КЛЕТКАХ (x,y)
       layout = buildingsConfig.getBuildingLayout(map);
     }
     loadMap();
@@ -54,11 +56,13 @@
       const dpr = window.devicePixelRatio || 1;
       const width = innerWidth;
       const height = innerHeight;
+
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
       cw = width;
       ch = height;
     }
@@ -68,22 +72,22 @@
       if(!url) return null;
       let record = imageCache.get(url);
       if(record) return record;
+
       const img = new Image();
       record = { img, ok: false };
       img.onload = () => { record.ok = true; };
       img.onerror = () => { record.ok = false; };
       img.src = url;
+
       imageCache.set(url, record);
       return record;
     }
 
     function getUserState(){
       let user = {};
-      try {
-        user = JSON.parse(localStorage.getItem('user') || '{}');
-      } catch (err) {
-        user = {};
-      }
+      try { user = JSON.parse(localStorage.getItem('user') || '{}'); }
+      catch (err) { user = {}; }
+
       if(!user.unlockedResources || typeof user.unlockedResources !== 'object'){
         user.unlockedResources = {};
       }
@@ -118,14 +122,15 @@
       const radius = size * 0.18;
 
       ctx.save();
+
       if(primitive.kind === 'campfire'){
         ctx.globalAlpha = 0.5;
         ctx.fillStyle = primitive.glow || 'rgba(255,160,80,0.5)';
         ctx.beginPath();
         ctx.ellipse(centerX, centerY + size * 0.1, size * 0.5, size * 0.3, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1;
 
+        ctx.globalAlpha = 1;
         ctx.fillStyle = primitive.stone || '#6e7a86';
         drawRoundedRect(baseX + size * 0.15, baseY + size * 0.55, size * 0.7, size * 0.25, radius);
 
@@ -138,6 +143,7 @@
         ctx.quadraticCurveTo(baseX + size * 0.75, baseY + size * 0.45, centerX, baseY + size * 0.7);
         ctx.quadraticCurveTo(baseX + size * 0.25, baseY + size * 0.45, centerX, baseY + size * 0.2);
         ctx.fill();
+
         ctx.restore();
         return;
       }
@@ -180,29 +186,29 @@
     }
 
     /**
-     * ВАЖНОЕ ИЗМЕНЕНИЕ:
-     * - Позиция здания считается относительно ЦЕНТРА карты
-     * - Смещение от центра откладываем в VIRTUAL_CELL_PX (фиксированный шаг),
-     *   поэтому при изменении размера клетки (cell) здания не "съезжают" и не "сжимаются" вместе с сеткой.
+     * КЛЮЧЕВОЕ:
+     * - ЯКОРЬ = костёр (в координатах карты, не камеры)
+     * - Все здания смещаем относительно костра в VIRTUAL_CELL_PX
+     * - Размеры зданий фиксированные
      */
-    function drawBuilding(def, position, cell){
-      const radius = Number.isFinite(def && def.colliderRadius) ? Math.max(1, def.colliderRadius) : 2;
+    function drawBuilding(def, position, cell, anchorSpot){
+      const radius = Number.isFinite(def?.colliderRadius) ? Math.max(1, def.colliderRadius) : 2;
 
-      // размер здания фиксированный (не зависит от cell)
+      // фиксированный размер
       const size = BUILDING_CELL_PX * 0.82 * (radius * 2 + 1);
 
-      // якорь: центр карты в "текущем мире" (зависит от cell)
-      const anchorX = (GRID_W * cell) * 0.5;
-      const anchorY = (GRID_H * cell) * 0.5;
+      // якорь в пикселях мира = позиция костра на карте (через cell)
+      const anchorX = (anchorSpot.x + 0.5) * cell;
+      const anchorY = (anchorSpot.y + 0.5) * cell;
 
-      // смещение от центра карты, но в "виртуальных пикселях" (не зависит от cell)
-      const dx = ((position.x + 0.5) - GRID_W * 0.5) * VIRTUAL_CELL_PX;
-      const dy = ((position.y + 0.5) - GRID_H * 0.5) * VIRTUAL_CELL_PX;
+      // смещения относительно костра (виртуальные пиксели)
+      const dx = (position.x - anchorSpot.x) * VIRTUAL_CELL_PX;
+      const dy = (position.y - anchorSpot.y) * VIRTUAL_CELL_PX;
 
       const centerX = anchorX + dx;
       const centerY = anchorY + dy;
 
-      const imgRec = def && def.assetUrl ? getImageRecord(def.assetUrl) : null;
+      const imgRec = def?.assetUrl ? getImageRecord(def.assetUrl) : null;
       if(imgRec && imgRec.ok && imgRec.img.complete && imgRec.img.naturalWidth > 0){
         ctx.drawImage(imgRec.img, centerX - size / 2, centerY - size / 2, size, size);
         return;
@@ -210,18 +216,37 @@
       drawPrimitive(def, centerX, centerY, size);
     }
 
+    function getWiggleOffset(cell){
+      const start = Number(localStorage.getItem('islandWiggleAt') || 0);
+      if(!start) return { x: 0, y: 0 };
+
+      const duration = 5000;
+      const elapsed = performance.now() - start;
+      if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
+
+      const t = elapsed / duration;
+      const decay = 1 - t;
+
+      return {
+        x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
+        y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
+      };
+    }
+
     function render(){
       ctx.clearRect(0, 0, cw, ch);
 
-      // текущий размер клетки (может меняться при изменении GRID_W)
-      const cell = cw / GRID_W || 0;
-
+      const cell = (GRID_W ? (cw / GRID_W) : 0);
       const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
       const wiggle = getWiggleOffset(cell);
       const user = getUserState();
 
-      ctx.save();
-      ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
+      // найти позицию костра в layout — это наш якорь
+      let anchorSpot = layout.find(s => s.id === 'campfire');
+      if(!anchorSpot){
+        // fallback: геометрический центр карты (на всякий случай)
+        anchorSpot = { x: (GRID_W * 0.5) - 0.5, y: (GRID_H * 0.5) - 0.5 };
+      }
 
       const getCampfireDef = () => {
         for(const upgradeId of campfireUpgradeIds){
@@ -231,6 +256,9 @@
         }
         return buildingById.get('campfire');
       };
+
+      ctx.save();
+      ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 
       const ordered = layout
         .map((spot) => {
@@ -242,28 +270,14 @@
         .filter((entry) => entry.def)
         .sort((a, b) => a.spot.y - b.spot.y);
 
-      ordered.forEach(({ spot, def }) => {
+      for(const { spot, def } of ordered){
         const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
-        if(!unlocked) return;
-        drawBuilding(def, spot, cell);
-      });
+        if(!unlocked) continue;
+        drawBuilding(def, spot, cell, anchorSpot);
+      }
 
       ctx.restore();
       requestAnimationFrame(render);
-    }
-
-    function getWiggleOffset(cell){
-      const start = Number(localStorage.getItem('islandWiggleAt') || 0);
-      if(!start) return { x: 0, y: 0 };
-      const duration = 5000;
-      const elapsed = performance.now() - start;
-      if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
-      const t = elapsed / duration;
-      const decay = 1 - t;
-      return {
-        x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
-        y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
-      };
     }
 
     resize();
@@ -274,6 +288,7 @@
         resize();
       }
     });
+
     render();
   </script>
 </body>
