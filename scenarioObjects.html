@@ -47,6 +47,7 @@ const COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
 const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
 const SCENARIO_STATE_KEY = 'scenarioObjectsState';
 const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
+const SCENARIO_SHIFT_APPLIED_KEY = 'scenarioObjectsShiftApplied';
 
 // NEW: список открытых объектов (id[]) — сохраняется и загружается отдельно
 const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
@@ -62,6 +63,56 @@ function persistOpenedIds(){
   localStorage.setItem(SCENARIO_OPENED_KEY, JSON.stringify([...openedIds]));
 }
 let openedIds = loadOpenedIds();
+let pendingMapShift = null;
+
+function normalizeShift(shift){
+  return {
+    x: Number.isFinite(shift?.x) ? shift.x : 0,
+    y: Number.isFinite(shift?.y) ? shift.y : 0,
+  };
+}
+
+function readMapShift(){
+  try {
+    return normalizeShift(JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}'));
+  } catch (err) {
+    return { x: 0, y: 0 };
+  }
+}
+
+function readAppliedShift(){
+  try {
+    return normalizeShift(JSON.parse(localStorage.getItem(SCENARIO_SHIFT_APPLIED_KEY) || '{"x":0,"y":0}'));
+  } catch (err) {
+    return { x: 0, y: 0 };
+  }
+}
+
+function markShiftApplied(shift){
+  localStorage.setItem(SCENARIO_SHIFT_APPLIED_KEY, JSON.stringify(normalizeShift(shift)));
+}
+
+function updatePendingMapShift(){
+  const shift = readMapShift();
+  const applied = readAppliedShift();
+  if((shift.x || shift.y) && (shift.x !== applied.x || shift.y !== applied.y)){
+    pendingMapShift = shift;
+  } else {
+    pendingMapShift = null;
+  }
+}
+
+function applyPendingMapShift(){
+  if(!pendingMapShift || !scenarioState.length) return false;
+  scenarioState.forEach((state) => {
+    state.gridX += pendingMapShift.x;
+    state.gridY += pendingMapShift.y;
+  });
+  persistScenarioState();
+  markShiftApplied(pendingMapShift);
+  pendingMapShift = null;
+  return true;
+}
 
 function loadMap({ initial = false } = {}){
   const parsed = JSON.parse(localStorage.getItem('map') || '[]');
@@ -69,28 +120,14 @@ function loadMap({ initial = false } = {}){
   const nextGridW = nextMap[0]?.length || 0;
   const nextGridH = nextMap.length;
 
-  if(!initial && GRID_W && GRID_H && nextGridW && nextGridH){
-    let shift = { x: 0, y: 0 };
-    try {
-      shift = JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}');
-    } catch (err) {
-      shift = { x: 0, y: 0 };
-    }
-    const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
-    const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
-    if(shiftX || shiftY){
-      scenarioState.forEach((state) => {
-        state.gridX += shiftX;
-        state.gridY += shiftY;
-      });
-      persistScenarioState();
-    }
-  }
-
   map = nextMap;
   GRID_W = nextGridW;
   GRID_H = nextGridH;
   cellPct = GRID_W ? (100 / GRID_W) : 0;
+  updatePendingMapShift();
+  if(!initial){
+    applyPendingMapShift();
+  }
 }
 
 function getIslandBounds(){
@@ -158,20 +195,26 @@ function loadScenarioState(){
   const byId = new Map(stored.map((item) => [item.id, item]));
   const initial = computeInitialPositions();
   const next = [];
+  const shiftX = pendingMapShift?.x || 0;
+  const shiftY = pendingMapShift?.y || 0;
 
   scenarioObjects.forEach((def, index) => {
     const existing = byId.get(def.id) || initial[index];
     if(!existing) return;
     next.push({
       id: def.id,
-      gridX: Number.isFinite(existing.gridX) ? existing.gridX : 0,
-      gridY: Number.isFinite(existing.gridY) ? existing.gridY : 0,
+      gridX: (Number.isFinite(existing.gridX) ? existing.gridX : 0) + shiftX,
+      gridY: (Number.isFinite(existing.gridY) ? existing.gridY : 0) + shiftY,
       triggered: Boolean(existing.triggered),
       transformed: Boolean(existing.transformed),
       // NEW: opened берем из отдельного списка (и подстрахуемся, если вдруг было в state)
       opened: openedIds.has(def.id) || Boolean(existing.opened),
     });
   });
+  if(pendingMapShift){
+    markShiftApplied(pendingMapShift);
+    pendingMapShift = null;
+  }
 
   // NEW: если под объектом уже есть земля, считаем, что он открыт (синхронизация на случай рассинхрона)
   let openedChanged = false;
