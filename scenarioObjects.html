@@ -39,6 +39,44 @@ let GRID_W = 0;
 let GRID_H = 0;
 let cellPct = 0;
 
+/* =========================
+   Soft cell shrink (как в island/buildings)
+========================= */
+const SHRINK_FACTOR = 0.6;   // 0..1 (1 = как раньше, 0 = почти не сжимать)
+const MIN_CELL_PX   = 18;    // минимальный размер клетки
+
+function ensureBaseSize(){
+  let bw = Number(localStorage.getItem('islandBaseW') || 0);
+  let bh = Number(localStorage.getItem('islandBaseH') || 0);
+  if(!bw || !bh){
+    bw = GRID_W || 1;
+    bh = GRID_H || 1;
+    localStorage.setItem('islandBaseW', String(bw));
+    localStorage.setItem('islandBaseH', String(bh));
+  }
+  return { bw, bh };
+}
+
+function getCell(){
+  if(!GRID_W || !GRID_H) return 0;
+  const { bw, bh } = ensureBaseSize();
+
+  const effW = bw + Math.max(0, GRID_W - bw) * SHRINK_FACTOR;
+  const effH = bh + Math.max(0, GRID_H - bh) * SHRINK_FACTOR;
+
+  const cell = Math.min(cw / effW, ch / effH);
+  return Math.max(MIN_CELL_PX, cell);
+}
+
+// cellPct должен соответствовать РЕАЛЬНОМУ cell (а не 100/GRID_W)
+function recalcCellPct(){
+  const cell = getCell();
+  if(!cell) { cellPct = 0; return; }
+  const effW = cw / cell; // "эффективная ширина сетки" в клетках
+  cellPct = effW ? (100 / effW) : 0;
+}
+/* ========================= */
+
 const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
 const scenarioObjects = Array.isArray(scenarioConfig.objects) ? scenarioConfig.objects : [];
 const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
@@ -123,7 +161,10 @@ function loadMap({ initial = false } = {}){
   map = nextMap;
   GRID_W = nextGridW;
   GRID_H = nextGridH;
-  cellPct = GRID_W ? (100 / GRID_W) : 0;
+
+  // важно: после обновления GRID_* пересчитать cellPct по мягкой формуле
+  recalcCellPct();
+
   updatePendingMapShift();
   if(!initial){
     applyPendingMapShift();
@@ -179,7 +220,7 @@ function computeInitialPositions(){
       gridY,
       triggered: false,
       transformed: false,
-      opened: openedIds.has(def.id), // NEW
+      opened: openedIds.has(def.id),
     };
   });
 }
@@ -207,16 +248,15 @@ function loadScenarioState(){
       gridY: (Number.isFinite(existing.gridY) ? existing.gridY : 0) + shiftY,
       triggered: Boolean(existing.triggered),
       transformed: Boolean(existing.transformed),
-      // NEW: opened берем из отдельного списка (и подстрахуемся, если вдруг было в state)
       opened: openedIds.has(def.id) || Boolean(existing.opened),
     });
   });
+
   if(pendingMapShift){
     markShiftApplied(pendingMapShift);
     pendingMapShift = null;
   }
 
-  // NEW: если под объектом уже есть земля, считаем, что он открыт (синхронизация на случай рассинхрона)
   let openedChanged = false;
   next.forEach((s) => {
     if(map[s.gridY]?.[s.gridX] && !openedIds.has(s.id)){
@@ -246,7 +286,10 @@ function getWiggleOffset(){
   if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
   const t = elapsed / duration;
   const decay = 1 - t;
-  const cell = GRID_W ? cw / GRID_W : 0;
+
+  // было: cw / GRID_W
+  const cell = getCell();
+
   return {
     x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
     y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
@@ -378,7 +421,6 @@ function canSyncTrigger(state, def, heroPos){
 function spawnScenarioLand(){
   if(!map.length) return;
 
-  // NEW: seed содержит id, чтобы открыть конкретный объект
   const seeds = [];
   scenarioState.forEach((state) => {
     const def = scenarioById.get(state.id);
@@ -428,8 +470,6 @@ function spawnScenarioLand(){
   }
 
   let changed = false;
-
-  // NEW: отслеживаем, под каким объектом именно "подспавнилась" земля (центральная клетка seed)
   const openedNow = new Set();
 
   seeds.forEach(({ id, x, y }) => {
@@ -453,7 +493,6 @@ function spawnScenarioLand(){
     if(centerBecameLand) openedNow.add(id);
   });
 
-  // NEW: если под объектом действительно заспавнилась земля — помечаем как открытый и сохраняем список
   if(openedNow.size){
     let anyOpenedAdded = false;
     openedNow.forEach((id) => {
@@ -473,7 +512,9 @@ function spawnScenarioLand(){
   map = nextMap;
   GRID_W = map[0]?.length || 0;
   GRID_H = map.length;
-  cellPct = GRID_W ? (100 / GRID_W) : 0;
+
+  // важно: пересчитать cellPct после изменения GRID_*
+  recalcCellPct();
 
   localStorage.setItem('map', JSON.stringify(map));
   localStorage.setItem('mapShift', JSON.stringify(shift));
@@ -658,7 +699,7 @@ function frame(now){
 
 function init(){
   loadMap({ initial: true });
-  openedIds = loadOpenedIds(); // NEW: на случай, если перед init кто-то обновил localStorage
+  openedIds = loadOpenedIds();
   scenarioState = loadScenarioState();
   persistScenarioState();
   rebuildScenarioColliderCells();
@@ -671,7 +712,6 @@ window.addEventListener('storage', (event) => {
     loadMap();
     rebuildScenarioColliderCells();
   }
-  // NEW: если список открытых обновили в другом табе — подтягиваем
   if(event.key === SCENARIO_OPENED_KEY){
     openedIds = loadOpenedIds();
     scenarioState.forEach((s) => { s.opened = openedIds.has(s.id); });
