@@ -37,6 +37,37 @@
     let cw = 0;
     let ch = 0;
 
+    // === Soft cell shrink (настройки) ===
+    const SHRINK_FACTOR = 0.6;   // 0..1 (1 = как сейчас, 0 = вообще не сжимать)
+    const MIN_CELL_PX   = 18;    // нижняя граница (чтобы не становилось совсем мелко)
+
+    // базовый размер острова (берём один раз и сохраняем)
+    function ensureBaseSize(){
+      let bw = Number(localStorage.getItem('islandBaseW') || 0);
+      let bh = Number(localStorage.getItem('islandBaseH') || 0);
+
+      if(!bw || !bh){
+        bw = GRID_W || 1;
+        bh = GRID_H || 1;
+        localStorage.setItem('islandBaseW', String(bw));
+        localStorage.setItem('islandBaseH', String(bh));
+      }
+      return { bw, bh };
+    }
+
+    // единый расчёт cell для всех слоёв
+    function getCell(){
+      if(!GRID_W || !GRID_H) return 0;
+
+      const { bw, bh } = ensureBaseSize();
+
+      const effW = bw + Math.max(0, GRID_W - bw) * SHRINK_FACTOR;
+      const effH = bh + Math.max(0, GRID_H - bh) * SHRINK_FACTOR;
+
+      const cell = Math.min(cw / effW, ch / effH);
+      return Math.max(MIN_CELL_PX, cell);
+    }
+
     function loadMap(){
       try {
         const stored = JSON.parse(localStorage.getItem('map') || '[]');
@@ -236,7 +267,7 @@
     function render(){
       ctx.clearRect(0, 0, cw, ch);
 
-      const cell = (GRID_W ? (cw / GRID_W) : 0);
+      const cell = getCell();
       const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
       const wiggle = getWiggleOffset(cell);
       const user = getUserState();
