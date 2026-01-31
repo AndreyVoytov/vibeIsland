@@ -186,10 +186,69 @@
     return { x: cx, y: cy };
   }
 
+  function getMapSignature(map){
+    const h = map.length || 0;
+    const w = map[0]?.length || 0;
+    return `${w}x${h}`;
+  }
+
+  function readStoredCampfireCenter(){
+    try {
+      const raw = localStorage.getItem('campfireCenter');
+      if(!raw) return null;
+      const parsed = JSON.parse(raw);
+      if(parsed && Number.isFinite(parsed.x) && Number.isFinite(parsed.y)){
+        return { x: parsed.x, y: parsed.y };
+      }
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+
+  function writeStoredCampfireCenter(center, signature){
+    try {
+      localStorage.setItem('campfireCenter', JSON.stringify(center));
+      localStorage.setItem('campfireCenterMapSig', signature);
+    } catch (err) {
+      // ignore storage errors
+    }
+  }
+
+  function getStableCampfireCenter(map){
+    const signature = getMapSignature(map);
+    let stored = readStoredCampfireCenter();
+    const storedSig = localStorage.getItem('campfireCenterMapSig') || '';
+
+    if(stored){
+      if(storedSig && storedSig !== signature){
+        let shift = { x: 0, y: 0 };
+        try {
+          shift = JSON.parse(localStorage.getItem('mapShift') || '{"x":0,"y":0}');
+        } catch (err) {
+          shift = { x: 0, y: 0 };
+        }
+        const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+        const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+        stored = { x: stored.x + shiftX, y: stored.y + shiftY };
+        writeStoredCampfireCenter(stored, signature);
+      }
+      if(map[stored.y]?.[stored.x] !== undefined){
+        return stored;
+      }
+    }
+
+    const computed = getCoreIslandCenter(map);
+    if(computed){
+      writeStoredCampfireCenter(computed, signature);
+    }
+    return computed;
+  }
+
   function getBuildingLayout(map) {
     if (!Array.isArray(map) || !map.length) return [];
 
-    const center = getCoreIslandCenter(map);
+    const center = getStableCampfireCenter(map);
     if (!center) return [];
 
     const placed = [];
