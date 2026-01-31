@@ -35,6 +35,30 @@
       ? buildingsConfig.virtualCellPx
       : 28;
 
+    function getExpansionLevel(){
+      const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
+      if(!Number.isFinite(stored)) return 0;
+      return Math.max(0, Math.floor(stored));
+    }
+
+    function getBaseGridW(){
+      const stored = Number(localStorage.getItem('baseGridW') || '0');
+      if(Number.isFinite(stored) && stored > 0) return stored;
+      if(GRID_W){
+        localStorage.setItem('baseGridW', String(GRID_W));
+        return GRID_W;
+      }
+      return 0;
+    }
+
+    function getWorldCellPx(){
+      const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
+      const baseGridW = getBaseGridW();
+      if(!baseGridW) return 0;
+      const scale = Math.pow(0.97, getExpansionLevel());
+      return (gameW / baseGridW) * scale;
+    }
+
     const canvas = document.getElementById('buildingsCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -240,7 +264,7 @@
     function render(){
       ctx.clearRect(0, 0, cw, ch);
 
-      const cell = (GRID_W ? (cw / GRID_W) : 0);
+      const cell = getWorldCellPx();
       const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
       const wiggle = getWiggleOffset(cell);
       const user = getUserState();

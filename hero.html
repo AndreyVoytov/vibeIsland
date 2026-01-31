@@ -75,6 +75,30 @@ function getUserState(){
   return user;
 }
 
+function getExpansionLevel(){
+  const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
+  if(!Number.isFinite(stored)) return 0;
+  return Math.max(0, Math.floor(stored));
+}
+
+function getBaseGridW(){
+  const stored = Number(localStorage.getItem('baseGridW') || '0');
+  if(Number.isFinite(stored) && stored > 0) return stored;
+  if(GRID_W){
+    localStorage.setItem('baseGridW', String(GRID_W));
+    return GRID_W;
+  }
+  return 0;
+}
+
+function getWorldCellPx(){
+  const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
+  const baseGridW = getBaseGridW();
+  if(!baseGridW) return 0;
+  const scale = Math.pow(0.97, getExpansionLevel());
+  return (gameW / baseGridW) * scale;
+}
+
 function getVirtualCellPx(){
   const value = buildingsConfig.virtualCellPx;
   return Number.isFinite(value) ? value : 28;
@@ -194,7 +218,8 @@ function update(dtMs){
 
   /* коллизии по ногам (как и было) */
   const vw   = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
-  const cell = vw / GRID_W;
+  const cell = getWorldCellPx();
+  const worldW = (cell && GRID_W) ? cell * GRID_W : vw;
   const blockers = getBuildingBlockers(cell);
   const resourceBlockers = getResourceBlockers();
   const scenarioBlockers = getScenarioBlockers();
@@ -206,8 +231,8 @@ function update(dtMs){
 
   if (vx){
     const nx = charXPct + vx;
-    const gx = Math.floor(pct2pxX(nx, vw) / cell);
-    const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
+    const gx = Math.floor(pct2pxX(nx, worldW) / cell);
+    const gy = Math.floor(pct2pxY(charYPct, worldW) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
       if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
         charXPct = nx;
@@ -219,8 +244,8 @@ function update(dtMs){
   }
   if (vy){
     const ny = charYPct + vy;
-    const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
-    const gy = Math.floor(pct2pxY(ny, vw) / cell);
+    const gx = Math.floor(pct2pxX(charXPct, worldW) / cell);
+    const gy = Math.floor(pct2pxY(ny, worldW) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx]){
       if(!blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
         charYPct = ny;
@@ -233,8 +258,8 @@ function update(dtMs){
 
   if(blockedByBuildingX && !movedY && Math.abs(vy) > 0.001){
     const slideY = charYPct + vy;
-    const gx = Math.floor(pct2pxX(charXPct, vw) / cell);
-    const gy = Math.floor(pct2pxY(slideY, vw) / cell);
+    const gx = Math.floor(pct2pxX(charXPct, worldW) / cell);
+    const gy = Math.floor(pct2pxY(slideY, worldW) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
       charYPct = slideY;
       movedY = true;
@@ -242,8 +267,8 @@ function update(dtMs){
   }
   if(blockedByBuildingY && !movedX && Math.abs(vx) > 0.001){
     const slideX = charXPct + vx;
-    const gx = Math.floor(pct2pxX(slideX, vw) / cell);
-    const gy = Math.floor(pct2pxY(charYPct, vw) / cell);
+    const gx = Math.floor(pct2pxX(slideX, worldW) / cell);
+    const gy = Math.floor(pct2pxY(charYPct, worldW) / cell);
     if (gx>=0 && gx<GRID_W && gy>=0 && gy<GRID_H && map[gy]?.[gx] && !blockers.has(`${gx},${gy}`) && !resourceBlockers.has(`${gx},${gy}`) && !scenarioBlockers.has(`${gx},${gy}`)){
       charXPct = slideX;
       movedX = true;
@@ -258,11 +283,11 @@ function update(dtMs){
   /* —— камера: всегда держим героя в центре экрана (без клампа) —— */
   const ghCam = parseFloat(localStorage.getItem('gameHeight')) || innerHeight;
   const vwCam = parseFloat(localStorage.getItem('gameWidth'))  || innerWidth;
-  const worldW = vwCam;                              // логика мира остаётся прежней
-  const worldH = vwCam * (GRID_H / GRID_W);          // ось Y в % от ширины
+  const worldWCam = (cell && GRID_W) ? cell * GRID_W : vwCam;
+  const worldH = worldWCam * (GRID_H / GRID_W);          // ось Y в % от ширины
 
-  const heroX = pct2pxX(charXPct, vwCam);
-  const heroY = pct2pxY(charYPct, vwCam);
+  const heroX = pct2pxX(charXPct, worldWCam);
+  const heroY = pct2pxY(charYPct, worldWCam);
 
   // Камера — центр на герое, без ограничений, чтобы остров «ездил» под ним.
   const camX = heroX - vwCam/2;

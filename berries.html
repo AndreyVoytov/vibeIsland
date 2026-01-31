@@ -251,9 +251,33 @@ function getVirtualCellPx(){
   return Number.isFinite(value) ? value : 28;
 }
 
+function getExpansionLevel(){
+  const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
+  if(!Number.isFinite(stored)) return 0;
+  return Math.max(0, Math.floor(stored));
+}
+
+function getBaseGridW(){
+  const stored = Number(localStorage.getItem('baseGridW') || '0');
+  if(Number.isFinite(stored) && stored > 0) return stored;
+  if(GRID_W){
+    localStorage.setItem('baseGridW', String(GRID_W));
+    return GRID_W;
+  }
+  return 0;
+}
+
 function getCellPx(){
   const vw = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
-  return GRID_W ? (vw / GRID_W) : 0;
+  const baseGridW = getBaseGridW();
+  if(!baseGridW) return 0;
+  const scale = Math.pow(0.97, getExpansionLevel());
+  return (vw / baseGridW) * scale;
+}
+
+function getWorldWidth(){
+  const cell = getCellPx();
+  return (cell && GRID_W) ? cell * GRID_W : (parseFloat(localStorage.getItem('gameWidth')) || innerWidth);
 }
 
 function getBuildingAnchorSpot(layout){
@@ -361,7 +385,7 @@ function resolveCampfireCenter(){
 
 /* канвас */
 const cvs=document.getElementById('berriesCanvas'),ctx=cvs.getContext('2d');
-let cw=0,ch=0; const pct2px=p=>p*cw/100;
+let cw=0,ch=0; const pct2px=p=>p*getWorldWidth()/100;
 function resize(){
   const dpr = window.devicePixelRatio || 1;
   const width = innerWidth;
@@ -1386,7 +1410,7 @@ function getWiggleOffset(){
   if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
   const t = elapsed / duration;
   const decay = 1 - t;
-  const cell = GRID_W ? cw / GRID_W : 0;
+  const cell = getCellPx();
   return {
     x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
     y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,

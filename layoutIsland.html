@@ -31,6 +31,27 @@ function loadMap(){
 loadMap();
 
 function getCam(){ return JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}'); }
+function getExpansionLevel(){
+  const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
+  if(!Number.isFinite(stored)) return 0;
+  return Math.max(0, Math.floor(stored));
+}
+function getBaseGridW(){
+  const stored = Number(localStorage.getItem('baseGridW') || '0');
+  if(Number.isFinite(stored) && stored > 0) return stored;
+  if(GRID_W){
+    localStorage.setItem('baseGridW', String(GRID_W));
+    return GRID_W;
+  }
+  return 0;
+}
+function getWorldCellPx(){
+  const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
+  const baseGridW = getBaseGridW();
+  if(!baseGridW) return 0;
+  const scale = Math.pow(0.97, getExpansionLevel());
+  return (gameW / baseGridW) * scale;
+}
 function getWiggleOffset(){
   const start = Number(localStorage.getItem('islandWiggleAt') || 0);
   if(!start) return { x: 0, y: 0 };
@@ -39,7 +60,7 @@ function getWiggleOffset(){
   if(elapsed < 0 || elapsed > duration) return { x: 0, y: 0 };
   const t = elapsed / duration;
   const decay = 1 - t;
-  const cell = GRID_W ? cw / GRID_W : 0;
+  const cell = getWorldCellPx();
   return {
     x: Math.sin(t * Math.PI * 4) * cell * 0.12 * decay,
     y: Math.cos(t * Math.PI * 4) * cell * 0.08 * decay,
@@ -87,7 +108,7 @@ function isCustomSurface(value){
 function drawIslandUnderShadow(cam, wiggle){
   // Find island bounding box in canvas space
   let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
-  const cell = cw/GRID_W || 0;
+  const cell = getWorldCellPx();
   for(let y=0;y<GRID_H;y++) for(let x=0;x<GRID_W;x++) if(map[y]?.[x]){
     minX=Math.min(minX,x*cell); minY=Math.min(minY,y*cell);
     maxX=Math.max(maxX,(x+1)*cell); maxY=Math.max(maxY,(y+1)*cell);
@@ -136,7 +157,7 @@ function drawIslandUnderShadow(cam, wiggle){
 
 /* остров: перекрывающиеся тайлы + «срез» или картинка тайла */
 function drawIsland(cam, wiggle){
-  const cell = cw/GRID_W || 0, radius = cell*0.22, overlap = cell*0.12;
+  const cell = getWorldCellPx(), radius = cell*0.22, overlap = cell*0.12;
 
   ctx.save(); ctx.translate(-cam.x + wiggle.x, -cam.y + wiggle.y);
 

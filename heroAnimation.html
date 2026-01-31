@@ -24,9 +24,35 @@ const canvas = document.getElementById('heroCanvas');
 const ctx    = canvas.getContext('2d');
 
 /* ---------- масштабирование ---------- */
-let cw, ch, cell, pct2px = p => p * cw / 100;
+let cw, ch, cell, pct2px = p => p * getWorldWidth() / 100;
 const CHAR_R_PCT = 6;
 const SCALE      = 1.6;
+
+function getExpansionLevel(){
+  const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
+  if(!Number.isFinite(stored)) return 0;
+  return Math.max(0, Math.floor(stored));
+}
+function getBaseGridW(){
+  const stored = Number(localStorage.getItem('baseGridW') || '0');
+  if(Number.isFinite(stored) && stored > 0) return stored;
+  if(GRID_W){
+    localStorage.setItem('baseGridW', String(GRID_W));
+    return GRID_W;
+  }
+  return 0;
+}
+function getWorldCellPx(){
+  const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
+  const baseGridW = getBaseGridW();
+  if(!baseGridW) return 0;
+  const scale = Math.pow(0.97, getExpansionLevel());
+  return (gameW / baseGridW) * scale;
+}
+function getWorldWidth(){
+  const cellPx = getWorldCellPx();
+  return (cellPx && GRID_W) ? cellPx * GRID_W : (parseFloat(localStorage.getItem('gameWidth')) || innerWidth);
+}
 
 let charR;
 let footOffset;
@@ -317,7 +343,7 @@ function resize(){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   cw = width;
   ch = height;
-  cell  = cw / GRID_W;
+  cell  = getWorldCellPx();
   charR = pct2px(CHAR_R_PCT);
   footOffset = 38;
 }
