@@ -75,20 +75,44 @@ function getUserState(){
   return user;
 }
 
-function getBuildingBlockers(){
+function getVirtualCellPx(){
+  const value = buildingsConfig.virtualCellPx;
+  return Number.isFinite(value) ? value : 28;
+}
+
+function getBuildingAnchorSpot(){
+  let anchorSpot = buildingLayout.find((spot) => spot.id === 'campfire');
+  if(anchorSpot) return anchorSpot;
+  if(GRID_W && GRID_H){
+    return { x: (GRID_W * 0.5) - 0.5, y: (GRID_H * 0.5) - 0.5 };
+  }
+  return null;
+}
+
+function getBuildingBlockers(cellPx){
   const user = getUserState();
   const blockers = new Set();
+  if(!cellPx || !GRID_W) return blockers;
+  const anchorSpot = getBuildingAnchorSpot();
+  if(!anchorSpot) return blockers;
+  const virtualCellPx = getVirtualCellPx();
+  const anchorX = (anchorSpot.x + 0.5) * cellPx;
+  const anchorY = (anchorSpot.y + 0.5) * cellPx;
+
   buildingLayout.forEach((spot) => {
     const def = buildingById.get(spot.id);
     if(!def || !def.collider) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
-    const anchorX = Math.floor(spot.x);
-    const anchorY = Math.floor(spot.y);
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-    for(let dy = -radius; dy <= radius; dy += 1){
-      for(let dx = -radius; dx <= radius; dx += 1){
-        blockers.add(`${anchorX + dx},${anchorY + dy}`);
+    const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
+    const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
+    const gridX = Math.floor(centerX / cellPx);
+    const gridY = Math.floor(centerY / cellPx);
+    const radiusCells = Math.max(1, Math.round((radius * virtualCellPx) / cellPx));
+    for(let dy = -radiusCells; dy <= radiusCells; dy += 1){
+      for(let dx = -radiusCells; dx <= radiusCells; dx += 1){
+        blockers.add(`${gridX + dx},${gridY + dy}`);
       }
     }
   });
@@ -171,7 +195,7 @@ function update(dtMs){
   /* коллизии по ногам (как и было) */
   const vw   = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const cell = vw / GRID_W;
-  const blockers = getBuildingBlockers();
+  const blockers = getBuildingBlockers(cell);
   const resourceBlockers = getResourceBlockers();
   const scenarioBlockers = getScenarioBlockers();
 

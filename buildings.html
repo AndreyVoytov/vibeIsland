@@ -26,10 +26,14 @@
     let layout = [];
 
     // Размер зданий фиксированный (НЕ зависит от cell)
-    const BUILDING_CELL_PX = 28;
+    const BUILDING_CELL_PX = Number.isFinite(buildingsConfig.buildingCellPx)
+      ? buildingsConfig.buildingCellPx
+      : 28;
 
     // "Виртуальный" шаг мира зданий (смещения от костра)
-    const VIRTUAL_CELL_PX = 28;
+    const VIRTUAL_CELL_PX = Number.isFinite(buildingsConfig.virtualCellPx)
+      ? buildingsConfig.virtualCellPx
+      : 28;
 
     const canvas = document.getElementById('buildingsCanvas');
     const ctx = canvas.getContext('2d');

@@ -246,22 +246,51 @@ let campfireCenter = null;
 const buildingDefs = buildingsConfig.buildings || [];
 const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
 
+function getVirtualCellPx(){
+  const value = buildingsConfig.virtualCellPx;
+  return Number.isFinite(value) ? value : 28;
+}
+
+function getCellPx(){
+  const vw = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
+  return GRID_W ? (vw / GRID_W) : 0;
+}
+
+function getBuildingAnchorSpot(layout){
+  const anchorSpot = layout.find((spot) => spot.id === 'campfire');
+  if(anchorSpot) return anchorSpot;
+  const gridH = map.length || 0;
+  if(GRID_W && gridH){
+    return { x: (GRID_W * 0.5) - 0.5, y: (gridH * 0.5) - 0.5 };
+  }
+  return null;
+}
+
 function getActiveBuildingCells(padding = 0){
   const user = getUserState();
   const cells = new Set();
-  if(!Array.isArray(buildingLayout)) return cells;
+  if(!Array.isArray(buildingLayout) || !GRID_W) return cells;
+  const anchorSpot = getBuildingAnchorSpot(buildingLayout);
+  const cellPx = getCellPx();
+  if(!anchorSpot || !cellPx) return cells;
+  const virtualCellPx = getVirtualCellPx();
+  const anchorX = (anchorSpot.x + 0.5) * cellPx;
+  const anchorY = (anchorSpot.y + 0.5) * cellPx;
   buildingLayout.forEach((spot) => {
     const def = buildingById.get(spot.id);
     if(!def) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
-    const anchorX = Math.floor(spot.x);
-    const anchorY = Math.floor(spot.y);
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-    const expanded = Math.max(0, Math.round(radius) + Math.max(0, Math.round(padding)));
+    const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
+    const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
+    const gridX = Math.floor(centerX / cellPx);
+    const gridY = Math.floor(centerY / cellPx);
+    const radiusCells = Math.max(1, Math.round((radius * virtualCellPx) / cellPx));
+    const expanded = Math.max(0, radiusCells + Math.max(0, Math.round(padding)));
     for(let dy = -expanded; dy <= expanded; dy += 1){
       for(let dx = -expanded; dx <= expanded; dx += 1){
-        cells.add(`${anchorX + dx},${anchorY + dy}`);
+        cells.add(`${gridX + dx},${gridY + dy}`);
       }
     }
   });

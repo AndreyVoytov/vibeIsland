@@ -1,5 +1,7 @@
 /* buildings-config.js */
 (function (global) {
+  const BUILDING_CELL_PX = 28;
+  const VIRTUAL_CELL_PX = 28;
   const drillMarkers = [
     '#ff6b6b', '#ff9f1c', '#ffd93d', '#6bcB77', '#4d96ff',
     '#845ec2', '#f368e0', '#00c9a7', '#ff9671', '#c34a36',
@@ -255,5 +257,11 @@
     }));
   }
 
-  global.BuildingsConfig = { buildings, getBuildingLayout, layoutOffset };
+  global.BuildingsConfig = {
+    buildings,
+    getBuildingLayout,
+    layoutOffset,
+    buildingCellPx: BUILDING_CELL_PX,
+    virtualCellPx: VIRTUAL_CELL_PX,
+  };
 })(window);

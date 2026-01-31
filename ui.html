@@ -538,6 +538,33 @@
       return chosen ? chosen.profit : 0;
     }
 
+    function getVirtualCellPx(){
+      const value = buildingConfig.virtualCellPx;
+      return Number.isFinite(value) ? value : 28;
+    }
+
+    function getBuildingAnchorSpot(layout, gridW, gridH){
+      const anchorSpot = layout.find((spot) => spot.id === 'campfire');
+      if(anchorSpot) return anchorSpot;
+      if(gridW && gridH){
+        return { x: (gridW * 0.5) - 0.5, y: (gridH * 0.5) - 0.5 };
+      }
+      return null;
+    }
+
+    function getBuildingColliderInfo(spot, def, anchorSpot, cellPx, virtualCellPx){
+      if(!spot || !def || !anchorSpot || !cellPx) return null;
+      const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
+      const anchorX = (anchorSpot.x + 0.5) * cellPx;
+      const anchorY = (anchorSpot.y + 0.5) * cellPx;
+      const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
+      const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
+      const gridX = Math.floor(centerX / cellPx);
+      const gridY = Math.floor(centerY / cellPx);
+      const radiusCells = Math.max(1, Math.round((radius * virtualCellPx) / cellPx));
+      return { gridX, gridY, radiusCells };
+    }
+
     function calculateIdleIncome(){
       const lastActiveAt = Number(localStorage.getItem('lastActiveAt') || 0);
       if(!Number.isFinite(lastActiveAt) || lastActiveAt <= 0){
@@ -586,21 +613,30 @@
       if(!def || !def.collider) return;
       const currentMap = loadMap();
       const gridW = currentMap[0]?.length || 0;
+      const gridH = currentMap.length || 0;
       if(!gridW) return;
+      const cellPx = (parseFloat(localStorage.getItem('gameWidth')) || innerWidth) / gridW;
       const layout = buildingConfig.getBuildingLayout(currentMap);
       const spot = layout.find((entry) => entry.id === res.id);
       const campfireSpot = layout.find((entry) => entry.id === 'campfire');
       if(!spot || !campfireSpot) return;
+      const anchorSpot = getBuildingAnchorSpot(layout, gridW, gridH);
+      const collider = getBuildingColliderInfo(
+        spot,
+        def,
+        anchorSpot,
+        cellPx,
+        getVirtualCellPx()
+      );
+      if(!collider) return;
       const hero = getHeroState();
       if(!hero) return;
       const gridX = (hero.charXPct / 100) * gridW;
       const gridY = (hero.charYPct / 100) * gridW;
       const heroCellX = Math.floor(gridX);
       const heroCellY = Math.floor(gridY);
-      const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-      const anchorX = Math.floor(spot.x);
-      const anchorY = Math.floor(spot.y);
-      const inZone = Math.abs(heroCellX - anchorX) <= radius && Math.abs(heroCellY - anchorY) <= radius;
+      const inZone = Math.abs(heroCellX - collider.gridX) <= collider.radiusCells
+        && Math.abs(heroCellY - collider.gridY) <= collider.radiusCells;
       if(!inZone) return;
       const xPct = (campfireSpot.x / gridW) * 100;
       const yPct = (campfireSpot.y / gridW) * 100;

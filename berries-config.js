@@ -6,7 +6,7 @@
       id: 'strawberry',
       titleRu: 'Клубника',
       assetUrl: './img/berry/1.png',
-      profit: 100,
+      profit: 10000,
       unlockCost: 0,
       maxSpawnRadius: 10,
       widthPx: 28,
