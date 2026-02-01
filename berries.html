@@ -403,6 +403,7 @@ addEventListener('resize',resize); resize();
 /* геометрия острова */
 const TARGET_BUSHES_AT_CURRENT_MAP = 30;
 let land = [];
+let landSet = new Set();
 let BUSH_DENSITY = 0.05;
 let MAX_UNPICKED_BUSHES = 1;
 let cellPct = 0;
@@ -428,6 +429,49 @@ function clampToIsland(xPct,yPct,radPct=0){ const b=islandBounds;
   return {
     xPct:Math.max(b.minXPct+radPct,Math.min(b.maxXPct-radPct,xPct)),
     yPct:Math.max(b.minYPct+radPct,Math.min(b.maxYPct-radPct,yPct))
+  };
+}
+
+function cellKey(x, y){ return `${x},${y}`; }
+
+function isLandCell(x, y){
+  return landSet.has(cellKey(x, y));
+}
+
+function isAllowedLandCell(x, y, avoid){
+  if(!isLandCell(x, y)) return false;
+  if(avoid && avoid.has(cellKey(x, y))) return false;
+  return true;
+}
+
+function findNearestLandCell(x, y, avoid, maxR = 8){
+  if(isAllowedLandCell(x, y, avoid)) return { x, y };
+  for(let r = 1; r <= maxR; r += 1){
+    for(let dy = -r; dy <= r; dy += 1){
+      for(let dx = -r; dx <= r; dx += 1){
+        if(Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if(isAllowedLandCell(nx, ny, avoid)) return { x: nx, y: ny };
+      }
+    }
+  }
+  return null;
+}
+
+function clampToLandSafe(xPct, yPct, radPct = 0, avoid = null){
+  if(!cellPct || !GRID_W) return clampToIsland(xPct, yPct, radPct);
+  const clamped = clampToIsland(xPct, yPct, radPct);
+  const gx = Math.floor(clamped.xPct / cellPct);
+  const gy = Math.floor(clamped.yPct / cellPct);
+  if(isAllowedLandCell(gx, gy, avoid)){
+    return clamped;
+  }
+  const nearest = findNearestLandCell(gx, gy, avoid);
+  if(!nearest) return clamped;
+  return {
+    xPct: (nearest.x + 0.5) * cellPct,
+    yPct: (nearest.y + 0.5) * cellPct,
   };
 }
 
@@ -458,7 +502,8 @@ function loadMapData({ initial = false } = {}){
   GRID_W = map[0]?.length || 0;
   cellPct = GRID_W ? (100/GRID_W) : 0;
   land = [];
-  map.forEach((row,y)=>row.forEach((c,x)=>c&&land.push({x,y})));
+  landSet = new Set();
+  map.forEach((row,y)=>row.forEach((c,x)=>{ if(c){ land.push({x,y}); landSet.add(cellKey(x, y)); } }));
   BUSH_DENSITY = land.length ? (TARGET_BUSHES_AT_CURRENT_MAP / land.length) : 0.05;
   MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
   islandBounds = getIslandBounds(land, cellPct);
@@ -832,14 +877,14 @@ function updateFlyingParticles(b, now){
   });
 }
 
-function spawnExtractParticles(b, now){
+function spawnExtractParticles(b, now, avoidSet){
   const particleDef = getExtractParticleDef(b.berryDef);
   const count = Number.isFinite(b.berryDef?.extractParticleCount) ? b.berryDef.extractParticleCount : EXTRACT_PARTICLE_COUNT;
   for(let i = 0; i < count; i++){
     const a = rnd(0, Math.PI * 2);
     const d = rnd(SCATTER_MIN_PCT, SCATTER_MAX_PCT);
     const v = vec(a);
-    const to = clampToIsland(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT);
+    const to = clampToLandSafe(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT, avoidSet);
     const be = mkBerry(false, b.xPct, b.yPct, particleDef);
     Object.assign(be, {
       x0: b.xPct,
@@ -908,7 +953,12 @@ function updBush(b){
       const harvestMs = getExtractHarvestMs(b.berryDef);
       if(now - b.harvestStart < harvestMs) return;
 
-      spawnExtractParticles(b, now);
+      {
+        const buildingCells = getActiveBuildingCells();
+        const scenarioBlockers = getScenarioBlockers();
+        const avoidSet = new Set([...buildingCells, ...scenarioBlockers]);
+        spawnExtractParticles(b, now, avoidSet);
+      }
       localStorage.setItem('heroAction', JSON.stringify({chopAt: now}));
 
       const stages = getExtractStages(b.berryDef);
@@ -936,7 +986,10 @@ function updBush(b){
       const tNow=now;
       b.berries.forEach(be=>{
         const a=rnd(0,Math.PI*2), d=rnd(SCATTER_MIN_PCT,SCATTER_MAX_PCT), v=vec(a);
-        const to = clampToIsland(b.xPct+v.x*d, b.yPct+v.y*d, BERRY_R_PCT);
+        const buildingCells = getActiveBuildingCells();
+        const scenarioBlockers = getScenarioBlockers();
+        const avoidSet = new Set([...buildingCells, ...scenarioBlockers]);
+        const to = clampToLandSafe(b.xPct+v.x*d, b.yPct+v.y*d, BERRY_R_PCT, avoidSet);
         Object.assign(be,{
           x0:be.xPct,y0:be.yPct, tx:to.xPct,ty:to.yPct,
           flying:true,tFly0:tNow,flyDur:BERRY_FLY_MS,
