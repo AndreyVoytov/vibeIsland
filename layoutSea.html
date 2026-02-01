@@ -65,6 +65,14 @@ const SHARK_WANDER_R = 7;     // радиус блуждания (в % шири�
 const SHARK_SAFE_FACTOR = 1.5; // спавн не ближе чем 1.5*R к тайлам
 const SHARK_ANG_SPEED_MIN = 0.0006;
 const SHARK_ANG_SPEED_MAX = 0.0016;
+const SHARK_SCENARIO_SAFE_CELLS = 2.0;
+const SHARK_ANCHOR_PULL = 0.002;
+const SHARK_ANCHOR_POINTS = [
+  { xPct: 10, yPct: 10 },
+  { xPct: 90, yPct: 10 },
+  { xPct: 10, yPct: 90 },
+  { xPct: 90, yPct: 90 },
+];
 
 // расстояние от точки до прямоугольника в тех же единицах (проценты)
 function distPointRect(px, py, rx, ry, rw, rh){
@@ -96,35 +104,120 @@ function getIslandBBoxPct(){
 // случайное число в [a,b]
 function rand(a,b){ return a + Math.random()*(b-a); }
 
+let scenarioObjectsCache = { raw: '', cells: [] };
+function getScenarioObjectCells(){
+  const raw = localStorage.getItem('scenarioObjectsState') || '';
+  if(raw === scenarioObjectsCache.raw){
+    return scenarioObjectsCache.cells;
+  }
+  scenarioObjectsCache.raw = raw;
+  if(!raw){
+    scenarioObjectsCache.cells = [];
+    return scenarioObjectsCache.cells;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if(Array.isArray(parsed)){
+      scenarioObjectsCache.cells = parsed
+        .map((state) => {
+          const x = Number(state?.gridX);
+          const y = Number(state?.gridY);
+          if(!Number.isFinite(x) || !Number.isFinite(y)) return null;
+          return { x, y };
+        })
+        .filter(Boolean);
+    } else {
+      scenarioObjectsCache.cells = [];
+    }
+  } catch (err) {
+    scenarioObjectsCache.cells = [];
+  }
+  return scenarioObjectsCache.cells;
+}
+
+function getScenarioSafeDist(cellPct){
+  return Math.max(cellPct * SHARK_SCENARIO_SAFE_CELLS, 0.5);
+}
+
+function isNearScenario(xPct, yPct, scenarioCells, cellPct, safeDist){
+  if(!scenarioCells.length) return false;
+  const distLimit = safeDist ?? getScenarioSafeDist(cellPct);
+  for(let i = 0; i < scenarioCells.length; i += 1){
+    const c = scenarioCells[i];
+    const cx = (c.x + 0.5) * cellPct;
+    const cy = (c.y + 0.5) * cellPct;
+    const dx = xPct - cx;
+    const dy = yPct - cy;
+    if(Math.hypot(dx, dy) < distLimit) return true;
+  }
+  return false;
+}
+
+function getAnchorPoints(bbox, expansionOffset, scenarioCells, cellPct){
+  const safeDist = getScenarioSafeDist(cellPct);
+  const anchors = SHARK_ANCHOR_POINTS.map((p) => ({ xPct: p.xPct, yPct: p.yPct }));
+  const cx = bbox ? (bbox.xPct + bbox.wPct / 2) : 50;
+  const cy = bbox ? (bbox.yPct + bbox.hPct / 2) : (H_PCT / 2);
+  const push = Math.max(expansionOffset * 1.6, 0);
+  anchors.forEach((a) => {
+    let vx = a.xPct - cx;
+    let vy = a.yPct - cy;
+    const len = Math.hypot(vx, vy) || 1;
+    vx /= len; vy /= len;
+    a.xPct = Math.max(5, Math.min(95, a.xPct + vx * push));
+    a.yPct = Math.max(5, Math.min(H_PCT - 5, a.yPct + vy * push));
+    if(isNearScenario(a.xPct, a.yPct, scenarioCells, cellPct, safeDist)){
+      a.xPct = Math.max(5, Math.min(95, a.xPct + vx * safeDist));
+      a.yPct = Math.max(5, Math.min(H_PCT - 5, a.yPct + vy * safeDist));
+    }
+  });
+  return anchors;
+}
+
 function spawnSharks(){
   sharks.length = 0;
   const bbox = getIslandBBoxPct();
   const expansionOffset = getExpansionOffsetPct();
+  const scenarioCells = getScenarioObjectCells();
+  const cellPct = getCellSizePct();
+  const scenarioSafeDist = getScenarioSafeDist(cellPct);
+  const anchors = getAnchorPoints(bbox, expansionOffset, scenarioCells, cellPct);
   for(let i=0;i<SHARK_N;i++){
     let tries = 0;
     let sx=0, sy=0, ok=false;
     const R = SHARK_WANDER_R;
+    const anchor = anchors[i % Math.max(1, anchors.length)];
     // ограничим спавн так, чтобы круг блуждания оставался в пределах моря
     while(tries++<200 && !ok){
-      sx = rand(R, 100 - R);
-      sy = rand(R, H_PCT - R);
+      if(anchor){
+        sx = anchor.xPct + rand(-R, R);
+        sy = anchor.yPct + rand(-R, R);
+      } else {
+        sx = rand(R, 100 - R);
+        sy = rand(R, H_PCT - R);
+      }
+      sx = Math.max(R, Math.min(100 - R, sx));
+      sy = Math.max(R, Math.min(H_PCT - R, sy));
       // если есть остров — соблюдаем безопасную дистанцию
       let safe = true;
       if(bbox){
         const d = distPointRect(sx, sy, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
         if(d < (SHARK_SAFE_FACTOR * R + expansionOffset)) safe = false;
       }
+      if(isNearScenario(sx, sy, scenarioCells, cellPct, scenarioSafeDist)) safe = false;
       if(isLandAtPct(sx, sy)) safe = false;
       ok = safe;
     }
     const phase = Math.random()*Math.PI*2;
     const angSpeed = rand(SHARK_ANG_SPEED_MIN, SHARK_ANG_SPEED_MAX);
+    const anchorIndex = i % Math.max(1, anchors.length);
     sharks.push({
       sxPct: sx, syPct: sy,
       R: SHARK_WANDER_R,
       angle: Math.random()*Math.PI*2,
       angSpeed,
       phase,
+      anchorIndex,
       xPct: sx, yPct: sy
     });
   }
@@ -134,7 +227,19 @@ function updateSharks(dt){
   const bbox = getIslandBBoxPct();
   const expansionOffset = getExpansionOffsetPct();
   const nudgeStep = Math.max(getCellSizePct() * 0.75, 0.5);
+  const scenarioCells = getScenarioObjectCells();
+  const cellPct = getCellSizePct();
+  const scenarioSafeDist = getScenarioSafeDist(cellPct);
+  const anchors = getAnchorPoints(bbox, expansionOffset, scenarioCells, cellPct);
   sharks.forEach(s=>{
+    if(!Number.isFinite(s.anchorIndex)){
+      s.anchorIndex = Math.floor(Math.random() * Math.max(1, anchors.length));
+    }
+    const anchor = anchors[s.anchorIndex % Math.max(1, anchors.length)];
+    if(anchor){
+      s.sxPct += (anchor.xPct - s.sxPct) * SHARK_ANCHOR_PULL * dt;
+      s.syPct += (anchor.yPct - s.syPct) * SHARK_ANCHOR_PULL * dt;
+    }
     s.angle += s.angSpeed * dt;
     const x = s.sxPct + Math.cos(s.angle) * s.R;
     const y = s.syPct + Math.sin(s.angle*1.25 + s.phase) * (s.R*0.65);
@@ -154,6 +259,24 @@ function updateSharks(dt){
         const push = (minD - d);
         s.xPct += vx * push;
         s.yPct += vy * push;
+      }
+    }
+    if(scenarioCells.length){
+      for(let i = 0; i < scenarioCells.length; i += 1){
+        const c = scenarioCells[i];
+        const cx = (c.x + 0.5) * cellPct;
+        const cy = (c.y + 0.5) * cellPct;
+        const dx = s.xPct - cx;
+        const dy = s.yPct - cy;
+        const dist = Math.hypot(dx, dy);
+        if(dist < scenarioSafeDist){
+          const nx = dx / (dist || 1);
+          const ny = dy / (dist || 1);
+          const push = (scenarioSafeDist - dist);
+          s.xPct = Math.max(0, Math.min(100, s.xPct + nx * push));
+          s.yPct = Math.max(0, Math.min(H_PCT, s.yPct + ny * push));
+          break;
+        }
       }
     }
     if(isLandAtPct(s.xPct, s.yPct)){
