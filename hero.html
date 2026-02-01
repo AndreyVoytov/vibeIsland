@@ -49,7 +49,16 @@ function loadMap({ initial = false } = {}){
   buildingLayout = buildingsConfig.getBuildingLayout(map);
   if(initial && GRID_W){
     charXPct = 50;
-    charYPct = (GRID_H / 2) / GRID_W * 100;
+    const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
+    const baseGridW = Number(localStorage.getItem('baseGridW') || GRID_W) || GRID_W;
+    const expansionLevel = Math.max(0, Math.floor(Number(localStorage.getItem('islandExpansionLevel') || '0') || 0));
+    const scale = Math.pow(0.97, expansionLevel);
+    const cellPx = (gameW / baseGridW) * scale;
+    const worldW = cellPx * GRID_W;
+    const offsetY = worldW ? (50 / worldW) * 100 : 0;
+    const offsetX = worldW ? (3 / worldW) * 100 : 0;
+    charXPct = 50 - offsetX;
+    charYPct = (GRID_H / 2) / GRID_W * 100 + offsetY;
   }
 }
 loadMap({ initial: true });
@@ -189,6 +198,46 @@ function getScenarioBlockers(){
   return scenarioBlockersCache;
 }
 
+function getHeroGridCell(){
+  if(!GRID_W) return null;
+  const gx = Math.floor((charXPct / 100) * GRID_W);
+  const gy = Math.floor((charYPct / 100) * GRID_W);
+  if(!Number.isFinite(gx) || !Number.isFinite(gy)) return null;
+  return { gx, gy };
+}
+
+function isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers){
+  if(gx < 0 || gy < 0 || gx >= GRID_W || gy >= GRID_H) return false;
+  if(!map[gy]?.[gx]) return false;
+  if(blockers.has(`${gx},${gy}`)) return false;
+  if(resourceBlockers.has(`${gx},${gy}`)) return false;
+  if(scenarioBlockers.has(`${gx},${gy}`)) return false;
+  return true;
+}
+
+function findNearestFreeCell(gx, gy, blockers, resourceBlockers, scenarioBlockers, maxR = 6){
+  if(isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)) return { gx, gy };
+  for(let r = 1; r <= maxR; r += 1){
+    for(let dy = -r; dy <= r; dy += 1){
+      for(let dx = -r; dx <= r; dx += 1){
+        if(Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const nx = gx + dx;
+        const ny = gy + dy;
+        if(isCellFree(nx, ny, blockers, resourceBlockers, scenarioBlockers)){
+          return { gx: nx, gy: ny };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function snapHeroToCell(cell){
+  if(!cell) return;
+  charXPct = ((cell.gx + 0.5) / GRID_W) * 100;
+  charYPct = ((cell.gy + 0.5) / GRID_W) * 100;
+}
+
 function applyHeroTeleport(){
   const raw = localStorage.getItem('heroTeleport');
   if(!raw) return;
@@ -276,6 +325,14 @@ function update(dtMs){
   }
 
   if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
+
+  const heroCell = getHeroGridCell();
+  if(heroCell && !isCellFree(heroCell.gx, heroCell.gy, blockers, resourceBlockers, scenarioBlockers)){
+    const safeCell = findNearestFreeCell(heroCell.gx, heroCell.gy, blockers, resourceBlockers, scenarioBlockers);
+    if(safeCell){
+      snapHeroToCell(safeCell);
+    }
+  }
 
   /* публикуем состояние героя */
   localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));

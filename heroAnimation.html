@@ -63,6 +63,8 @@ let charYPct = (GRID_H / 2) / GRID_W * 100;
 let facing   = 1;
 
 const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
+const DIALOGUE_TEXT_AT_KEY = 'scenarioDialogueTextAt';
+const DIALOGUE_TEXT_TTL_MS = 15000;
 
 /* ---------- анимация шага / ожидания ---------- */
 let phase = 0;
@@ -139,7 +141,7 @@ function drawHero(anim){
   ctx.save();
   ctx.translate(
     pct2px(charXPct) - cam.x + wiggle.x,
-    pct2px(charYPct) - cam.y + wiggle.y - footOffset + cell / 2
+    pct2px(charYPct) - cam.y + wiggle.y - footOffset + cell / 2 - 8
   );
   ctx.scale(facing * S, S);
 
@@ -287,6 +289,21 @@ function drawSpeechBubble(text, cam = { x: 0, y: 0 }, wiggle = { x: 0, y: 0 }){
   ctx.restore();
 }
 
+function pruneDialogueText(){
+  const raw = localStorage.getItem(DIALOGUE_TEXT_KEY) || '';
+  if(!raw) return;
+  const at = Number(localStorage.getItem(DIALOGUE_TEXT_AT_KEY) || 0);
+  if(!Number.isFinite(at) || !at){
+    localStorage.removeItem(DIALOGUE_TEXT_KEY);
+    localStorage.removeItem(DIALOGUE_TEXT_AT_KEY);
+    return;
+  }
+  if(Date.now() - at > DIALOGUE_TEXT_TTL_MS){
+    localStorage.removeItem(DIALOGUE_TEXT_KEY);
+    localStorage.removeItem(DIALOGUE_TEXT_AT_KEY);
+  }
+}
+
 /* ---------- цикл ---------- */
 function frame(){
   const state = JSON.parse(localStorage.getItem('heroState') || 'null');
@@ -319,6 +336,7 @@ function frame(){
   if(blinkTimer>0){ blinkTimer -= dtMs; }
   else{ nextBlink -= dtMs; if(nextBlink<=0){ blinkTimer = BLINK_DUR; nextBlink = 2000 + Math.random()*4000; } }
 
+  pruneDialogueText();
   ctx.clearRect(0,0,cw,ch);
   drawHero({isMoving, phase, chopBlend});
   const dialogueText = localStorage.getItem(DIALOGUE_TEXT_KEY) || '';

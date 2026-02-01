@@ -47,6 +47,7 @@ const COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
 const COLLIDER_CELLS_KEY = 'scenarioColliderCells';
 const SCENARIO_STATE_KEY = 'scenarioObjectsState';
 const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
+const DIALOGUE_TEXT_AT_KEY = 'scenarioDialogueTextAt';
 
 // NEW: список открытых объектов (id[]) — сохраняется и загружается отдельно
 const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
@@ -598,6 +599,11 @@ function syncDialogueText(text){
   if(next === lastDialogueText) return;
   lastDialogueText = next;
   localStorage.setItem(DIALOGUE_TEXT_KEY, next);
+  if(next){
+    localStorage.setItem(DIALOGUE_TEXT_AT_KEY, Date.now().toString());
+  } else {
+    localStorage.removeItem(DIALOGUE_TEXT_AT_KEY);
+  }
 }
 
 function checkTriggers(){
