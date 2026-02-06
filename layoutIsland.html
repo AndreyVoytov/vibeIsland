@@ -36,6 +36,8 @@ function getExpansionLevel(){
   if(!Number.isFinite(stored)) return 0;
   return Math.max(0, Math.floor(stored));
 }
+
+const WORLD_ZOOM = 1.15;
 function getBaseGridW(){
   const stored = Number(localStorage.getItem('baseGridW') || '0');
   if(Number.isFinite(stored) && stored > 0) return stored;
@@ -49,7 +51,7 @@ function getWorldCellPx(){
   const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const baseGridW = getBaseGridW();
   if(!baseGridW) return 0;
-  const scale = Math.pow(0.97, getExpansionLevel());
+  const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
   return (gameW / baseGridW) * scale;
 }
 function getWiggleOffset(){

@@ -200,6 +200,8 @@ function getExpansionLevel(){
   if(!Number.isFinite(stored)) return 0;
   return Math.max(0, Math.floor(stored));
 }
+
+const WORLD_ZOOM = 1.15;
 function getBaseGridW(){
   const stored = Number(localStorage.getItem('baseGridW') || '0');
   if(Number.isFinite(stored) && stored > 0) return stored;
@@ -213,8 +215,14 @@ function getWorldCellPx(){
   const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const baseGridW = getBaseGridW();
   if(!baseGridW) return 0;
-  const scale = Math.pow(0.97, getExpansionLevel());
+  const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
   return (gameW / baseGridW) * scale;
+}
+const BASE_CELL_PX = 28;
+function getScenarioSizeScale(){
+  const cellPx = getWorldCellPx();
+  if(!Number.isFinite(cellPx) || cellPx <= 0) return 1;
+  return cellPx / BASE_CELL_PX;
 }
 function getWorldWidth(){
   const cell = getWorldCellPx();
@@ -502,8 +510,9 @@ function drawScenarioObject(state, now){
   const x = baseX;
   const y = baseY + floatOffset;
 
-  const width = Number.isFinite(def.widthPx) ? def.widthPx : 60;
-  const height = Number.isFinite(def.heightPx) ? def.heightPx : 60;
+  const sizeScale = getScenarioSizeScale();
+  const width = (Number.isFinite(def.widthPx) ? def.widthPx : 60) * sizeScale;
+  const height = (Number.isFinite(def.heightPx) ? def.heightPx : 60) * sizeScale;
 
   if(floating){
     ctx.save();

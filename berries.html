@@ -248,7 +248,9 @@ const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
 
 function getVirtualCellPx(){
   const value = buildingsConfig.virtualCellPx;
-  return Number.isFinite(value) ? value : 28;
+  if(Number.isFinite(value)) return value;
+  const cellPx = getCellPx();
+  return Number.isFinite(cellPx) ? cellPx : 0;
 }
 
 function getExpansionLevel(){
@@ -256,6 +258,8 @@ function getExpansionLevel(){
   if(!Number.isFinite(stored)) return 0;
   return Math.max(0, Math.floor(stored));
 }
+
+const WORLD_ZOOM = 1.15;
 
 function getBaseGridW(){
   const stored = Number(localStorage.getItem('baseGridW') || '0');
@@ -271,8 +275,15 @@ function getCellPx(){
   const vw = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const baseGridW = getBaseGridW();
   if(!baseGridW) return 0;
-  const scale = Math.pow(0.97, getExpansionLevel());
+  const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
   return (vw / baseGridW) * scale;
+}
+
+const BASE_CELL_PX = 28;
+function getBerrySizeScale(){
+  const cellPx = getCellPx();
+  if(!Number.isFinite(cellPx) || cellPx <= 0) return 1;
+  return cellPx / BASE_CELL_PX;
 }
 
 function getWorldWidth(){
@@ -294,23 +305,16 @@ function getActiveBuildingCells(padding = 0){
   const user = getUserState();
   const cells = new Set();
   if(!Array.isArray(buildingLayout) || !GRID_W) return cells;
-  const anchorSpot = getBuildingAnchorSpot(buildingLayout);
-  const cellPx = getCellPx();
-  if(!anchorSpot || !cellPx) return cells;
-  const virtualCellPx = getVirtualCellPx();
-  const anchorX = (anchorSpot.x + 0.5) * cellPx;
-  const anchorY = (anchorSpot.y + 0.5) * cellPx;
   buildingLayout.forEach((spot) => {
     const def = buildingById.get(spot.id);
     if(!def) return;
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-    const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
-    const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
-    const gridX = Math.floor(centerX / cellPx);
-    const gridY = Math.floor(centerY / cellPx);
-    const radiusCells = Math.max(1, Math.round((radius * virtualCellPx) / cellPx));
+    const offset = buildingsConfig.layoutOffset || { x: 0, y: 0 };
+    const gridX = Math.round(spot.x + offset.x);
+    const gridY = Math.round(spot.y + offset.y);
+    const radiusCells = Math.max(1, Math.round(radius));
     const expanded = Math.max(0, radiusCells + Math.max(0, Math.round(padding)));
     for(let dy = -expanded; dy <= expanded; dy += 1){
       for(let dx = -expanded; dx <= expanded; dx += 1){
@@ -1303,7 +1307,8 @@ function drawBushBottom(b, now, visual){
   const rec = getBushImgRec(visual.assetUrl);
 
   if(rec && rec.ok && canDrawImg(rec.img)){
-    ctx.drawImage(rec.img, pct2px(b.xPct)-60*s, pct2px(b.yPct)-50*s, 120*s, 100*s);
+    const sizeScale = getBerrySizeScale();
+    ctx.drawImage(rec.img, pct2px(b.xPct)-60*s*sizeScale, pct2px(b.yPct)-50*s*sizeScale, 120*s*sizeScale, 100*s*sizeScale);
   }else{
     const r=pct2px(BUSH_R_PCT)*s;
     ctx.save();
@@ -1337,11 +1342,12 @@ function drawBerry(be){
   const s = be.onBush ? be.scale : 1;
   const def = be.def || { widthPx:24,heightPx:24,assetUrl:'',primitive:{base:'#e11',highlight:'rgba(255,255,255,0.6)'} };
   const monolithScale = def.bushType === 'centered' ? 1 / 2.5 : 1;
+  const sizeScale = getBerrySizeScale();
 
   const rec = getBerryImgRec(getBerryAssetUrl(def));
   if(rec && rec.ok && canDrawImg(rec.img)){
-    const w = (def.widthPx || 24) * s * monolithScale;
-    const h = (def.heightPx || 24) * s * monolithScale;
+    const w = (def.widthPx || 24) * s * monolithScale * sizeScale;
+    const h = (def.heightPx || 24) * s * monolithScale * sizeScale;
     ctx.drawImage(rec.img, pct2px(be.xPct)-w/2, pct2px(be.yPct)-h/2, w, h);
     return;
   }
@@ -1396,11 +1402,12 @@ function drawLeaf(l){
   const alpha=clamp(1-(performance.now()-l.t0)/LEAF_LIFE_MS,0,1);
 
   if(useLeafImg && leafImgOk && canDrawImg(leafImg)){
+    const sizeScale = getBerrySizeScale();
     ctx.save();
     ctx.globalAlpha=alpha;
     ctx.translate(pct2px(l.xPct),pct2px(l.yPct));
     ctx.rotate(l.rot);
-    ctx.drawImage(leafImg,-14,-9,28,18);
+    ctx.drawImage(leafImg,-14*sizeScale,-9*sizeScale,28*sizeScale,18*sizeScale);
     ctx.restore();
   }else{
     const w=pct2px(2), h=pct2px(1);

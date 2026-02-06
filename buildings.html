@@ -25,15 +25,19 @@
     const campfireUpgradeIds = ['campfire-upgrade-3', 'campfire-upgrade-2', 'campfire-upgrade-1'];
     let layout = [];
 
-    // Размер зданий фиксированный (НЕ зависит от cell)
-    const BUILDING_CELL_PX = Number.isFinite(buildingsConfig.buildingCellPx)
-      ? buildingsConfig.buildingCellPx
-      : 28;
+    function getBuildingCellPx(worldCellPx){
+      const value = buildingsConfig.buildingCellPx;
+      if(Number.isFinite(value)) return value;
+      return Number.isFinite(worldCellPx) ? worldCellPx : 0;
+    }
 
-    // "Виртуальный" шаг мира зданий (смещения от костра)
-    const VIRTUAL_CELL_PX = Number.isFinite(buildingsConfig.virtualCellPx)
-      ? buildingsConfig.virtualCellPx
-      : 28;
+    function getVirtualCellPx(worldCellPx){
+      const value = buildingsConfig.virtualCellPx;
+      if(Number.isFinite(value)) return value;
+      return Number.isFinite(worldCellPx) ? worldCellPx : 0;
+    }
+
+    const WORLD_ZOOM = 1.15;
 
     function getExpansionLevel(){
       const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
@@ -55,7 +59,7 @@
       const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
       const baseGridW = getBaseGridW();
       if(!baseGridW) return 0;
-      const scale = Math.pow(0.97, getExpansionLevel());
+      const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
       return (gameW / baseGridW) * scale;
     }
 
@@ -219,19 +223,19 @@
      * - Все здания смещаем относительно костра в VIRTUAL_CELL_PX
      * - Размеры зданий фиксированные
      */
-    function drawBuilding(def, position, cell, anchorSpot){
+    function drawBuilding(def, position, cell, anchorSpot, buildingCellPx, virtualCellPx){
       const radius = Number.isFinite(def?.colliderRadius) ? Math.max(1, def.colliderRadius) : 2;
 
       // фиксированный размер
-      const size = BUILDING_CELL_PX * 0.82 * (radius * 2 + 1);
+      const size = buildingCellPx * 0.82 * (radius * 2 + 1);
 
       // якорь в пикселях мира = позиция костра на карте (через cell)
       const anchorX = (anchorSpot.x + 0.5) * cell;
       const anchorY = (anchorSpot.y + 0.5) * cell;
 
       // смещения относительно костра (виртуальные пиксели)
-      const dx = (position.x - anchorSpot.x) * VIRTUAL_CELL_PX;
-      const dy = (position.y - anchorSpot.y) * VIRTUAL_CELL_PX;
+      const dx = (position.x - anchorSpot.x) * virtualCellPx;
+      const dy = (position.y - anchorSpot.y) * virtualCellPx;
 
       const centerX = anchorX + dx;
       const centerY = anchorY + dy;
@@ -267,6 +271,8 @@
       const cell = getWorldCellPx();
       const cam = JSON.parse(localStorage.getItem('camera') || '{"x":0,"y":0}');
       const wiggle = getWiggleOffset(cell);
+      const buildingCellPx = getBuildingCellPx(cell);
+      const virtualCellPx = getVirtualCellPx(cell);
       const user = getUserState();
 
       // найти позицию костра в layout — это наш якорь
@@ -301,7 +307,7 @@
       for(const { spot, def } of ordered){
         const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
         if(!unlocked) continue;
-        drawBuilding(def, spot, cell, anchorSpot);
+        drawBuilding(def, spot, cell, anchorSpot, buildingCellPx, virtualCellPx);
       }
 
       ctx.restore();

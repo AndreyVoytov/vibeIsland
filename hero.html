@@ -90,6 +90,8 @@ function getExpansionLevel(){
   return Math.max(0, Math.floor(stored));
 }
 
+const WORLD_ZOOM = 1.15;
+
 function getBaseGridW(){
   const stored = Number(localStorage.getItem('baseGridW') || '0');
   if(Number.isFinite(stored) && stored > 0) return stored;
@@ -104,13 +106,15 @@ function getWorldCellPx(){
   const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const baseGridW = getBaseGridW();
   if(!baseGridW) return 0;
-  const scale = Math.pow(0.97, getExpansionLevel());
+  const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
   return (gameW / baseGridW) * scale;
 }
 
 function getVirtualCellPx(){
   const value = buildingsConfig.virtualCellPx;
-  return Number.isFinite(value) ? value : 28;
+  if(Number.isFinite(value)) return value;
+  const cellPx = getWorldCellPx();
+  return Number.isFinite(cellPx) ? cellPx : 0;
 }
 
 function getBuildingAnchorSpot(){
@@ -126,11 +130,6 @@ function getBuildingBlockers(cellPx){
   const user = getUserState();
   const blockers = new Set();
   if(!cellPx || !GRID_W) return blockers;
-  const anchorSpot = getBuildingAnchorSpot();
-  if(!anchorSpot) return blockers;
-  const virtualCellPx = getVirtualCellPx();
-  const anchorX = (anchorSpot.x + 0.5) * cellPx;
-  const anchorY = (anchorSpot.y + 0.5) * cellPx;
 
   buildingLayout.forEach((spot) => {
     const def = buildingById.get(spot.id);
@@ -138,11 +137,10 @@ function getBuildingBlockers(cellPx){
     const unlocked = def.defaultUnlocked || user.unlockedResources[def.id];
     if(!unlocked) return;
     const radius = Number.isFinite(def.colliderRadius) ? def.colliderRadius : 1;
-    const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
-    const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
-    const gridX = Math.floor(centerX / cellPx);
-    const gridY = Math.floor(centerY / cellPx);
-    const radiusCells = Math.max(1, Math.round((radius * virtualCellPx) / cellPx));
+    const offset = buildingsConfig.layoutOffset || { x: 0, y: 0 };
+    const gridX = Math.round(spot.x + offset.x);
+    const gridY = Math.round(spot.y + offset.y);
+    const radiusCells = Math.max(1, Math.round(radius));
     for(let dy = -radiusCells; dy <= radiusCells; dy += 1){
       for(let dx = -radiusCells; dx <= radiusCells; dx += 1){
         blockers.add(`${gridX + dx},${gridY + dy}`);

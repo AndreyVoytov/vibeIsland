@@ -27,6 +27,8 @@ const ctx    = canvas.getContext('2d');
 let cw, ch, cell, pct2px = p => p * getWorldWidth() / 100;
 const CHAR_R_PCT = 6;
 const SCALE      = 1.6;
+const BASE_CELL_PX = 28;
+const WORLD_ZOOM = 1.15;
 
 function getExpansionLevel(){
   const stored = Number(localStorage.getItem('islandExpansionLevel') || '0');
@@ -46,7 +48,7 @@ function getWorldCellPx(){
   const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
   const baseGridW = getBaseGridW();
   if(!baseGridW) return 0;
-  const scale = Math.pow(0.97, getExpansionLevel());
+  const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
   return (gameW / baseGridW) * scale;
 }
 function getWorldWidth(){
@@ -362,8 +364,10 @@ function resize(){
   cw = width;
   ch = height;
   cell  = getWorldCellPx();
-  charR = pct2px(CHAR_R_PCT);
-  footOffset = 38;
+  const baseGridW = getBaseGridW();
+  const heroCellScale = baseGridW ? (CHAR_R_PCT * baseGridW / 100) : 1.5;
+  charR = cell * heroCellScale;
+  footOffset = cell ? (38 / BASE_CELL_PX) * cell : 38;
 }
 addEventListener('resize', resize);
 
