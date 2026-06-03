@@ -163,6 +163,9 @@
       ],
       extractStages: [1, 0.82, 0.66, 0.5],
       extractHarvestMs: 700,
+      extractParticleAssetUrl: './img/mineable/log-pine.png',
+      extractParticleWidthPx: 50,
+      extractParticleHeightPx: 38,
       primitive: {
         kind: 'tree',
         trunk: '#6d4a2f',
@@ -208,6 +211,9 @@
       ],
       extractStages: [1, 0.84, 0.68, 0.52],
       extractHarvestMs: 700,
+      extractParticleAssetUrl: './img/mineable/log-birch.png',
+      extractParticleWidthPx: 50,
+      extractParticleHeightPx: 38,
       primitive: {
         kind: 'tree',
         trunk: '#d6c8b3',
@@ -256,6 +262,9 @@
       ],
       extractStages: [1, 1, 1, 1],
       extractHarvestMs: 700,
+      extractParticleAssetUrl: './img/mineable/log-dead.png',
+      extractParticleWidthPx: 52,
+      extractParticleHeightPx: 36,
       primitive: {
         kind: 'tree',
         trunk: '#3b423a',
@@ -304,6 +313,9 @@
       ],
       extractStages: [1, 1, 1, 1],
       extractHarvestMs: 700,
+      extractParticleAssetUrl: './img/mineable/log-snow-pine.png',
+      extractParticleWidthPx: 52,
+      extractParticleHeightPx: 36,
       primitive: {
         kind: 'tree',
         trunk: '#6d4a2f',

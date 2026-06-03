@@ -96,6 +96,9 @@
   const DIALOGUE_TEXT_TTL_MS = 15000;
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
+  const SCENARIO_SEA_GLINT_PERIOD_MS = 3400;
+  const SCENARIO_SEA_GLINT_ACTIVE_MS = 950;
+  const SCENARIO_SEA_GLINT_HIT_PAD = 0.28;
   const WATER_BURST_ASSET = './img/sea/water-foam-burst.png';
   const WATER_BURST_MIN_DELAY_MS = 900;
   const WATER_BURST_MAX_DELAY_MS = 2300;
@@ -139,6 +142,10 @@
     './img/mineable/snow_pine2.png',
     './img/mineable/snow_pine3.png',
     './img/mineable/snow_pine4.png',
+    './img/mineable/log-pine.png',
+    './img/mineable/log-birch.png',
+    './img/mineable/log-dead.png',
+    './img/mineable/log-snow-pine.png',
   ];
 
   const BERRY_IMAGE_ASSETS = [
@@ -338,6 +345,8 @@
   scenarioSpriteLayer.zIndex = 3;
   const scenarioGraphics = new PIXI.Graphics();
   scenarioGraphics.zIndex = 2.8;
+  const scenarioFxGraphics = new PIXI.Graphics();
+  scenarioFxGraphics.zIndex = 3.2;
   const buildingGlowGraphics = new PIXI.Graphics();
   buildingGlowGraphics.zIndex = 4.8;
   const buildingsGraphics = new PIXI.Graphics();
@@ -362,6 +371,7 @@
     islandLayer,
     scenarioSpriteLayer,
     scenarioGraphics,
+    scenarioFxGraphics,
     buildingGlowGraphics,
     buildingsGraphics,
     buildingSpriteLayer,
@@ -403,6 +413,7 @@
   const scenarioObjects = Array.isArray(scenarioConfig.objects) ? scenarioConfig.objects : [];
   const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
   const BERRIES_LIST = Array.isArray(berriesConfig.berries) ? berriesConfig.berries : [];
+  const resourceById = new Map(BERRIES_LIST.map((item) => [item.id, item]));
   const getResourceWeight = typeof berriesConfig.getResourceWeight === 'function'
     ? berriesConfig.getResourceWeight
     : () => 1;
@@ -879,7 +890,7 @@
   }
 
   function getResourceProfitById(id) {
-    const found = BERRIES_LIST.find((entry) => entry.id === id);
+    const found = resourceById.get(id);
     return found && typeof found.profit === 'number' ? found.profit : 1;
   }
 
@@ -1177,6 +1188,19 @@
     return Math.hypot(dx, dy) <= radius;
   }
 
+  function activateScenarioObject(state, def) {
+    if (!state || !def || state.triggered || activeDialogue) return false;
+    state.triggered = true;
+    state.opened = true;
+    openedIds.add(state.id);
+    if (def.transformOnApproach) state.transformed = true;
+    persistOpenedIds();
+    persistScenarioState();
+    rebuildScenarioColliderCells();
+    startDialogue(def.dialog || []);
+    return true;
+  }
+
   function spawnScenarioLand() {
     if (!map.length) return;
     const seeds = [];
@@ -1339,11 +1363,7 @@
       if (!triggerRadiusTouchesLand(state, radius)) return;
       if (!isHeroWithinTrigger(state, def)) return;
       if (!scenarioIsOnLand(state)) return;
-      state.triggered = true;
-      if (def.transformOnApproach) state.transformed = true;
-      persistScenarioState();
-      rebuildScenarioColliderCells();
-      startDialogue(def.dialog || []);
+      activateScenarioObject(state, def);
     });
   }
 
@@ -1371,22 +1391,85 @@
     g.lineStyle(0, 0xffffff, 0);
   }
 
+  function drawScenarioSeaGlint(g, x, y, width, height, now, state) {
+    const seed = (((state.gridX * 73 + state.gridY * 41) % 997) + 997) % 997;
+    const t = (now + seed * 13) % SCENARIO_SEA_GLINT_PERIOD_MS;
+    if (t > SCENARIO_SEA_GLINT_ACTIVE_MS) return;
+    const u = t / SCENARIO_SEA_GLINT_ACTIVE_MS;
+    const alpha = Math.sin(u * Math.PI) * 0.92;
+    if (alpha <= 0.01) return;
+    const offsetX = Math.sin(seed * 0.37) * width * 0.18;
+    const offsetY = Math.cos(seed * 0.29) * height * 0.1;
+    const gx = x + width * 0.18 + offsetX;
+    const gy = y - height * 0.23 + offsetY;
+    const r = Math.max(6, Math.min(width, height) * (0.16 + 0.08 * easeOutQuad(u)));
+
+    g.lineStyle(Math.max(1, r * 0.08), 0xffffff, alpha);
+    g.moveTo(gx - r, gy);
+    g.lineTo(gx + r, gy);
+    g.moveTo(gx, gy - r);
+    g.lineTo(gx, gy + r);
+    g.lineStyle(Math.max(1, r * 0.045), 0xfff0a8, alpha * 0.75);
+    g.moveTo(gx - r * 0.58, gy - r * 0.58);
+    g.lineTo(gx + r * 0.58, gy + r * 0.58);
+    g.moveTo(gx + r * 0.58, gy - r * 0.58);
+    g.lineTo(gx - r * 0.58, gy + r * 0.58);
+    g.lineStyle(Math.max(1, r * 0.035), 0xffffff, alpha * 0.34);
+    g.drawCircle(gx, gy, r * (0.55 + u * 0.55));
+    g.lineStyle(0, 0xffffff, 0);
+    g.beginFill(0xffffff, alpha);
+    g.drawCircle(gx, gy, Math.max(1.5, r * 0.14));
+    g.endFill();
+  }
+
+  function getScenarioRenderMetrics(state, def, now = performance.now()) {
+    const x = (state.gridX + 0.5) * cellPct;
+    const y = (state.gridY + 0.5) * cellPct;
+    const baseX = pct2px(x);
+    const baseY = pct2px(y);
+    const floating = !scenarioIsOnLand(state, def && def.triggerRadiusCells);
+    const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const width = (Number.isFinite(def && def.widthPx) ? def.widthPx : 60) * sizeScale;
+    const height = (Number.isFinite(def && def.heightPx) ? def.heightPx : 60) * sizeScale;
+    return { baseX, baseY, floating, floatOffset, width, height };
+  }
+
+  function hitFloatingScenarioAt(screenX, screenY) {
+    if (!cellPct || activeDialogue) return null;
+    const worldX = screenX - worldRoot.x;
+    const worldY = screenY - worldRoot.y;
+    const now = performance.now();
+    for (let i = scenarioState.length - 1; i >= 0; i -= 1) {
+      const state = scenarioState[i];
+      if (!state || state.triggered) continue;
+      const def = scenarioById.get(state.id);
+      if (!def) continue;
+      const metrics = getScenarioRenderMetrics(state, def, now);
+      if (!metrics.floating) continue;
+      const cx = metrics.baseX;
+      const cy = metrics.baseY + metrics.floatOffset;
+      const halfW = metrics.width * (0.5 + SCENARIO_SEA_GLINT_HIT_PAD);
+      const halfH = metrics.height * (0.5 + SCENARIO_SEA_GLINT_HIT_PAD);
+      if (Math.abs(worldX - cx) <= halfW && Math.abs(worldY - cy) <= halfH) return { state, def };
+    }
+    return null;
+  }
+
+  function activateFloatingScenarioAt(screenX, screenY) {
+    const hit = hitFloatingScenarioAt(screenX, screenY);
+    return Boolean(hit && activateScenarioObject(hit.state, hit.def));
+  }
+
   function renderScenarioObjects(now) {
     scenarioGraphics.clear();
+    scenarioFxGraphics.clear();
     const activeIds = new Set();
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
       if (!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
       activeIds.add(state.id);
-      const x = (state.gridX + 0.5) * cellPct;
-      const y = (state.gridY + 0.5) * cellPct;
-      const baseX = pct2px(x);
-      const baseY = pct2px(y);
-      const floating = !scenarioIsOnLand(state, def.triggerRadiusCells);
-      const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
-      const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
-      const width = (Number.isFinite(def.widthPx) ? def.widthPx : 60) * sizeScale;
-      const height = (Number.isFinite(def.heightPx) ? def.heightPx : 60) * sizeScale;
+      const { baseX, baseY, floating, floatOffset, width, height } = getScenarioRenderMetrics(state, def, now);
       const waterY = baseY + floatOffset + height * 0.35;
 
       if (floating) drawWaterRipples(scenarioGraphics, baseX, waterY, width, height, now, state);
@@ -1417,6 +1500,7 @@
         drawRoundedRect(scenarioGraphics, baseX - width / 2, baseY + floatOffset - height / 2, width, height, Math.min(width, height) * 0.2);
         scenarioGraphics.endFill();
       }
+      if (floating && !state.triggered) drawScenarioSeaGlint(scenarioFxGraphics, baseX, baseY + floatOffset, width, height, now, state);
     });
     scenarioSprites.forEach((sprite, id) => {
       if (!activeIds.has(id)) sprite.visible = false;
@@ -1702,8 +1786,9 @@
     if (primitive.kind === 'tree') {
       def.__extractParticleDef = {
         id: def.id,
-        widthPx: 20,
-        heightPx: 12,
+        assetUrl: def.extractParticleAssetUrl || '',
+        widthPx: Number.isFinite(def.extractParticleWidthPx) ? def.extractParticleWidthPx : 48,
+        heightPx: Number.isFinite(def.extractParticleHeightPx) ? def.extractParticleHeightPx : 34,
         primitive: { kind: 'log', bark: primitive.trunk || '#6d4a2f', core: '#c89a5b' },
       };
     } else {
@@ -1845,17 +1930,67 @@
     });
   }
 
+  function normalizeRareDropRules(def) {
+    if (!def) return [];
+    if (Array.isArray(def.rareDrops)) return def.rareDrops;
+    if (def.rareDrop) return [def.rareDrop];
+    return [];
+  }
+
+  function getRareDropDef(rule) {
+    if (!rule || typeof rule !== 'object') return null;
+    if (rule.def && typeof rule.def === 'object') return rule.def;
+    const id = rule.id || rule.resourceId || rule.dropId;
+    return id ? resourceById.get(id) : null;
+  }
+
+  function shouldRollRareDrop(rule, phase) {
+    const on = rule.on || rule.phase || 'final';
+    if (on !== 'always' && on !== phase) return false;
+    const chance = Number.isFinite(rule.chance) ? rule.chance : Number(rule.probability);
+    return Math.random() < clamp(Number.isFinite(chance) ? chance : 0, 0, 1);
+  }
+
+  function getRareDropCount(rule) {
+    if (Number.isFinite(rule.count)) return Math.max(1, Math.floor(rule.count));
+    const min = Number.isFinite(rule.minCount) ? rule.minCount : 1;
+    const max = Number.isFinite(rule.maxCount) ? rule.maxCount : min;
+    return Math.max(1, rndi(Math.floor(min), Math.floor(Math.max(min, max))));
+  }
+
+  function spawnFlyingDrop(b, dropDef, now, avoidSet, minDist = SCATTER_MIN_PCT, maxDist = SCATTER_MAX_PCT) {
+    const a = rnd(0, Math.PI * 2);
+    const d = rnd(minDist, maxDist);
+    const v = vec(a);
+    const to = clampToLandSafe(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT, avoidSet);
+    const be = mkBerry(false, b.xPct, b.yPct, dropDef);
+    Object.assign(be, { x0: b.xPct, y0: b.yPct, tx: to.xPct, ty: to.yPct, flying: true, tFly0: now, flyDur: BERRY_FLY_MS, onBush: false, scale: 1 });
+    b.berries.push(be);
+  }
+
+  function spawnRareDrops(b, now, avoidSet, phase) {
+    const rules = normalizeRareDropRules(b && b.berryDef);
+    if (!rules.length) return;
+    rules.forEach((rule) => {
+      if (!rule || typeof rule !== 'object') return;
+      const rolls = Number.isFinite(rule.rolls) ? Math.max(1, Math.floor(rule.rolls)) : 1;
+      for (let roll = 0; roll < rolls; roll += 1) {
+        if (!shouldRollRareDrop(rule, phase)) continue;
+        const dropDef = getRareDropDef(rule);
+        if (!dropDef) continue;
+        const count = getRareDropCount(rule);
+        const minDist = Number.isFinite(rule.scatterMinPct) ? rule.scatterMinPct : SCATTER_MIN_PCT * 0.75;
+        const maxDist = Number.isFinite(rule.scatterMaxPct) ? rule.scatterMaxPct : SCATTER_MAX_PCT * 0.9;
+        for (let i = 0; i < count; i += 1) spawnFlyingDrop(b, dropDef, now, avoidSet, minDist, maxDist);
+      }
+    });
+  }
+
   function spawnExtractParticles(b, now, avoidSet) {
     const particleDef = getExtractParticleDef(b.berryDef);
     const count = Number.isFinite(b.berryDef && b.berryDef.extractParticleCount) ? b.berryDef.extractParticleCount : EXTRACT_PARTICLE_COUNT;
     for (let i = 0; i < count; i += 1) {
-      const a = rnd(0, Math.PI * 2);
-      const d = rnd(SCATTER_MIN_PCT, SCATTER_MAX_PCT);
-      const v = vec(a);
-      const to = clampToLandSafe(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT, avoidSet);
-      const be = mkBerry(false, b.xPct, b.yPct, particleDef);
-      Object.assign(be, { x0: b.xPct, y0: b.yPct, tx: to.xPct, ty: to.yPct, flying: true, tFly0: now, flyDur: BERRY_FLY_MS, onBush: false, scale: 1 });
-      b.berries.push(be);
+      spawnFlyingDrop(b, particleDef, now, avoidSet);
     }
   }
 
@@ -1886,7 +2021,10 @@
     spawnWoodChips(b, now);
     spawnExtractParticles(b, now, avoidSet);
     const stages = getExtractStages(b.berryDef);
-    b.extractStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
+    const nextStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
+    const willFinish = nextStage >= stages.length;
+    spawnRareDrops(b, now, avoidSet, willFinish ? 'final' : 'hit');
+    b.extractStage = nextStage;
     if (b.extractStage >= stages.length) {
       b.stage = 'exploded';
       if (isTreeDef(b.berryDef)) b.felledVisualUntil = now + TREE_CHOP_SHAKE_MS;
@@ -2613,9 +2751,13 @@
 
   function onPointerDown(event) {
     if (pointerId !== null || isUiOpen()) return;
+    const pos = getPointerPos(event);
+    if (activateFloatingScenarioAt(pos.x, pos.y)) {
+      event.preventDefault();
+      return;
+    }
     pointerId = event.pointerId;
     app.view.setPointerCapture(pointerId);
-    const pos = getPointerPos(event);
     controllerState.joyActive = true;
     controllerState.joyCtr = pos;
     controllerState.joyVec = { x: 0, y: 0 };
