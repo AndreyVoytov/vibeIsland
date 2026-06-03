@@ -97,6 +97,10 @@
   const WATER_BURST_MAX_ACTIVE = 5;
   const CLOUD_COUNT = 5;
   const CLOUD_WRAP_PAD = 180;
+  const SUNSET_HORIZON_ASSET = './img/sea/sunset-horizon.png';
+  const HORIZON_TOP_PAD = 18;
+  const HORIZON_MAX_HEIGHT = 190;
+  const HORIZON_MIN_HEIGHT = 120;
 
   const SHARK_N = 5;
   const SHARK_WANDER_R = 7;
@@ -157,6 +161,7 @@
   const SEA_IMAGE_ASSETS = [
     './img/sea/shark-fin.png',
     WATER_BURST_ASSET,
+    SUNSET_HORIZON_ASSET,
   ];
 
   const SCENARIO_IMAGE_ASSETS = [
@@ -292,6 +297,10 @@
 
   const seaGraphics = new PIXI.Graphics();
   seaGraphics.zIndex = 0;
+  const horizonLayer = new PIXI.Container();
+  horizonLayer.zIndex = 0.25;
+  horizonLayer.eventMode = 'none';
+  horizonLayer.interactiveChildren = false;
   const worldRoot = new PIXI.Container();
   worldRoot.sortableChildren = true;
   worldRoot.zIndex = 1;
@@ -301,7 +310,7 @@
   cloudLayer.interactiveChildren = false;
   const screenLayer = new PIXI.Container();
   screenLayer.zIndex = 2;
-  app.stage.addChild(seaGraphics, worldRoot, cloudLayer, screenLayer);
+  app.stage.addChild(seaGraphics, horizonLayer, worldRoot, cloudLayer, screenLayer);
 
   const sharkGraphics = new PIXI.Graphics();
   sharkGraphics.zIndex = 1;
@@ -316,7 +325,7 @@
   const scenarioSpriteLayer = new PIXI.Container();
   scenarioSpriteLayer.zIndex = 3;
   const scenarioGraphics = new PIXI.Graphics();
-  scenarioGraphics.zIndex = 4;
+  scenarioGraphics.zIndex = 2.8;
   const buildingGlowGraphics = new PIXI.Graphics();
   buildingGlowGraphics.zIndex = 4.8;
   const buildingsGraphics = new PIXI.Graphics();
@@ -374,6 +383,7 @@
   const clouds = [];
   const waterBursts = [];
   let nextWaterBurstDelay = 0;
+  let horizonSprite = null;
 
   const buildingDefs = buildingsConfig.buildings || [];
   const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
@@ -389,6 +399,46 @@
     if (!url || !KNOWN_ASSETS.has(url)) return null;
     if (!textureCache.has(url)) textureCache.set(url, PIXI.Texture.from(url));
     return textureCache.get(url);
+  }
+
+  function toHexColor(color) {
+    return `#${(color & 0xffffff).toString(16).padStart(6, '0')}`;
+  }
+
+  function mixColor(input, target, amount) {
+    const a = parseColor(input, '#ffffff').color;
+    const b = parseColor(target, '#000000').color;
+    const t = clamp(amount, 0, 1);
+    const ar = (a >> 16) & 255;
+    const ag = (a >> 8) & 255;
+    const ab = a & 255;
+    const br = (b >> 16) & 255;
+    const bg = (b >> 8) & 255;
+    const bb = b & 255;
+    const r = Math.round(lerp(ar, br, t));
+    const g = Math.round(lerp(ag, bg, t));
+    const blue = Math.round(lerp(ab, bb, t));
+    return toHexColor((r << 16) + (g << 8) + blue);
+  }
+
+  function renderHorizon() {
+    const texture = getTexture(SUNSET_HORIZON_ASSET);
+    if (!texture) return;
+    if (!horizonSprite) {
+      horizonSprite = new PIXI.Sprite(texture);
+      horizonSprite.anchor.set(0, 0);
+      horizonLayer.addChild(horizonSprite);
+    } else if (horizonSprite.texture !== texture) {
+      horizonSprite.texture = texture;
+    }
+    const ratio = texture.width && texture.height ? texture.height / texture.width : 0.41;
+    const height = clamp(gameWidth * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.24));
+    horizonSprite.visible = true;
+    horizonSprite.x = 0;
+    horizonSprite.y = HORIZON_TOP_PAD;
+    horizonSprite.width = gameWidth;
+    horizonSprite.height = height;
+    horizonSprite.alpha = 0.88;
   }
 
   function createCloud(index) {
@@ -536,16 +586,69 @@
   }
 
   function getTileEdgeColor(value) {
+    if (typeof value === 'string') return mixColor(value, '#000000', 0.22);
+    if (typeof value === 'object' && value.surfaceColor && !value.surfaceType) return mixColor(value.surfaceColor, '#000000', 0.22);
     return getSurfaceDef(value).edge;
   }
 
   function getTileSoilColor(value) {
+    if (typeof value === 'string') return mixColor('#8a5a2b', value, 0.14);
+    if (typeof value === 'object' && value.surfaceColor && !value.surfaceType) return mixColor('#8a5a2b', value.surfaceColor, 0.14);
     return getSurfaceDef(value).soil;
   }
 
-  function isCustomSurface(value) {
-    const surface = getTileSurfaceColor(value);
-    return surface && surface !== '#2fb84b';
+  function drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radius) {
+    const surface = getTileSurfaceColor(cellValue) || '#2fb84b';
+    beginFill(g, surface, '#2fb84b');
+    drawRoundedRect(g, sx, sy, ww, hh, radius);
+    g.endFill();
+    beginFill(g, 'rgba(255,255,255,0.04)', '#ffffff');
+    drawRoundedRect(g, sx + ww * 0.04, sy + hh * 0.04, ww * 0.92, hh * 0.33, radius * 0.65);
+    g.endFill();
+    beginFill(g, 'rgba(0,0,0,0.035)', '#000000');
+    g.drawRect(sx + ww * 0.03, sy + hh * 0.72, ww * 0.94, hh * 0.16);
+    g.endFill();
+  }
+
+  function drawIslandTileFrontSide(g, cellValue, sx, sy, cellSize) {
+    const edge = getTileEdgeColor(cellValue) || '#1f8a3a';
+    const surface = getTileSurfaceColor(cellValue) || '#2fb84b';
+    const soil = getTileSoilColor(cellValue) || '#8a5a2b';
+    const lipH = cellSize * 0.045;
+    const faceH = cellSize * 0.075;
+    const soilH = cellSize * 0.165;
+    const y0 = sy + cellSize - cellSize * 0.005;
+    beginFill(g, edge, '#1f8a3a');
+    g.drawRect(sx, y0, cellSize, lipH);
+    g.endFill();
+    beginFill(g, mixColor(surface, '#000000', 0.12), '#279541');
+    g.drawRect(sx, y0 + lipH, cellSize, faceH);
+    g.endFill();
+    beginFill(g, soil, '#8a5a2b');
+    g.drawRect(sx, y0 + lipH + faceH, cellSize, soilH);
+    g.endFill();
+    beginFill(g, 'rgba(255,255,255,0.55)', '#ffffff');
+    g.drawRect(sx, y0 + lipH + faceH + soilH, cellSize, Math.max(1, cellSize * 0.018));
+    g.endFill();
+  }
+
+  function drawIslandTileRightSide(g, cellValue, sx, sy, cellSize) {
+    const edge = getTileEdgeColor(cellValue) || '#1f8a3a';
+    const surface = getTileSurfaceColor(cellValue) || '#2fb84b';
+    const soil = getTileSoilColor(cellValue) || '#8a5a2b';
+    const lipW = cellSize * 0.045;
+    const faceW = cellSize * 0.075;
+    const soilW = cellSize * 0.14;
+    const x0 = sx + cellSize - cellSize * 0.005;
+    beginFill(g, edge, '#1f8a3a');
+    g.drawRect(x0, sy, lipW, cellSize);
+    g.endFill();
+    beginFill(g, mixColor(surface, '#000000', 0.12), '#279541');
+    g.drawRect(x0 + lipW, sy, faceW, cellSize);
+    g.endFill();
+    beginFill(g, soil, '#8a5a2b');
+    g.drawRect(x0 + lipW + faceW, sy, soilW, cellSize);
+    g.endFill();
   }
 
   function getIslandBoundsCells(landCells) {
@@ -713,7 +816,6 @@
     }
     g.endFill();
 
-    const tileTexture = getTexture('./img/tiles/1.png');
     for (let y = 0; y < GRID_H; y += 1) {
       for (let x = 0; x < GRID_W; x += 1) {
         const cellValue = map[y] && map[y][x];
@@ -722,18 +824,7 @@
         const sy = y * cell - overlap / 2;
         const ww = cell + overlap;
         const hh = cell + overlap;
-        if (tileTexture && !isCustomSurface(cellValue)) {
-          const sprite = new PIXI.Sprite(tileTexture);
-          sprite.x = sx;
-          sprite.y = sy;
-          sprite.width = ww;
-          sprite.height = hh + 10;
-          islandLayer.addChild(sprite);
-        } else {
-          beginFill(g, getTileSurfaceColor(cellValue) || '#2fb84b', '#2fb84b');
-          drawRoundedRect(g, sx, sy, ww, hh, radius);
-          g.endFill();
-        }
+        drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radius);
       }
     }
 
@@ -743,26 +834,10 @@
         const sx = x * cell;
         const sy = y * cell;
         if (!map[y + 1] || !map[y + 1][x]) {
-          beginFill(g, getTileEdgeColor(map[y][x]) || '#1f8a3a');
-          g.drawRect(sx, sy + cell, cell, cell * 0.035);
-          g.endFill();
-          beginFill(g, getTileSurfaceColor(map[y][x]) || '#2fb84b');
-          g.drawRect(sx, sy + cell + cell * 0.035, cell, cell * 0.03);
-          g.endFill();
-          beginFill(g, getTileSoilColor(map[y][x]) || '#8a5a2b');
-          g.drawRect(sx, sy + cell + cell * 0.065, cell, cell * 0.12);
-          g.endFill();
+          drawIslandTileFrontSide(g, map[y][x], sx, sy, cell);
         }
         if (!map[y][x + 1]) {
-          beginFill(g, getTileEdgeColor(map[y][x]) || '#1f8a3a');
-          g.drawRect(sx + cell, sy, cell * 0.035, cell);
-          g.endFill();
-          beginFill(g, getTileSurfaceColor(map[y][x]) || '#2fb84b');
-          g.drawRect(sx + cell + cell * 0.035, sy, cell * 0.03, cell);
-          g.endFill();
-          beginFill(g, getTileSoilColor(map[y][x]) || '#8a5a2b');
-          g.drawRect(sx + cell + cell * 0.065, sy, cell * 0.12, cell);
-          g.endFill();
+          drawIslandTileRightSide(g, map[y][x], sx, sy, cell);
         }
       }
     }
@@ -811,12 +886,13 @@
     }
     const unlocked = new Set(getUnlockedResourceIds());
     const hasSurface = (def) => !land.length || land.some((cell) => canSpawnResourceOnCell(def, cell.x, cell.y));
-    const available = BERRIES_LIST.filter((def) => unlocked.has(def.id) && hasSurface(def));
+    const available = BERRIES_LIST.filter((def) => (unlocked.has(def.id) || isBiomeOnlyResource(def)) && hasSurface(def));
     const surfacePool = BERRIES_LIST.filter(hasSurface);
     const pool = available.length ? available : (surfacePool.length ? surfacePool : BERRIES_LIST);
     const idx = pickWeightedIndex(pool, (i) => {
       const originalIndex = BERRIES_LIST.indexOf(pool[i]);
-      return getResourceWeight(originalIndex >= 0 ? originalIndex : i);
+      const baseWeight = getResourceWeight(originalIndex >= 0 ? originalIndex : i);
+      return baseWeight * (isBiomeOnlyResource(pool[i]) ? 2.5 : 1);
     });
     return pool[idx] || pool[0];
   }
@@ -1427,6 +1503,10 @@
     return def && def.resourceType === 'extractable';
   }
 
+  function isBiomeOnlyResource(def) {
+    return Boolean(isExtractable(def) && getAllowedResourceSurfaceTypes(def));
+  }
+
   function getExtractStages(def) {
     if (!def || !Array.isArray(def.extractStages) || !def.extractStages.length) return [1];
     return def.extractStages;
@@ -1637,15 +1717,17 @@
 
   function spawnBush(berryDef) {
     if (!land.length) return false;
+    const candidateCells = land.filter((cell) => canSpawnResourceOnCell(berryDef, cell.x, cell.y));
+    if (!candidateCells.length) return false;
     const spawnRadius = getSpawnRadius(berryDef);
     const extractable = isExtractable(berryDef);
     const buildingCells = getActiveBuildingCells(extractable ? RESOURCE_COLLIDER_PADDING : 0);
     const heroPos = extractable ? getHeroGridPosition() : null;
     const scenarioBlockers = getScenarioBlockers();
-    for (let i = 0; i < 30; i += 1) {
-      const c = land[Math.random() * land.length | 0];
+    const attempts = Math.max(40, candidateCells.length * 2);
+    for (let i = 0; i < attempts; i += 1) {
+      const c = candidateCells[Math.random() * candidateCells.length | 0];
       const key = cellKey(c.x, c.y);
-      if (!canSpawnResourceOnCell(berryDef, c.x, c.y)) continue;
       if (campfireCenter) {
         const dist = Math.hypot(c.x - campfireCenter.x, c.y - campfireCenter.y);
         if (dist < spawnRadius.min || dist > spawnRadius.max) continue;
@@ -2603,7 +2685,8 @@
 
   const heroParts = {};
   const heroContainer = new PIXI.Container();
-  heroLayer.addChild(heroContainer);
+  heroContainer.zIndex = 0;
+  resourceSpriteLayer.addChild(heroContainer);
   let heroPhase = 0;
   let lastHeroAnimT = performance.now();
   let blinkTimer = 0;
@@ -2691,6 +2774,7 @@
     const bounce = (isMoving ? 0.1 : 0.04) * charR * Math.abs(Math.sin(heroPhase));
     heroContainer.x = pct2px(charXPct);
     heroContainer.y = pct2px(charYPct) - footOffset + cell / 2 - 8;
+    heroContainer.zIndex = pct2px(charYPct) + cell * 0.45;
     heroContainer.scale.set(facing * S, S);
 
     updateSprite(heroParts.armBack, HERO_OFFSETS.armBack.x * charR, HERO_OFFSETS.armBack.y * charR - bounce, ((-20 + armSwing * 45 / charR) * Math.PI / 180) / 2);
@@ -3044,6 +3128,7 @@
     app.renderer.resize(gameWidth, gameHeight);
     joyR = JOY_R_PCT * gameWidth / 100;
     redrawSea();
+    renderHorizon();
     redrawIsland();
     resizeClouds();
   }
