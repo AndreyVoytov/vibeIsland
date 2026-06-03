@@ -88,6 +88,8 @@
   const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
   const DIALOGUE_TEXT_AT_KEY = 'scenarioDialogueTextAt';
   const DIALOGUE_TEXT_TTL_MS = 15000;
+  const WATER_RIPPLE_PERIOD_MS = 1900;
+  const WATER_RIPPLE_COUNT = 3;
 
   const SHARK_N = 5;
   const SHARK_WANDER_R = 7;
@@ -1170,6 +1172,23 @@
     return getTexture(asset) || getTexture(fallback);
   }
 
+  function drawWaterRipples(g, x, y, width, height, now, state) {
+    const seed = ((state.gridX * 17 + state.gridY * 31) % 1000) / 1000;
+    const baseT = (now / WATER_RIPPLE_PERIOD_MS + seed) % 1;
+    for (let i = 0; i < WATER_RIPPLE_COUNT; i += 1) {
+      const t = (baseT + i / WATER_RIPPLE_COUNT) % 1;
+      const fade = 1 - t;
+      const alpha = 0.13 * fade * fade;
+      if (alpha <= 0.01) continue;
+      const wobble = Math.sin(now / 520 + i * 1.7 + seed * Math.PI * 2) * 0.025;
+      const rx = width * (0.42 + t * 0.36 + wobble);
+      const ry = height * (0.17 + t * 0.16 - wobble * 0.45);
+      g.lineStyle(Math.max(1, getWorldCellPx() * 0.018), 0xffffff, alpha);
+      g.drawEllipse(x, y, rx, ry);
+    }
+    g.lineStyle(0, 0xffffff, 0);
+  }
+
   function renderScenarioObjects(now) {
     scenarioGraphics.clear();
     const activeIds = new Set();
@@ -1186,9 +1205,12 @@
       const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
       const width = (Number.isFinite(def.widthPx) ? def.widthPx : 60) * sizeScale;
       const height = (Number.isFinite(def.heightPx) ? def.heightPx : 60) * sizeScale;
+      const waterY = baseY + floatOffset + height * 0.35;
+
+      if (floating) drawWaterRipples(scenarioGraphics, baseX, waterY, width, height, now, state);
 
       beginFill(scenarioGraphics, floating ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)');
-      scenarioGraphics.drawEllipse(baseX, baseY + floatOffset + height * 0.35, width * 0.35, height * 0.16);
+      scenarioGraphics.drawEllipse(baseX, waterY, width * 0.35, height * 0.16);
       scenarioGraphics.endFill();
 
       let sprite = scenarioSprites.get(state.id);
