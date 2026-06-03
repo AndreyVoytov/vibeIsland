@@ -7,9 +7,25 @@
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
   const KNOWN_LOCAL_ASSETS = new Set([
     './img/berry/1.png',
+    './img/berry/strawberry.png',
+    './img/berry/blueberry.png',
+    './img/berry/raspberry.png',
+    './img/berry/tomato.png',
+    './img/berry/champignon.png',
+    './img/berry/strawberry-bush.png',
+    './img/berry/blueberry-bush.png',
+    './img/berry/raspberry-bush.png',
+    './img/berry/tomato-bush.png',
+    './img/berry/champignon-bush.png',
     './img/building/campfire.png',
     './img/building/campfire2.png',
+    './img/building/campfire3.png',
+    './img/building/campfire4.png',
+    './img/building/whetstone.png',
+    './img/building/forge.png',
   ]);
+  Array.from({ length: 10 }, (_, index) => `./img/building/drill-${index + 1}.png`)
+    .forEach((url) => KNOWN_LOCAL_ASSETS.add(url));
   [
     './img/mineable/pine1.png',
     './img/mineable/tree1.png',

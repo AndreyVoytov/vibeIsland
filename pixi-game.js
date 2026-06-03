@@ -76,7 +76,9 @@
   };
   const WALK_FREQ = 2 * Math.PI * 1.5;
   const IDLE_FREQ = 2 * Math.PI * 0.3;
-  const CHOP_DUR = 900;
+  const CHOP_DUR = 450;
+  const CHOP_STRIKE_RATIO = 0.78;
+  const CHOP_REARM_MS = 80;
   const BLINK_DUR = 200;
 
   const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
@@ -120,6 +122,33 @@
     './img/mineable/snow_pine4.png',
   ];
 
+  const BERRY_IMAGE_ASSETS = [
+    './img/berry/strawberry.png',
+    './img/berry/blueberry.png',
+    './img/berry/raspberry.png',
+    './img/berry/tomato.png',
+    './img/berry/champignon.png',
+    './img/berry/strawberry-bush.png',
+    './img/berry/blueberry-bush.png',
+    './img/berry/raspberry-bush.png',
+    './img/berry/tomato-bush.png',
+    './img/berry/champignon-bush.png',
+  ];
+
+  const BUILDING_IMAGE_ASSETS = [
+    './img/building/campfire.png',
+    './img/building/campfire2.png',
+    './img/building/campfire3.png',
+    './img/building/campfire4.png',
+    './img/building/whetstone.png',
+    './img/building/forge.png',
+    ...Array.from({ length: 10 }, (_, index) => `./img/building/drill-${index + 1}.png`),
+  ];
+
+  const SEA_IMAGE_ASSETS = [
+    './img/sea/shark-fin.png',
+  ];
+
   const SCENARIO_IMAGE_ASSETS = [
     './images/scenario/wood-crate.png',
     './images/scenario/suitcase.png',
@@ -146,6 +175,9 @@
     './images/scenario/lifebuoy-fallback.svg',
   ]);
   MINEABLE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  BERRY_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  BUILDING_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  SEA_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SCENARIO_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   HERO_SPRITES.forEach((name) => KNOWN_ASSETS.add(`./img/hero/${name}.png`));
 
@@ -259,6 +291,8 @@
 
   const sharkGraphics = new PIXI.Graphics();
   sharkGraphics.zIndex = 1;
+  const sharkSpriteLayer = new PIXI.Container();
+  sharkSpriteLayer.zIndex = 1.5;
   const islandLayer = new PIXI.Container();
   islandLayer.zIndex = 2;
   const scenarioSpriteLayer = new PIXI.Container();
@@ -267,6 +301,11 @@
   scenarioGraphics.zIndex = 4;
   const buildingsGraphics = new PIXI.Graphics();
   buildingsGraphics.zIndex = 5;
+  const buildingSpriteLayer = new PIXI.Container();
+  buildingSpriteLayer.sortableChildren = true;
+  buildingSpriteLayer.zIndex = 5.1;
+  const resourceShadowGraphics = new PIXI.Graphics();
+  resourceShadowGraphics.zIndex = 5.8;
   const resourceSpriteLayer = new PIXI.Container();
   resourceSpriteLayer.sortableChildren = true;
   resourceSpriteLayer.zIndex = 6;
@@ -274,7 +313,19 @@
   resourceGraphics.zIndex = 6.5;
   const heroLayer = new PIXI.Container();
   heroLayer.zIndex = 7;
-  worldRoot.addChild(sharkGraphics, islandLayer, scenarioSpriteLayer, scenarioGraphics, buildingsGraphics, resourceSpriteLayer, resourceGraphics, heroLayer);
+  worldRoot.addChild(
+    sharkGraphics,
+    sharkSpriteLayer,
+    islandLayer,
+    scenarioSpriteLayer,
+    scenarioGraphics,
+    buildingsGraphics,
+    buildingSpriteLayer,
+    resourceShadowGraphics,
+    resourceSpriteLayer,
+    resourceGraphics,
+    heroLayer
+  );
 
   const joystickGraphics = new PIXI.Graphics();
   joystickGraphics.zIndex = 10;
@@ -1170,9 +1221,14 @@
   const resourceColliderCells = new Set();
   const resourceSpawnCells = new Set();
   const resourceSprites = new Map();
+  const berrySprites = new Map();
+  const buildingSprites = new Map();
+  const sharkSprites = [];
   let pendingResourceColliderSync = false;
   let lastPickMs = 0;
   let nextBushUid = 1;
+  let nextBerryUid = 1;
+  let activeChopTargetUid = null;
 
   function requestResourceColliderSync() {
     if (pendingResourceColliderSync) return;
@@ -1222,6 +1278,7 @@
 
   function mkBerry(onBush, xPct, yPct, def) {
     return {
+      uid: nextBerryUid++,
       def,
       onBush,
       xPct,
@@ -1430,9 +1487,9 @@
       scale: typeof def.bushScale === 'number' ? def.bushScale : 1,
       assetUrl: def.bushAssetUrl || def.assetUrl || '',
       assetUrls: Array.isArray(def.bushAssetUrls) ? def.bushAssetUrls : null,
-      widthPx: Number.isFinite(def.widthPx) ? def.widthPx : null,
-      heightPx: Number.isFinite(def.heightPx) ? def.heightPx : null,
-      anchorY: Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : null,
+      widthPx: Number.isFinite(def.bushWidthPx) ? def.bushWidthPx : (Number.isFinite(def.widthPx) ? def.widthPx : null),
+      heightPx: Number.isFinite(def.bushHeightPx) ? def.bushHeightPx : (Number.isFinite(def.heightPx) ? def.heightPx : null),
+      anchorY: Number.isFinite(def.bushAnchorY) ? def.bushAnchorY : (Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : null),
       primitive: def.bushPrimitive || null,
     };
   }
@@ -1540,6 +1597,44 @@
     }
   }
 
+  function heroInExtractRange(b) {
+    const h = getHero();
+    const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
+    const touch = heroTouchesResourceCollider(b) || bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
+    return touch || dist <= pct2px(BURST_R_PCT);
+  }
+
+  function clearResourceChopTarget(b) {
+    if (b && activeChopTargetUid === b.uid) activeChopTargetUid = null;
+    if (!b) return;
+    b.chopSwingAt = 0;
+    b.chopStrikeDone = false;
+  }
+
+  function startResourceChopSwing(b, now) {
+    if (!b.uid) b.uid = nextBushUid++;
+    activeChopTargetUid = b.uid;
+    b.chopSwingAt = now;
+    b.chopStrikeDone = false;
+    localStorage.setItem('heroAction', JSON.stringify({ chopAt: now, targetUid: b.uid }));
+  }
+
+  function applyResourceChop(b, now) {
+    const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
+    spawnExtractParticles(b, now, avoidSet);
+    const stages = getExtractStages(b.berryDef);
+    b.extractStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
+    if (b.extractStage >= stages.length) {
+      b.stage = 'exploded';
+      busy.delete(cellKey(b.gridX, b.gridY));
+      unregisterResourceCollider(b);
+      clearResourceChopTarget(b);
+    } else {
+      refreshResourceCollider(b);
+      refreshResourceSpawn(b);
+    }
+  }
+
   function updateBush(b) {
     const now = performance.now();
     if (b.stage === 'growing') {
@@ -1570,28 +1665,23 @@
     if (b.stage === 'ripe') {
       if (isExtractable(b.berryDef)) {
         updateFlyingParticles(b, now);
-        const h = getHero();
-        const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
-        const touch = heroTouchesResourceCollider(b) || bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
-        if (!(touch || dist <= pct2px(BURST_R_PCT))) {
-          b.harvestStart = 0;
+        if (!heroInExtractRange(b)) {
+          clearResourceChopTarget(b);
           return;
         }
-        if (!b.harvestStart) b.harvestStart = now;
-        if (now - b.harvestStart < getExtractHarvestMs(b.berryDef)) return;
-        const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
-        spawnExtractParticles(b, now, avoidSet);
-        localStorage.setItem('heroAction', JSON.stringify({ chopAt: now }));
-        const stages = getExtractStages(b.berryDef);
-        b.extractStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
-        b.harvestStart = 0;
-        if (b.extractStage >= stages.length) {
-          b.stage = 'exploded';
-          busy.delete(cellKey(b.gridX, b.gridY));
-          unregisterResourceCollider(b);
-        } else {
-          refreshResourceCollider(b);
-          refreshResourceSpawn(b);
+        if (activeChopTargetUid && activeChopTargetUid !== b.uid) return;
+        const swingElapsed = b.chopSwingAt ? now - b.chopSwingAt : Infinity;
+        if (!b.chopSwingAt || swingElapsed >= CHOP_DUR + CHOP_REARM_MS) {
+          startResourceChopSwing(b, now);
+          return;
+        }
+        if (!b.chopStrikeDone && swingElapsed >= CHOP_DUR * CHOP_STRIKE_RATIO) {
+          if (!heroInExtractRange(b)) {
+            clearResourceChopTarget(b);
+            return;
+          }
+          b.chopStrikeDone = true;
+          applyResourceChop(b, now);
         }
         return;
       }
@@ -1804,6 +1894,11 @@
     return getTexture(visual.assetUrl);
   }
 
+  function shouldDrawTreeShadow(b, visual) {
+    const primitive = visual.primitive || (b.berryDef && b.berryDef.primitive) || {};
+    return primitive.kind === 'tree';
+  }
+
   function renderBushSprite(b, now, visual, activeSpriteIds) {
     if (b.stage === 'exploded' || b.stage === 'dead') return false;
     const texture = getBushSpriteTexture(b, visual);
@@ -1823,12 +1918,21 @@
     const fallbackH = pct2px(BUSH_R_PCT) * 5;
     const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
     const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
+    const x = pct2px(b.xPct);
+    const y = pct2px(b.yPct);
+    const width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
+    const height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
+    if (shouldDrawTreeShadow(b, visual)) {
+      beginFill(resourceShadowGraphics, 'rgba(0,0,0,0.24)', '#000000');
+      resourceShadowGraphics.drawEllipse(x, y + height * 0.045, width * 0.28, Math.max(3, height * 0.045));
+      resourceShadowGraphics.endFill();
+    }
     sprite.visible = true;
     sprite.anchor.set(0.5, Number.isFinite(visual.anchorY) ? visual.anchorY : 0.86);
-    sprite.x = pct2px(b.xPct);
-    sprite.y = pct2px(b.yPct);
-    sprite.width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
-    sprite.height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
+    sprite.x = x;
+    sprite.y = y;
+    sprite.width = width;
+    sprite.height = height;
     sprite.zIndex = sprite.y;
     activeSpriteIds.add(b.uid);
     return true;
@@ -1875,9 +1979,43 @@
     g.endFill();
   }
 
-  function drawBerry(g, be) {
+  function renderBerrySprite(be, activeBerrySpriteIds) {
+    if (!be.alive && be.stage !== 'collectOut' && be.stage !== 'collectIn') return false;
+    if (be.onBush && be.def && be.def.bushType === 'centered') return false;
+    if (be.onBush && be.def && be.def.bushAssetUrl) return false;
+    const def = be.def || {};
+    const texture = getTexture(def.assetUrl);
+    if (!texture) return false;
+    if (!be.uid) be.uid = nextBerryUid++;
+    let sprite = berrySprites.get(be.uid);
+    if (!sprite) {
+      sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      berrySprites.set(be.uid, sprite);
+      resourceSpriteLayer.addChild(sprite);
+    } else if (sprite.texture !== texture) {
+      sprite.texture = texture;
+    }
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const s = be.onBush ? be.scale : 1;
+    const centeredScale = def.bushType === 'centered' ? 0.6 : 1;
+    const width = (Number.isFinite(def.widthPx) ? def.widthPx : 24) * sizeScale * s * centeredScale;
+    const height = (Number.isFinite(def.heightPx) ? def.heightPx : 24) * sizeScale * s * centeredScale;
+    sprite.visible = true;
+    sprite.x = pct2px(be.xPct);
+    sprite.y = pct2px(be.yPct);
+    sprite.width = width;
+    sprite.height = height;
+    sprite.zIndex = sprite.y + 1;
+    activeBerrySpriteIds.add(be.uid);
+    return true;
+  }
+
+  function drawBerry(g, be, activeBerrySpriteIds) {
     if (!be.alive && be.stage !== 'collectOut' && be.stage !== 'collectIn') return;
     if (be.onBush && be.def && be.def.bushType === 'centered') return;
+    if (be.onBush && be.def && be.def.bushAssetUrl) return;
+    if (renderBerrySprite(be, activeBerrySpriteIds)) return;
     const s = be.onBush ? be.scale : 1;
     const def = be.def || { primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.6)' } };
     const monolithScale = def.bushType === 'centered' ? 1 / 2.5 : 1;
@@ -1943,24 +2081,34 @@
 
   function renderResources(now) {
     resourceGraphics.clear();
+    resourceShadowGraphics.clear();
     const activeSpriteIds = new Set();
+    const activeBerrySpriteIds = new Set();
     bushes.forEach((b) => {
       const visual = getBushVisualDef(b);
+      let bushSpriteRendered = false;
       if (visual.type === 'centered') {
-        if (!renderBushSprite(b, now, visual, activeSpriteIds)) {
+        bushSpriteRendered = renderBushSprite(b, now, visual, activeSpriteIds);
+        if (!bushSpriteRendered) {
           drawBushCentered(resourceGraphics, b, now, visual);
         }
       } else {
-        drawBushBottom(resourceGraphics, b, now);
+        bushSpriteRendered = renderBushSprite(b, now, visual, activeSpriteIds);
+        if (!bushSpriteRendered) drawBushBottom(resourceGraphics, b, now);
       }
       b.leafs.forEach((leaf) => drawLeaf(resourceGraphics, leaf, now));
-      b.berries.forEach((be) => drawBerry(resourceGraphics, be));
-      if (visual.type !== 'centered') drawBushTop(resourceGraphics, b, now);
+      b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
+      if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
     });
     resourceSprites.forEach((sprite, id) => {
       if (activeSpriteIds.has(id)) return;
       resourceSpriteLayer.removeChild(sprite);
       resourceSprites.delete(id);
+    });
+    berrySprites.forEach((sprite, id) => {
+      if (activeBerrySpriteIds.has(id)) return;
+      resourceSpriteLayer.removeChild(sprite);
+      berrySprites.delete(id);
     });
   }
 
@@ -2024,15 +2172,53 @@
     g.endFill();
   }
 
+  function renderBuildingSprite(def, centerX, centerY, size, activeBuildingIds) {
+    const texture = getTexture(def && def.assetUrl);
+    if (!texture) return false;
+    let sprite = buildingSprites.get(def.id);
+    if (!sprite) {
+      sprite = new PIXI.Sprite(texture);
+      buildingSprites.set(def.id, sprite);
+      buildingSpriteLayer.addChild(sprite);
+    } else if (sprite.texture !== texture) {
+      sprite.texture = texture;
+    }
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const width = (Number.isFinite(def.widthPx) ? def.widthPx : size) * sizeScale;
+    const height = (Number.isFinite(def.heightPx) ? def.heightPx : size) * sizeScale;
+    sprite.visible = true;
+    sprite.anchor.set(0.5, Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : 0.76);
+    sprite.x = centerX;
+    sprite.y = centerY;
+    sprite.width = width;
+    sprite.height = height;
+    sprite.zIndex = centerY;
+    activeBuildingIds.add(def.id);
+    return true;
+  }
+
   function renderBuildings() {
     buildingsGraphics.clear();
     const cell = getWorldCellPx();
-    if (!cell || !buildingLayout.length) return;
+    const activeBuildingIds = new Set();
+    const clearBuildingSprites = () => {
+      buildingSprites.forEach((sprite, id) => {
+        buildingSpriteLayer.removeChild(sprite);
+        buildingSprites.delete(id);
+      });
+    };
+    if (!cell || !buildingLayout.length) {
+      clearBuildingSprites();
+      return;
+    }
     const buildingCellPx = getBuildingCellPx();
     const virtualCellPx = getVirtualCellPx();
     const user = getUserState();
     const anchorSpot = getBuildingAnchorSpot(buildingLayout);
-    if (!anchorSpot) return;
+    if (!anchorSpot) {
+      clearBuildingSprites();
+      return;
+    }
     const ordered = buildingLayout.map((spot) => {
       if (spot.id === 'campfire') return { spot, def: getCampfireDef(user) };
       return { spot, def: buildingById.get(spot.id) };
@@ -2046,7 +2232,14 @@
       const size = buildingCellPx * 0.82 * (radius * 2 + 1);
       const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
       const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
-      drawBuildingPrimitive(buildingsGraphics, def, centerX, centerY, size);
+      if (!renderBuildingSprite(def, centerX, centerY, size, activeBuildingIds)) {
+        drawBuildingPrimitive(buildingsGraphics, def, centerX, centerY, size);
+      }
+    });
+    buildingSprites.forEach((sprite, id) => {
+      if (activeBuildingIds.has(id)) return;
+      buildingSpriteLayer.removeChild(sprite);
+      buildingSprites.delete(id);
     });
   }
 
@@ -2534,7 +2727,9 @@
     const scenarioCells = getScenarioObjectCells();
     const safeDist = Math.max((GRID_W ? 100 / GRID_W : 0) * SHARK_SCENARIO_SAFE_CELLS, 0.5);
     const anchors = getAnchorPoints(bbox, expansionOffset, scenarioCells, safeDist);
-    sharks.forEach((s) => {
+    const finTexture = getTexture('./img/sea/shark-fin.png');
+    const activeSharks = new Set();
+    sharks.forEach((s, index) => {
       const anchor = anchors[s.anchorIndex % Math.max(1, anchors.length)];
       if (anchor) {
         s.sxPct += (anchor.xPct - s.sxPct) * SHARK_ANCHOR_PULL * dt;
@@ -2563,11 +2758,31 @@
       sharkGraphics.beginFill(0xffffff, 0.5);
       sharkGraphics.drawEllipse(x, y + 4, 16, 6);
       sharkGraphics.endFill();
-      sharkGraphics.beginFill(0x0a2a66, 1);
       const dx = -Math.sin(s.angle);
       const flip = dx < 0 ? -1 : 1;
-      sharkGraphics.drawPolygon([x - 10 * flip, y + 6, x, y - 16, x + 10 * flip, y + 6]);
-      sharkGraphics.endFill();
+      if (finTexture) {
+        let sprite = sharkSprites[index];
+        if (!sprite) {
+          sprite = new PIXI.Sprite(finTexture);
+          sprite.anchor.set(0.5, 0.78);
+          sharkSprites[index] = sprite;
+          sharkSpriteLayer.addChild(sprite);
+        }
+        const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+        sprite.visible = true;
+        sprite.x = x;
+        sprite.y = y + 3;
+        sprite.scale.set((42 * sizeScale / Math.max(1, finTexture.width)) * flip, 30 * sizeScale / Math.max(1, finTexture.height));
+        activeSharks.add(index);
+      } else {
+        sharkGraphics.beginFill(0x0a2a66, 1);
+        sharkGraphics.drawPolygon([x - 10 * flip, y + 6, x, y - 16, x + 10 * flip, y + 6]);
+        sharkGraphics.endFill();
+      }
+    });
+    sharkSprites.forEach((sprite, index) => {
+      if (activeSharks.has(index)) return;
+      sprite.visible = false;
     });
   }
 
