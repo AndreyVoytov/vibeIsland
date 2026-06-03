@@ -395,13 +395,29 @@
     return Array.isArray(parsed) ? parsed : [];
   }
 
-  function loadMapData({ initial = false, resetHero = false } = {}) {
+  function loadMapData({ initial = false, resetHero = false, skipScenarioShift = false } = {}) {
     const prevCellPct = cellPct;
     const prevGridW = GRID_W;
     const nextMap = readMap();
+    const nextGridW = nextMap[0] ? nextMap[0].length : 0;
+    const nextGridH = nextMap.length;
+
+    if (!initial && !skipScenarioShift && GRID_W && GRID_H && nextGridW && nextGridH) {
+      const shift = safeJson('mapShift', { x: 0, y: 0 });
+      const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+      const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+      if (shiftX || shiftY) {
+        scenarioState.forEach((state) => {
+          state.gridX += shiftX;
+          state.gridY += shiftY;
+        });
+        persistScenarioState();
+      }
+    }
+
     map = nextMap;
-    GRID_H = map.length;
-    GRID_W = map[0] ? map[0].length : 0;
+    GRID_H = nextGridH;
+    GRID_W = nextGridW;
     H_PCT = GRID_W ? (GRID_H / GRID_W) * 100 : 100;
     cellPct = GRID_W ? 100 / GRID_W : 0;
     land = [];
@@ -940,7 +956,7 @@
     map = nextMap;
     localStorage.setItem('map', JSON.stringify(map));
     localStorage.setItem('mapShift', JSON.stringify(shift));
-    loadMapData();
+    loadMapData({ skipScenarioShift: true });
   }
 
   function rebuildScenarioColliderCells() {
