@@ -90,6 +90,13 @@
   const DIALOGUE_TEXT_TTL_MS = 15000;
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
+  const WATER_BURST_ASSET = './img/sea/water-foam-burst.png';
+  const WATER_BURST_MIN_DELAY_MS = 900;
+  const WATER_BURST_MAX_DELAY_MS = 2300;
+  const WATER_BURST_LIFE_MS = 2400;
+  const WATER_BURST_MAX_ACTIVE = 5;
+  const CLOUD_COUNT = 5;
+  const CLOUD_WRAP_PAD = 180;
 
   const SHARK_N = 5;
   const SHARK_WANDER_R = 7;
@@ -149,6 +156,7 @@
 
   const SEA_IMAGE_ASSETS = [
     './img/sea/shark-fin.png',
+    WATER_BURST_ASSET,
   ];
 
   const SCENARIO_IMAGE_ASSETS = [
@@ -287,12 +295,20 @@
   const worldRoot = new PIXI.Container();
   worldRoot.sortableChildren = true;
   worldRoot.zIndex = 1;
+  const cloudLayer = new PIXI.Container();
+  cloudLayer.zIndex = 0.5;
+  cloudLayer.eventMode = 'none';
+  cloudLayer.interactiveChildren = false;
   const screenLayer = new PIXI.Container();
   screenLayer.zIndex = 2;
-  app.stage.addChild(seaGraphics, worldRoot, screenLayer);
+  app.stage.addChild(seaGraphics, worldRoot, cloudLayer, screenLayer);
 
   const sharkGraphics = new PIXI.Graphics();
   sharkGraphics.zIndex = 1;
+  const waterFxLayer = new PIXI.Container();
+  waterFxLayer.zIndex = 1.35;
+  waterFxLayer.eventMode = 'none';
+  waterFxLayer.interactiveChildren = false;
   const sharkSpriteLayer = new PIXI.Container();
   sharkSpriteLayer.zIndex = 1.5;
   const islandLayer = new PIXI.Container();
@@ -319,6 +335,7 @@
   heroLayer.zIndex = 7;
   worldRoot.addChild(
     sharkGraphics,
+    waterFxLayer,
     sharkSpriteLayer,
     islandLayer,
     scenarioSpriteLayer,
@@ -354,6 +371,9 @@
   let camera = { x: 0, y: 0 };
   let BUSH_DENSITY = 0.05;
   let MAX_UNPICKED_BUSHES = 1;
+  const clouds = [];
+  const waterBursts = [];
+  let nextWaterBurstDelay = 0;
 
   const buildingDefs = buildingsConfig.buildings || [];
   const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
@@ -369,6 +389,77 @@
     if (!url || !KNOWN_ASSETS.has(url)) return null;
     if (!textureCache.has(url)) textureCache.set(url, PIXI.Texture.from(url));
     return textureCache.get(url);
+  }
+
+  function createCloud(index) {
+    const container = new PIXI.Container();
+    container.eventMode = 'none';
+    container.interactiveChildren = false;
+    const g = new PIXI.Graphics();
+    const w = 92 + (index % 3) * 18;
+    const h = 34 + (index % 2) * 7;
+
+    g.beginFill(0xb9eaff, 0.16);
+    g.drawEllipse(3, h * 0.2, w * 0.55, h * 0.38);
+    g.endFill();
+    g.beginFill(0xffffff, 0.86);
+    g.drawEllipse(-w * 0.25, h * 0.05, w * 0.33, h * 0.36);
+    g.drawEllipse(0, -h * 0.08, w * 0.42, h * 0.5);
+    g.drawEllipse(w * 0.28, h * 0.03, w * 0.36, h * 0.4);
+    g.drawEllipse(w * 0.04, h * 0.2, w * 0.58, h * 0.34);
+    g.endFill();
+    g.beginFill(0xe2f7ff, 0.52);
+    g.drawEllipse(w * 0.12, h * 0.32, w * 0.5, h * 0.16);
+    g.endFill();
+    g.cacheAsBitmap = true;
+
+    container.addChild(g);
+    return container;
+  }
+
+  function resetCloud(cloud, initial = false) {
+    const viewportScale = clamp(gameWidth / 430, 0.82, 1.16);
+    const scale = rnd(0.68, 1.28) * viewportScale;
+    const minY = gameHeight * 0.05;
+    const maxY = gameHeight * 0.2;
+    cloud.scale.set(scale);
+    cloud.alpha = rnd(0.18, 0.32);
+    cloud.baseY = rnd(minY, Math.max(minY + 1, maxY));
+    cloud.y = cloud.baseY;
+    cloud.speed = rnd(0.006, 0.017) * (0.88 + scale * 0.12);
+    cloud.phase = rnd(0, Math.PI * 2);
+    cloud.x = initial
+      ? rnd(-CLOUD_WRAP_PAD, gameWidth + CLOUD_WRAP_PAD)
+      : -CLOUD_WRAP_PAD - cloud.width - rnd(0, gameWidth * 0.35);
+  }
+
+  function initClouds() {
+    if (clouds.length) return;
+    for (let i = 0; i < CLOUD_COUNT; i += 1) {
+      const cloud = createCloud(i);
+      resetCloud(cloud, true);
+      clouds.push(cloud);
+      cloudLayer.addChild(cloud);
+    }
+  }
+
+  function resizeClouds() {
+    if (!clouds.length) return;
+    const minY = gameHeight * 0.05;
+    const maxY = gameHeight * 0.2;
+    clouds.forEach((cloud) => {
+      cloud.baseY = clamp(cloud.baseY || cloud.y || minY, minY, Math.max(minY + 1, maxY));
+      if (cloud.x > gameWidth + CLOUD_WRAP_PAD) cloud.x = rnd(0, gameWidth);
+    });
+  }
+
+  function updateClouds(now, deltaMS) {
+    initClouds();
+    clouds.forEach((cloud) => {
+      cloud.x += cloud.speed * deltaMS;
+      cloud.y = cloud.baseY + Math.sin(now / 4200 + cloud.phase) * 3;
+      if (cloud.x - cloud.width > gameWidth + CLOUD_WRAP_PAD) resetCloud(cloud, false);
+    });
   }
 
   function cellKey(x, y) {
@@ -2718,6 +2809,109 @@
     return false;
   }
 
+  function randomWaterBurstDelay() {
+    return rnd(WATER_BURST_MIN_DELAY_MS, WATER_BURST_MAX_DELAY_MS);
+  }
+
+  function screenToWorldPct(screenX, screenY) {
+    const worldW = Math.max(1, getWorldWidth());
+    return {
+      xPct: ((camera.x + screenX) / worldW) * 100,
+      yPct: ((camera.y + screenY) / worldW) * 100,
+    };
+  }
+
+  function isOpenWaterAtPct(xPct, yPct) {
+    if (xPct < 0 || xPct > 100 || yPct < 0 || yPct > H_PCT) return false;
+    const margin = Math.max(cellPct * 0.42, 0.9);
+    const samples = [
+      [0, 0],
+      [-margin, 0],
+      [margin, 0],
+      [0, -margin * 0.75],
+      [0, margin * 0.75],
+    ];
+    return samples.every(([dx, dy]) => {
+      const sx = xPct + dx;
+      const sy = yPct + dy;
+      return sx >= 0 && sx <= 100 && sy >= 0 && sy <= H_PCT && !isLandAtPct(sx, sy);
+    });
+  }
+
+  function findWaterBurstSpot() {
+    for (let i = 0; i < 28; i += 1) {
+      const spot = screenToWorldPct(rnd(gameWidth * 0.08, gameWidth * 0.92), rnd(gameHeight * 0.08, gameHeight * 0.84));
+      if (isOpenWaterAtPct(spot.xPct, spot.yPct)) return spot;
+    }
+    for (let i = 0; i < 24; i += 1) {
+      const spot = { xPct: rnd(3, 97), yPct: rnd(3, Math.max(3, H_PCT - 3)) };
+      if (isOpenWaterAtPct(spot.xPct, spot.yPct)) return spot;
+    }
+    return null;
+  }
+
+  function spawnWaterBurst(now) {
+    if (waterBursts.length >= WATER_BURST_MAX_ACTIVE) return;
+    const texture = getTexture(WATER_BURST_ASSET);
+    if (!texture) return;
+    const spot = findWaterBurstSpot();
+    if (!spot) return;
+
+    const sprite = new PIXI.Sprite(texture);
+    const tw = Math.max(1, texture.width || 192);
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const baseWidth = rnd(38, 70) * sizeScale;
+    const baseScale = baseWidth / tw;
+    const yScale = baseScale * rnd(0.82, 1.06);
+    sprite.anchor.set(0.5);
+    sprite.alpha = 0;
+    sprite.x = pct2px(spot.xPct);
+    sprite.y = pct2px(spot.yPct);
+    sprite.rotation = rnd(-0.35, 0.35);
+    sprite.scale.set(baseScale, yScale);
+    sprite.tint = 0xe9fbff;
+    waterFxLayer.addChild(sprite);
+    waterBursts.push({
+      sprite,
+      xPct: spot.xPct,
+      yPct: spot.yPct,
+      startedAt: now,
+      lifeMs: WATER_BURST_LIFE_MS * rnd(0.82, 1.18),
+      scaleX: baseScale,
+      scaleY: yScale,
+      rotation: sprite.rotation,
+      spin: rnd(-0.08, 0.08),
+    });
+  }
+
+  function updateWaterBursts(now, deltaMS) {
+    nextWaterBurstDelay -= deltaMS;
+    if (nextWaterBurstDelay <= 0) {
+      spawnWaterBurst(now);
+      nextWaterBurstDelay = randomWaterBurstDelay();
+    }
+
+    for (let i = waterBursts.length - 1; i >= 0; i -= 1) {
+      const burst = waterBursts[i];
+      const t = (now - burst.startedAt) / burst.lifeMs;
+      if (t >= 1) {
+        waterFxLayer.removeChild(burst.sprite);
+        burst.sprite.destroy();
+        waterBursts.splice(i, 1);
+        continue;
+      }
+      const appear = clamp(t / 0.18, 0, 1);
+      const fade = clamp((1 - t) / 0.55, 0, 1);
+      const alpha = 0.34 * easeOutQuad(appear) * easeOutQuad(fade);
+      const grow = 0.76 + easeOutQuad(t) * 0.46;
+      burst.sprite.x = pct2px(burst.xPct);
+      burst.sprite.y = pct2px(burst.yPct);
+      burst.sprite.alpha = alpha;
+      burst.sprite.rotation = burst.rotation + burst.spin * t;
+      burst.sprite.scale.set(burst.scaleX * grow, burst.scaleY * (0.9 + grow * 0.1));
+    }
+  }
+
   function getAnchorPoints(bbox, expansionOffset, scenarioCells, safeDist) {
     const anchors = SHARK_ANCHOR_POINTS.map((p) => ({ xPct: p.xPct, yPct: p.yPct }));
     const cx = bbox ? bbox.xPct + bbox.wPct / 2 : 50;
@@ -2851,6 +3045,7 @@
     joyR = JOY_R_PCT * gameWidth / 100;
     redrawSea();
     redrawIsland();
+    resizeClouds();
   }
 
   function onMapChanged() {
@@ -2859,6 +3054,8 @@
 
   function init() {
     resize();
+    initClouds();
+    nextWaterBurstDelay = randomWaterBurstDelay();
     initHeroSprites();
     loadMapData({ initial: true, resetHero: true });
     openedIds = loadOpenedIds();
@@ -2900,6 +3097,8 @@
     const wiggle = getWiggleOffset();
     worldRoot.x = -camera.x + wiggle.x;
     worldRoot.y = -camera.y + wiggle.y;
+    updateClouds(now, deltaMS);
+    updateWaterBursts(now, deltaMS);
     updateAndRenderSharks(deltaMS);
     renderScenarioObjects(now);
     renderBuildings(now);
