@@ -40,6 +40,12 @@
   const LEAF_LIFE_MS = 700;
   const LEAF_SPD_MIN = 6;
   const LEAF_SPD_MAX = 10;
+  const WOOD_CHIP_COUNT = 9;
+  const WOOD_CHIP_LIFE_MS = 560;
+  const WOOD_CHIP_SPD_MIN = 7;
+  const WOOD_CHIP_SPD_MAX = 14;
+  const TREE_CHOP_SHAKE_MS = 520;
+  const TREE_CHOP_SHAKE_ROT = 0.11;
   const BERRY_R_PCT = 1.2;
   const BUSH_R_PCT = 3.7;
   const BUSH_TOP_GROW_MULT = 1.2;
@@ -1508,8 +1514,29 @@
     return { xPct, yPct, vxPct: v.x * spd, vyPct: v.y * spd, rot: rnd(0, Math.PI * 2), angVel: rnd(-10, 10) * (Math.PI / 180), t0: performance.now() };
   }
 
+  function mkWoodChip(xPct, yPct, side, now, primitive) {
+    const speed = rnd(WOOD_CHIP_SPD_MIN, WOOD_CHIP_SPD_MAX);
+    return {
+      xPct,
+      yPct,
+      vxPct: side * speed * rnd(0.65, 1.1),
+      vyPct: -speed * rnd(0.28, 0.72),
+      rot: rnd(0, Math.PI * 2),
+      angVel: rnd(-18, 18) * (Math.PI / 180),
+      sizePct: rnd(0.22, 0.48),
+      color: parseColor(primitive.trunk || primitive.bark || '#8a5a2b', '#8a5a2b').color,
+      t0: now,
+      lastT: now,
+    };
+  }
+
   function isExtractable(def) {
     return def && def.resourceType === 'extractable';
+  }
+
+  function isTreeDef(def) {
+    const primitive = (def && (def.bushPrimitive || def.primitive)) || {};
+    return primitive.kind === 'tree';
   }
 
   function isBiomeOnlyResource(def) {
@@ -1790,6 +1817,34 @@
     });
   }
 
+  function spawnWoodChips(b, now) {
+    if (!isTreeDef(b && b.berryDef)) return;
+    if (!b.woodChips) b.woodChips = [];
+    const h = getHero();
+    const side = h.charXPct < b.xPct ? -1 : 1;
+    const primitive = (b.berryDef && (b.berryDef.bushPrimitive || b.berryDef.primitive)) || {};
+    const hitXPct = b.xPct + side * cellPct * rnd(0.18, 0.32);
+    const hitYPct = b.yPct - cellPct * rnd(0.26, 0.48);
+    for (let i = 0; i < WOOD_CHIP_COUNT; i += 1) {
+      b.woodChips.push(mkWoodChip(hitXPct, hitYPct, side, now, primitive));
+    }
+    b.chopHitAt = now;
+    b.chopShakeSide = side;
+  }
+
+  function updateWoodChips(b, now) {
+    if (!b.woodChips || !b.woodChips.length) return;
+    b.woodChips = b.woodChips.filter((chip) => {
+      const dt = clamp((now - (chip.lastT || now)) / 1000, 0, 0.05);
+      chip.lastT = now;
+      chip.xPct += chip.vxPct * dt;
+      chip.yPct += chip.vyPct * dt;
+      chip.vyPct += 18 * dt;
+      chip.rot += chip.angVel;
+      return now - chip.t0 < WOOD_CHIP_LIFE_MS;
+    });
+  }
+
   function spawnExtractParticles(b, now, avoidSet) {
     const particleDef = getExtractParticleDef(b.berryDef);
     const count = Number.isFinite(b.berryDef && b.berryDef.extractParticleCount) ? b.berryDef.extractParticleCount : EXTRACT_PARTICLE_COUNT;
@@ -1828,11 +1883,13 @@
 
   function applyResourceChop(b, now) {
     const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
+    spawnWoodChips(b, now);
     spawnExtractParticles(b, now, avoidSet);
     const stages = getExtractStages(b.berryDef);
     b.extractStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
     if (b.extractStage >= stages.length) {
       b.stage = 'exploded';
+      if (isTreeDef(b.berryDef)) b.felledVisualUntil = now + TREE_CHOP_SHAKE_MS;
       busy.delete(cellKey(b.gridX, b.gridY));
       unregisterResourceCollider(b);
       clearResourceChopTarget(b);
@@ -1844,6 +1901,7 @@
 
   function updateBush(b) {
     const now = performance.now();
+    updateWoodChips(b, now);
     if (b.stage === 'growing') {
       b.scale = outBack(clamp((now - b.t0) / BUSH_GROW_MS, 0, 1));
       if (b.scale >= 1) {
@@ -1921,7 +1979,9 @@
         return now - leaf.t0 < LEAF_LIFE_MS;
       });
       updateFlyingParticles(b, now);
-      if (!b.leafs.length && b.berries.every((be) => !be.alive)) b.stage = 'dead';
+      const hasWoodChips = Boolean(b.woodChips && b.woodChips.length);
+      const hasFelledVisual = Boolean(b.felledVisualUntil && now < b.felledVisualUntil);
+      if (!b.leafs.length && !hasWoodChips && !hasFelledVisual && b.berries.every((be) => !be.alive)) b.stage = 'dead';
     }
   }
 
@@ -2106,8 +2166,22 @@
     return primitive.kind === 'tree';
   }
 
+  function shouldKeepFelledTreeVisual(b, now) {
+    return Boolean(b && b.stage === 'exploded' && isTreeDef(b.berryDef) && b.felledVisualUntil && now < b.felledVisualUntil);
+  }
+
+  function getTreeChopRotation(b, now) {
+    if (!b || !b.chopHitAt || !isTreeDef(b.berryDef)) return 0;
+    const t = (now - b.chopHitAt) / TREE_CHOP_SHAKE_MS;
+    if (t < 0 || t >= 1) return 0;
+    const fade = (1 - t) * (1 - t);
+    const side = b.chopShakeSide || 1;
+    return -side * Math.sin(t * Math.PI * 3.4) * TREE_CHOP_SHAKE_ROT * fade;
+  }
+
   function renderBushSprite(b, now, visual, activeSpriteIds) {
-    if (b.stage === 'exploded' || b.stage === 'dead') return false;
+    const keepFelledVisual = shouldKeepFelledTreeVisual(b, now);
+    if ((b.stage === 'exploded' && !keepFelledVisual) || b.stage === 'dead') return false;
     const texture = getBushSpriteTexture(b, visual);
     if (!texture) return false;
     if (!b.uid) b.uid = nextBushUid++;
@@ -2140,6 +2214,8 @@
     sprite.y = y;
     sprite.width = width;
     sprite.height = height;
+    sprite.rotation = getTreeChopRotation(b, now);
+    sprite.alpha = keepFelledVisual ? clamp((b.felledVisualUntil - now) / TREE_CHOP_SHAKE_MS, 0, 1) : 1;
     sprite.zIndex = sprite.y;
     activeSpriteIds.add(b.uid);
     return true;
@@ -2286,6 +2362,26 @@
     resourceGraphics.endFill();
   }
 
+  function drawWoodChip(g, chip, now) {
+    const alpha = clamp(1 - (now - chip.t0) / WOOD_CHIP_LIFE_MS, 0, 1);
+    if (alpha <= 0) return;
+    const x = pct2px(chip.xPct);
+    const y = pct2px(chip.yPct);
+    const w = Math.max(2, pct2px(chip.sizePct * 1.35));
+    const h = Math.max(1.2, pct2px(chip.sizePct * 0.46));
+    const c = Math.cos(chip.rot);
+    const s = Math.sin(chip.rot);
+    const points = [
+      [-w / 2, -h / 2],
+      [w / 2, -h / 2],
+      [w / 2, h / 2],
+      [-w / 2, h / 2],
+    ].map(([px, py]) => [x + px * c - py * s, y + px * s + py * c]).flat();
+    g.beginFill(chip.color || 0x8a5a2b, alpha);
+    g.drawPolygon(points);
+    g.endFill();
+  }
+
   function renderResources(now) {
     resourceGraphics.clear();
     resourceShadowGraphics.clear();
@@ -2304,6 +2400,7 @@
         if (!bushSpriteRendered) drawBushBottom(resourceGraphics, b, now);
       }
       b.leafs.forEach((leaf) => drawLeaf(resourceGraphics, leaf, now));
+      if (b.woodChips && b.woodChips.length) b.woodChips.forEach((chip) => drawWoodChip(resourceGraphics, chip, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
       if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
     });
