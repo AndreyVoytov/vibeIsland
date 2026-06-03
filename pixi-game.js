@@ -141,11 +141,17 @@
     './img/berry/raspberry.png',
     './img/berry/tomato.png',
     './img/berry/champignon.png',
+    './img/berry/beet.png',
+    './img/berry/radish.png',
+    './img/berry/potato.png',
     './img/berry/strawberry-bush.png',
     './img/berry/blueberry-bush.png',
     './img/berry/raspberry-bush.png',
     './img/berry/tomato-bush.png',
     './img/berry/champignon-bush.png',
+    './img/berry/beet-bush.png',
+    './img/berry/radish-bush.png',
+    './img/berry/potato-bush.png',
   ];
 
   const BUILDING_IMAGE_ASSETS = [
@@ -310,7 +316,7 @@
   cloudLayer.interactiveChildren = false;
   const screenLayer = new PIXI.Container();
   screenLayer.zIndex = 2;
-  app.stage.addChild(seaGraphics, horizonLayer, worldRoot, cloudLayer, screenLayer);
+  app.stage.addChild(seaGraphics, horizonLayer, worldRoot, screenLayer);
 
   const sharkGraphics = new PIXI.Graphics();
   sharkGraphics.zIndex = 1;
@@ -343,6 +349,7 @@
   const heroLayer = new PIXI.Container();
   heroLayer.zIndex = 7;
   worldRoot.addChild(
+    cloudLayer,
     sharkGraphics,
     waterFxLayer,
     sharkSpriteLayer,
@@ -470,17 +477,17 @@
   function resetCloud(cloud, initial = false) {
     const viewportScale = clamp(gameWidth / 430, 0.82, 1.16);
     const scale = rnd(0.68, 1.28) * viewportScale;
-    const minY = gameHeight * 0.05;
-    const maxY = gameHeight * 0.2;
+    const minY = camera.y + gameHeight * 0.05;
+    const maxY = camera.y + gameHeight * 0.2;
     cloud.scale.set(scale);
-    cloud.alpha = rnd(0.18, 0.32);
+    cloud.alpha = rnd(0.32, 0.48);
     cloud.baseY = rnd(minY, Math.max(minY + 1, maxY));
     cloud.y = cloud.baseY;
     cloud.speed = rnd(0.006, 0.017) * (0.88 + scale * 0.12);
     cloud.phase = rnd(0, Math.PI * 2);
     cloud.x = initial
-      ? rnd(-CLOUD_WRAP_PAD, gameWidth + CLOUD_WRAP_PAD)
-      : -CLOUD_WRAP_PAD - cloud.width - rnd(0, gameWidth * 0.35);
+      ? camera.x + rnd(-CLOUD_WRAP_PAD, gameWidth + CLOUD_WRAP_PAD)
+      : camera.x - CLOUD_WRAP_PAD - cloud.width - rnd(0, gameWidth * 0.35);
   }
 
   function initClouds() {
@@ -495,11 +502,11 @@
 
   function resizeClouds() {
     if (!clouds.length) return;
-    const minY = gameHeight * 0.05;
-    const maxY = gameHeight * 0.2;
+    const minY = camera.y + gameHeight * 0.05;
+    const maxY = camera.y + gameHeight * 0.2;
     clouds.forEach((cloud) => {
       cloud.baseY = clamp(cloud.baseY || cloud.y || minY, minY, Math.max(minY + 1, maxY));
-      if (cloud.x > gameWidth + CLOUD_WRAP_PAD) cloud.x = rnd(0, gameWidth);
+      if (cloud.x > camera.x + gameWidth + CLOUD_WRAP_PAD) cloud.x = camera.x + rnd(0, gameWidth);
     });
   }
 
@@ -508,7 +515,9 @@
     clouds.forEach((cloud) => {
       cloud.x += cloud.speed * deltaMS;
       cloud.y = cloud.baseY + Math.sin(now / 4200 + cloud.phase) * 3;
-      if (cloud.x - cloud.width > gameWidth + CLOUD_WRAP_PAD) resetCloud(cloud, false);
+      const rightEdge = camera.x + gameWidth + CLOUD_WRAP_PAD;
+      const leftEdge = camera.x - CLOUD_WRAP_PAD - cloud.width * 2;
+      if (cloud.x - cloud.width > rightEdge || cloud.x < leftEdge) resetCloud(cloud, false);
     });
   }
 
@@ -2382,8 +2391,13 @@
       sprite.texture = texture;
     }
     const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
-    const width = (Number.isFinite(def.widthPx) ? def.widthPx : size) * sizeScale;
-    const height = (Number.isFinite(def.heightPx) ? def.heightPx : size) * sizeScale;
+    let width = (Number.isFinite(def.widthPx) ? def.widthPx : size) * sizeScale;
+    let height = (Number.isFinite(def.heightPx) ? def.heightPx : size) * sizeScale;
+    if (isCampfireBuilding(def) && texture.width && texture.height) {
+      const fit = Math.min(width / texture.width, height / texture.height);
+      width = texture.width * fit;
+      height = texture.height * fit;
+    }
     sprite.visible = true;
     sprite.anchor.set(0.5, Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : 0.76);
     sprite.x = centerX;
