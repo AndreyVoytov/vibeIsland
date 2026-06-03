@@ -101,6 +101,35 @@
     { xPct: 90, yPct: 90 },
   ];
 
+  const MINEABLE_ASSETS = [
+    './img/mineable/pine1.png',
+    './img/mineable/pine2.png',
+    './img/mineable/pine3.png',
+    './img/mineable/pine4.png',
+    './img/mineable/tree1.png',
+    './img/mineable/tree2_.png',
+    './img/mineable/tree3.png',
+    './img/mineable/tree4.png',
+    './img/mineable/dead_tree1.png',
+    './img/mineable/dead_tree2.png',
+    './img/mineable/dead_tree3.png',
+    './img/mineable/dead_tree4.png',
+    './img/mineable/snow_pine1.png',
+    './img/mineable/snow_pine2.png',
+    './img/mineable/snow_pine3.png',
+    './img/mineable/snow_pine4.png',
+  ];
+
+  const SCENARIO_IMAGE_ASSETS = [
+    './images/scenario/wood-crate.png',
+    './images/scenario/suitcase.png',
+    './images/scenario/plane-wing.png',
+    './images/scenario/message-bottle.png',
+    './images/scenario/lighthouse-on.png',
+    './images/scenario/lighthouse-off.png',
+    './images/scenario/lifebuoy.png',
+  ];
+
   const KNOWN_ASSETS = new Set([
     './img/berry/1.png',
     './img/building/campfire.png',
@@ -116,6 +145,8 @@
     './images/scenario/lighthouse-off-fallback.svg',
     './images/scenario/lifebuoy-fallback.svg',
   ]);
+  MINEABLE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  SCENARIO_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   HERO_SPRITES.forEach((name) => KNOWN_ASSETS.add(`./img/hero/${name}.png`));
 
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -236,11 +267,14 @@
   scenarioGraphics.zIndex = 4;
   const buildingsGraphics = new PIXI.Graphics();
   buildingsGraphics.zIndex = 5;
+  const resourceSpriteLayer = new PIXI.Container();
+  resourceSpriteLayer.sortableChildren = true;
+  resourceSpriteLayer.zIndex = 6;
   const resourceGraphics = new PIXI.Graphics();
-  resourceGraphics.zIndex = 6;
+  resourceGraphics.zIndex = 6.5;
   const heroLayer = new PIXI.Container();
   heroLayer.zIndex = 7;
-  worldRoot.addChild(sharkGraphics, islandLayer, scenarioSpriteLayer, scenarioGraphics, buildingsGraphics, resourceGraphics, heroLayer);
+  worldRoot.addChild(sharkGraphics, islandLayer, scenarioSpriteLayer, scenarioGraphics, buildingsGraphics, resourceSpriteLayer, resourceGraphics, heroLayer);
 
   const joystickGraphics = new PIXI.Graphics();
   joystickGraphics.zIndex = 10;
@@ -331,11 +365,35 @@
     };
   }
 
+  const SURFACE_DEFS = {
+    grass: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
+    dead: { color: '#6f684a', edge: '#514b38', soil: '#5b4430' },
+    snow: { color: '#dff4ff', edge: '#a9d7e6', soil: '#756555' },
+  };
+
+  function getTileSurfaceType(value) {
+    if (!value) return null;
+    if (typeof value === 'object' && value.surfaceType) return value.surfaceType;
+    return 'grass';
+  }
+
+  function getSurfaceDef(value) {
+    return SURFACE_DEFS[getTileSurfaceType(value)] || SURFACE_DEFS.grass;
+  }
+
   function getTileSurfaceColor(value) {
     if (!value) return null;
     if (typeof value === 'string') return value;
     if (typeof value === 'object' && value.surfaceColor) return value.surfaceColor;
-    return '#2fb84b';
+    return getSurfaceDef(value).color;
+  }
+
+  function getTileEdgeColor(value) {
+    return getSurfaceDef(value).edge;
+  }
+
+  function getTileSoilColor(value) {
+    return getSurfaceDef(value).soil;
   }
 
   function isCustomSurface(value) {
@@ -538,24 +596,24 @@
         const sx = x * cell;
         const sy = y * cell;
         if (!map[y + 1] || !map[y + 1][x]) {
-          beginFill(g, '#1f8a3a');
+          beginFill(g, getTileEdgeColor(map[y][x]) || '#1f8a3a');
           g.drawRect(sx, sy + cell, cell, cell * 0.035);
           g.endFill();
           beginFill(g, getTileSurfaceColor(map[y][x]) || '#2fb84b');
           g.drawRect(sx, sy + cell + cell * 0.035, cell, cell * 0.03);
           g.endFill();
-          beginFill(g, '#8a5a2b');
+          beginFill(g, getTileSoilColor(map[y][x]) || '#8a5a2b');
           g.drawRect(sx, sy + cell + cell * 0.065, cell, cell * 0.12);
           g.endFill();
         }
         if (!map[y][x + 1]) {
-          beginFill(g, '#1f8a3a');
+          beginFill(g, getTileEdgeColor(map[y][x]) || '#1f8a3a');
           g.drawRect(sx + cell, sy, cell * 0.035, cell);
           g.endFill();
           beginFill(g, getTileSurfaceColor(map[y][x]) || '#2fb84b');
           g.drawRect(sx + cell + cell * 0.035, sy, cell * 0.03, cell);
           g.endFill();
-          beginFill(g, '#8a5a2b');
+          beginFill(g, getTileSoilColor(map[y][x]) || '#8a5a2b');
           g.drawRect(sx + cell + cell * 0.065, sy, cell * 0.12, cell);
           g.endFill();
         }
@@ -605,8 +663,10 @@
       return { id: 'fallback', titleRu: 'Berry', widthPx: 24, heightPx: 24, primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.6)' } };
     }
     const unlocked = new Set(getUnlockedResourceIds());
-    const available = BERRIES_LIST.filter((def) => unlocked.has(def.id));
-    const pool = available.length ? available : BERRIES_LIST;
+    const hasSurface = (def) => !land.length || land.some((cell) => canSpawnResourceOnCell(def, cell.x, cell.y));
+    const available = BERRIES_LIST.filter((def) => unlocked.has(def.id) && hasSurface(def));
+    const surfacePool = BERRIES_LIST.filter(hasSurface);
+    const pool = available.length ? available : (surfacePool.length ? surfacePool : BERRIES_LIST);
     const idx = pickWeightedIndex(pool, (i) => {
       const originalIndex = BERRIES_LIST.indexOf(pool[i]);
       return getResourceWeight(originalIndex >= 0 ? originalIndex : i);
@@ -1053,7 +1113,7 @@
     const visual = state.transformed && def.transformOnApproach ? def.transformOnApproach : def;
     const fallback = visual.fallbackUrl || def.fallbackUrl || '';
     const asset = visual.assetUrl || def.assetUrl || '';
-    return getTexture(fallback) || getTexture(asset);
+    return getTexture(asset) || getTexture(fallback);
   }
 
   function renderScenarioObjects(now) {
@@ -1109,8 +1169,10 @@
   const busy = new Set();
   const resourceColliderCells = new Set();
   const resourceSpawnCells = new Set();
+  const resourceSprites = new Map();
   let pendingResourceColliderSync = false;
   let lastPickMs = 0;
+  let nextBushUid = 1;
 
   function requestResourceColliderSync() {
     if (pendingResourceColliderSync) return;
@@ -1366,8 +1428,31 @@
     return {
       type: def.bushType || 'default',
       scale: typeof def.bushScale === 'number' ? def.bushScale : 1,
+      assetUrl: def.bushAssetUrl || def.assetUrl || '',
+      assetUrls: Array.isArray(def.bushAssetUrls) ? def.bushAssetUrls : null,
+      widthPx: Number.isFinite(def.widthPx) ? def.widthPx : null,
+      heightPx: Number.isFinite(def.heightPx) ? def.heightPx : null,
+      anchorY: Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : null,
       primitive: def.bushPrimitive || null,
     };
+  }
+
+  function getCellSurfaceType(x, y) {
+    return getTileSurfaceType(map[y] && map[y][x]);
+  }
+
+  function getAllowedResourceSurfaceTypes(def) {
+    if (!def) return null;
+    if (Array.isArray(def.surfaceTypes) && def.surfaceTypes.length) return new Set(def.surfaceTypes);
+    if (def.surfaceType) return new Set([def.surfaceType]);
+    return null;
+  }
+
+  function canSpawnResourceOnCell(def, x, y) {
+    const surfaceType = getCellSurfaceType(x, y);
+    const allowed = getAllowedResourceSurfaceTypes(def);
+    if (allowed) return allowed.has(surfaceType);
+    return surfaceType !== 'dead' && surfaceType !== 'snow';
   }
 
   function getSpawnRadius(def) {
@@ -1387,6 +1472,7 @@
     for (let i = 0; i < 30; i += 1) {
       const c = land[Math.random() * land.length | 0];
       const key = cellKey(c.x, c.y);
+      if (!canSpawnResourceOnCell(berryDef, c.x, c.y)) continue;
       if (campfireCenter) {
         const dist = Math.hypot(c.x - campfireCenter.x, c.y - campfireCenter.y);
         if (dist < spawnRadius.min || dist > spawnRadius.max) continue;
@@ -1397,7 +1483,7 @@
       if (spawnCells.some((cell) => buildingCells.has(cell) || scenarioBlockers.has(cell) || resourceSpawnCells.has(cell))) continue;
       if (extractable && spawnCells.some((cell) => resourceColliderCells.has(cell))) continue;
       busy.add(key);
-      const bush = { gridX: c.x, gridY: c.y, ...center(c.x, c.y), stage: 'growing', t0: performance.now(), scale: 0, berries: [], leafs: [], berryDef };
+      const bush = { uid: nextBushUid++, gridX: c.x, gridY: c.y, ...center(c.x, c.y), stage: 'growing', t0: performance.now(), scale: 0, berries: [], leafs: [], berryDef };
       bushes.push(bush);
       registerResourceSpawn(bush);
       if (extractable) registerResourceCollider(bush);
@@ -1704,6 +1790,50 @@
     return { sx: lerp(0.6, 1, outCub(grow)), sy: lerp(0.2, 1, outBack(grow)) };
   }
 
+  function getExtractStageIndex(b) {
+    if (!b || !isExtractable(b.berryDef)) return 0;
+    const stages = getExtractStages(b.berryDef);
+    return clamp(typeof b.extractStage === 'number' ? b.extractStage : 0, 0, stages.length - 1);
+  }
+
+  function getBushSpriteTexture(b, visual) {
+    if (Array.isArray(visual.assetUrls) && visual.assetUrls.length) {
+      const stageUrl = visual.assetUrls[getExtractStageIndex(b)] || visual.assetUrls[visual.assetUrls.length - 1];
+      return getTexture(stageUrl) || getTexture(visual.assetUrl);
+    }
+    return getTexture(visual.assetUrl);
+  }
+
+  function renderBushSprite(b, now, visual, activeSpriteIds) {
+    if (b.stage === 'exploded' || b.stage === 'dead') return false;
+    const texture = getBushSpriteTexture(b, visual);
+    if (!texture) return false;
+    if (!b.uid) b.uid = nextBushUid++;
+    let sprite = resourceSprites.get(b.uid);
+    if (!sprite) {
+      sprite = new PIXI.Sprite(texture);
+      resourceSprites.set(b.uid, sprite);
+      resourceSpriteLayer.addChild(sprite);
+    } else if (sprite.texture !== texture) {
+      sprite.texture = texture;
+    }
+    const scaleParts = getCenteredBushScale(now, b);
+    const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const fallbackH = pct2px(BUSH_R_PCT) * 5;
+    const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
+    const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
+    sprite.visible = true;
+    sprite.anchor.set(0.5, Number.isFinite(visual.anchorY) ? visual.anchorY : 0.86);
+    sprite.x = pct2px(b.xPct);
+    sprite.y = pct2px(b.yPct);
+    sprite.width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
+    sprite.height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
+    sprite.zIndex = sprite.y;
+    activeSpriteIds.add(b.uid);
+    return true;
+  }
+
   function drawBushCentered(g, b, now, visual) {
     if (b.stage === 'exploded' || b.stage === 'dead') return;
     const scaleParts = getCenteredBushScale(now, b);
@@ -1813,13 +1943,24 @@
 
   function renderResources(now) {
     resourceGraphics.clear();
+    const activeSpriteIds = new Set();
     bushes.forEach((b) => {
       const visual = getBushVisualDef(b);
-      if (visual.type === 'centered') drawBushCentered(resourceGraphics, b, now, visual);
-      else drawBushBottom(resourceGraphics, b, now);
+      if (visual.type === 'centered') {
+        if (!renderBushSprite(b, now, visual, activeSpriteIds)) {
+          drawBushCentered(resourceGraphics, b, now, visual);
+        }
+      } else {
+        drawBushBottom(resourceGraphics, b, now);
+      }
       b.leafs.forEach((leaf) => drawLeaf(resourceGraphics, leaf, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be));
       if (visual.type !== 'centered') drawBushTop(resourceGraphics, b, now);
+    });
+    resourceSprites.forEach((sprite, id) => {
+      if (activeSpriteIds.has(id)) return;
+      resourceSpriteLayer.removeChild(sprite);
+      resourceSprites.delete(id);
     });
   }
 

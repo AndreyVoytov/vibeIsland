@@ -10,6 +10,12 @@
     './img/building/campfire.png',
     './img/building/campfire2.png',
   ]);
+  [
+    './img/mineable/pine1.png',
+    './img/mineable/tree1.png',
+    './img/mineable/dead_tree1.png',
+    './img/mineable/snow_pine1.png',
+  ].forEach((url) => KNOWN_LOCAL_ASSETS.add(url));
 
   const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
@@ -69,8 +75,26 @@
     return svgDataUri(svg);
   }
 
+  function getExpansionSurfaceColor(def) {
+    if (def && def.surfaceColor) return def.surfaceColor;
+    if (def && def.surfaceType === 'dead') return '#6f684a';
+    if (def && def.surfaceType === 'snow') return '#dff4ff';
+    return '#2fb84b';
+  }
+
+  function getExpansionSurfaceValue(def) {
+    if (!def) return 1;
+    if (def.surfaceType) {
+      return {
+        surfaceType: def.surfaceType,
+        surfaceColor: getExpansionSurfaceColor(def),
+      };
+    }
+    return def.surfaceColor || 1;
+  }
+
   function buildExpandFallback(def) {
-    const surfaceColor = def && def.surfaceColor ? def.surfaceColor : '#2fb84b';
+    const surfaceColor = getExpansionSurfaceColor(def);
     return svgDataUri(
       "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
       `<rect x='8' y='8' width='48' height='48' rx='12' fill='${surfaceColor}'/>` +
@@ -181,10 +205,10 @@
     return checks.some(([x, y]) => Boolean(map[y] && map[y][x]));
   }
 
-  function applyScenarioObjectsToMap(map, shift, surfaceColor) {
+  function applyScenarioObjectsToMap(map, shift, surfaceValue) {
     const scenarioObjects = loadScenarioObjectsState();
     if (!scenarioObjects.length) return map;
-    const expansionValue = surfaceColor || 1;
+    const expansionValue = surfaceValue || 1;
     scenarioObjects.forEach((obj) => {
       const gridX = (Number.isFinite(obj.gridX) ? obj.gridX : 0) + ((shift && shift.x) || 0);
       const gridY = (Number.isFinite(obj.gridY) ? obj.gridY : 0) + ((shift && shift.y) || 0);
@@ -207,7 +231,7 @@
     return map;
   }
 
-  function expandIsland(map, surfaceColor) {
+  function expandIsland(map, surfaceValue) {
     if (!Array.isArray(map) || !map.length) return { map, shift: { x: 0, y: 0 } };
     let nextMap = normalizeMap(map);
     const bounds = getIslandBounds(nextMap);
@@ -226,7 +250,7 @@
     const expanded = nextMap.map((row) => row.slice());
     const h = nextMap.length;
     const w = nextMap[0] ? nextMap[0].length : 0;
-    const expansionValue = surfaceColor || 1;
+    const expansionValue = surfaceValue || 1;
     for (let y = 0; y < h; y += 1) {
       for (let x = 0; x < w; x += 1) {
         if (!nextMap[y] || !nextMap[y][x]) continue;
@@ -241,7 +265,7 @@
       }
     }
     const shift = { x: padding.left, y: padding.top };
-    applyScenarioObjectsToMap(expanded, shift, surfaceColor);
+    applyScenarioObjectsToMap(expanded, shift, surfaceValue);
     return { map: expanded, shift };
   }
 
@@ -280,7 +304,7 @@
     category: 'expansion',
     onUnlock: () => {
       const current = loadMap();
-      const result = expandIsland(current, def.surfaceColor);
+      const result = expandIsland(current, getExpansionSurfaceValue(def));
       localStorage.setItem('mapShift', JSON.stringify(result.shift || { x: 0, y: 0 }));
       localStorage.setItem('map', JSON.stringify(result.map));
       const expansionLevel = Number(localStorage.getItem('islandExpansionLevel') || '0');
