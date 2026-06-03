@@ -96,20 +96,26 @@
   const DIALOGUE_TEXT_TTL_MS = 15000;
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
-  const SCENARIO_SEA_GLINT_PERIOD_MS = 3400;
-  const SCENARIO_SEA_GLINT_ACTIVE_MS = 950;
-  const SCENARIO_SEA_GLINT_HIT_PAD = 0.28;
+  const SCENARIO_GLINT_PERIOD_MS = 3400;
+  const SCENARIO_GLINT_ACTIVE_MS = 950;
+  const SCENARIO_GLINT_HIT_PAD = 0.28;
   const WATER_BURST_ASSET = './img/sea/water-foam-burst.png';
   const WATER_BURST_MIN_DELAY_MS = 900;
   const WATER_BURST_MAX_DELAY_MS = 2300;
   const WATER_BURST_LIFE_MS = 2400;
   const WATER_BURST_MAX_ACTIVE = 5;
-  const CLOUD_COUNT = 5;
+  const CLOUD_ASSET = './img/sea/sunset-cloud.png';
+  const CLOUD_SOURCE_W = 384;
+  const CLOUD_SOURCE_H = 176;
+  const CLOUD_COUNT = 6;
   const CLOUD_WRAP_PAD = 180;
+  const CLOUD_FRONT_CHANCE = 0.07;
   const SUNSET_HORIZON_ASSET = './img/sea/sunset-horizon.png';
-  const HORIZON_TOP_PAD = 18;
+  const HORIZON_WATER_GAP_CELLS = 2.8;
+  const HORIZON_LINE_Y_RATIO = 0.67;
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
+  const CAMPFIRE_DISPLAY_SCALE = 1.4;
 
   const SHARK_N = 5;
   const SHARK_WANDER_R = 7;
@@ -181,6 +187,7 @@
     './img/sea/shark-fin.png',
     WATER_BURST_ASSET,
     SUNSET_HORIZON_ASSET,
+    CLOUD_ASSET,
   ];
 
   const SCENARIO_IMAGE_ASSETS = [
@@ -329,7 +336,7 @@
   cloudLayer.interactiveChildren = false;
   const screenLayer = new PIXI.Container();
   screenLayer.zIndex = 2;
-  app.stage.addChild(seaGraphics, horizonLayer, worldRoot, screenLayer);
+  app.stage.addChild(seaGraphics, worldRoot, screenLayer);
 
   const sharkGraphics = new PIXI.Graphics();
   sharkGraphics.zIndex = 1;
@@ -363,7 +370,14 @@
   resourceGraphics.zIndex = 6.5;
   const heroLayer = new PIXI.Container();
   heroLayer.zIndex = 7;
+  const foregroundCloudShadowGraphics = new PIXI.Graphics();
+  foregroundCloudShadowGraphics.zIndex = 7.8;
+  const foregroundCloudLayer = new PIXI.Container();
+  foregroundCloudLayer.zIndex = 8.2;
+  foregroundCloudLayer.eventMode = 'none';
+  foregroundCloudLayer.interactiveChildren = false;
   worldRoot.addChild(
+    horizonLayer,
     cloudLayer,
     sharkGraphics,
     waterFxLayer,
@@ -378,7 +392,9 @@
     resourceShadowGraphics,
     resourceSpriteLayer,
     resourceGraphics,
-    heroLayer
+    heroLayer,
+    foregroundCloudShadowGraphics,
+    foregroundCloudLayer
   );
 
   const joystickGraphics = new PIXI.Graphics();
@@ -456,11 +472,16 @@
       horizonSprite.texture = texture;
     }
     const ratio = texture.width && texture.height ? texture.height / texture.width : 0.41;
-    const height = clamp(gameWidth * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.24));
+    const cell = getWorldCellPx();
+    const worldW = getWorldWidth();
+    const width = Math.max(gameWidth * 1.35, worldW * 1.18);
+    const height = clamp(width * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.26));
+    const topRef = getTopScenarioOrIslandWorldY();
+    const gap = Math.max(cell * HORIZON_WATER_GAP_CELLS, gameHeight * 0.055);
     horizonSprite.visible = true;
-    horizonSprite.x = 0;
-    horizonSprite.y = HORIZON_TOP_PAD;
-    horizonSprite.width = gameWidth;
+    horizonSprite.x = (worldW - width) / 2;
+    horizonSprite.y = topRef - gap - height * HORIZON_LINE_Y_RATIO;
+    horizonSprite.width = width;
     horizonSprite.height = height;
     horizonSprite.alpha = 0.88;
   }
@@ -469,42 +490,95 @@
     const container = new PIXI.Container();
     container.eventMode = 'none';
     container.interactiveChildren = false;
-    const g = new PIXI.Graphics();
-    const w = 92 + (index % 3) * 18;
-    const h = 34 + (index % 2) * 7;
-
-    g.beginFill(0xb9eaff, 0.16);
-    g.drawEllipse(3, h * 0.2, w * 0.55, h * 0.38);
-    g.endFill();
-    g.beginFill(0xffffff, 0.86);
-    g.drawEllipse(-w * 0.25, h * 0.05, w * 0.33, h * 0.36);
-    g.drawEllipse(0, -h * 0.08, w * 0.42, h * 0.5);
-    g.drawEllipse(w * 0.28, h * 0.03, w * 0.36, h * 0.4);
-    g.drawEllipse(w * 0.04, h * 0.2, w * 0.58, h * 0.34);
-    g.endFill();
-    g.beginFill(0xe2f7ff, 0.52);
-    g.drawEllipse(w * 0.12, h * 0.32, w * 0.5, h * 0.16);
-    g.endFill();
-    g.cacheAsBitmap = true;
-
-    container.addChild(g);
+    const texture = getTexture(CLOUD_ASSET);
+    if (texture) {
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      container.sprite = sprite;
+      container.addChild(sprite);
+    } else {
+      const g = new PIXI.Graphics();
+      g.beginFill(0xffffff, 0.9);
+      g.drawEllipse(-36, 0, 46, 18);
+      g.drawEllipse(8, -6, 58, 24);
+      g.drawEllipse(52, 3, 42, 16);
+      g.endFill();
+      container.addChild(g);
+    }
+    container.cloudIndex = index;
     return container;
   }
 
+  function getIslandWorldBoundsPx() {
+    return {
+      left: pct2px(islandBounds.minXPct),
+      right: pct2px(islandBounds.maxXPct),
+      top: pct2px(islandBounds.minYPct),
+      bottom: pct2px(islandBounds.maxYPct),
+    };
+  }
+
+  function getTopScenarioOrIslandWorldY() {
+    const cell = getWorldCellPx();
+    let top = pct2px(islandBounds.minYPct);
+    scenarioState.forEach((state) => {
+      const def = scenarioById.get(state.id);
+      if (!def || !Number.isFinite(state.gridY)) return;
+      const sizeScale = cell > 0 ? cell / BASE_CELL_PX : 1;
+      const height = (Number.isFinite(def.heightPx) ? def.heightPx : 60) * sizeScale;
+      top = Math.min(top, (state.gridY + 0.5) * cell - height * 0.55);
+    });
+    return Number.isFinite(top) ? top : 0;
+  }
+
+  function getCloudTravelBounds() {
+    const bounds = getIslandWorldBoundsPx();
+    const cell = getWorldCellPx();
+    const pad = Math.max(gameWidth * 0.45, cell * 7, CLOUD_WRAP_PAD);
+    return {
+      left: Math.min(bounds.left - pad, horizonSprite ? horizonSprite.x - pad : -pad),
+      right: Math.max(bounds.right + pad, horizonSprite ? horizonSprite.x + horizonSprite.width + pad : getWorldWidth() + pad),
+      top: bounds.top,
+      bottom: bounds.bottom,
+    };
+  }
+
+  function attachCloudToLayer(cloud) {
+    const target = cloud.foreground ? foregroundCloudLayer : cloudLayer;
+    if (cloud.parent !== target) target.addChild(cloud);
+  }
+
   function resetCloud(cloud, initial = false) {
+    const bounds = getIslandWorldBoundsPx();
+    const travel = getCloudTravelBounds();
+    const cell = getWorldCellPx();
     const viewportScale = clamp(gameWidth / 430, 0.82, 1.16);
-    const scale = rnd(0.68, 1.28) * viewportScale;
-    const minY = camera.y + gameHeight * 0.05;
-    const maxY = camera.y + gameHeight * 0.2;
-    cloud.scale.set(scale);
-    cloud.alpha = rnd(0.32, 0.48);
-    cloud.baseY = rnd(minY, Math.max(minY + 1, maxY));
+    const foreground = Math.random() < CLOUD_FRONT_CHANCE;
+    const targetW = (foreground ? rnd(142, 210) : rnd(126, 196)) * viewportScale;
+    const targetH = targetW * (CLOUD_SOURCE_H / CLOUD_SOURCE_W) * rnd(0.94, 1.05);
+    const flip = Math.random() < 0.5 ? -1 : 1;
+    cloud.foreground = foreground;
+    cloud.visualWidth = targetW;
+    cloud.visualHeight = targetH;
+    if (cloud.sprite) {
+      cloud.scale.set(1);
+      cloud.sprite.scale.set((targetW / CLOUD_SOURCE_W) * flip, targetH / CLOUD_SOURCE_H);
+    } else {
+      cloud.scale.set((targetW / 128) * flip, targetH / 52);
+    }
+    cloud.alpha = foreground ? rnd(0.84, 0.96) : rnd(0.68, 0.84);
+    const safeTopY = (horizonSprite ? horizonSprite.y + horizonSprite.height * 0.2 : bounds.top - cell * 7);
+    const safeBottomY = bounds.top - cell * 1.35;
+    cloud.baseY = foreground
+      ? rnd(bounds.top + cell * 1.8, Math.max(bounds.top + cell * 2.2, bounds.bottom - cell * 2.4))
+      : rnd(safeTopY, Math.max(safeTopY + 1, safeBottomY));
     cloud.y = cloud.baseY;
-    cloud.speed = rnd(0.006, 0.017) * (0.88 + scale * 0.12);
+    cloud.speed = rnd(0.008, 0.019) * (foreground ? 0.86 : 1);
     cloud.phase = rnd(0, Math.PI * 2);
     cloud.x = initial
-      ? camera.x + rnd(-CLOUD_WRAP_PAD, gameWidth + CLOUD_WRAP_PAD)
-      : camera.x - CLOUD_WRAP_PAD - cloud.width - rnd(0, gameWidth * 0.35);
+      ? rnd(travel.left, travel.right)
+      : travel.left - cloud.visualWidth - rnd(0, gameWidth * 0.35);
+    attachCloudToLayer(cloud);
   }
 
   function initClouds() {
@@ -519,23 +593,36 @@
 
   function resizeClouds() {
     if (!clouds.length) return;
-    const minY = camera.y + gameHeight * 0.05;
-    const maxY = camera.y + gameHeight * 0.2;
+    clouds.forEach((cloud) => resetCloud(cloud, true));
+  }
+
+  function renderCloudShadows() {
+    foregroundCloudShadowGraphics.clear();
     clouds.forEach((cloud) => {
-      cloud.baseY = clamp(cloud.baseY || cloud.y || minY, minY, Math.max(minY + 1, maxY));
-      if (cloud.x > camera.x + gameWidth + CLOUD_WRAP_PAD) cloud.x = camera.x + rnd(0, gameWidth);
+      if (!cloud.foreground) return;
+      const alpha = 0.12 * (cloud.alpha || 1);
+      beginFill(foregroundCloudShadowGraphics, `rgba(18,36,62,${alpha})`, '#12243e');
+      foregroundCloudShadowGraphics.drawEllipse(
+        cloud.x,
+        cloud.y + cloud.visualHeight * 0.64,
+        cloud.visualWidth * 0.45,
+        Math.max(8, cloud.visualHeight * 0.18)
+      );
+      foregroundCloudShadowGraphics.endFill();
     });
   }
 
   function updateClouds(now, deltaMS) {
     initClouds();
+    const travel = getCloudTravelBounds();
     clouds.forEach((cloud) => {
       cloud.x += cloud.speed * deltaMS;
-      cloud.y = cloud.baseY + Math.sin(now / 4200 + cloud.phase) * 3;
-      const rightEdge = camera.x + gameWidth + CLOUD_WRAP_PAD;
-      const leftEdge = camera.x - CLOUD_WRAP_PAD - cloud.width * 2;
-      if (cloud.x - cloud.width > rightEdge || cloud.x < leftEdge) resetCloud(cloud, false);
+      cloud.y = cloud.baseY + Math.sin(now / 4200 + cloud.phase) * (cloud.foreground ? 5 : 3);
+      const rightEdge = travel.right + CLOUD_WRAP_PAD;
+      const leftEdge = travel.left - CLOUD_WRAP_PAD - cloud.visualWidth * 2;
+      if (cloud.x - cloud.visualWidth > rightEdge || cloud.x < leftEdge) resetCloud(cloud, false);
     });
+    renderCloudShadows();
   }
 
   function cellKey(x, y) {
@@ -590,8 +677,8 @@
 
   const SURFACE_DEFS = {
     grass: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
-    dead: { color: '#6f684a', edge: '#514b38', soil: '#5b4430' },
-    snow: { color: '#dff4ff', edge: '#a9d7e6', soil: '#756555' },
+    dead: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
+    snow: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
   };
 
   function getTileSurfaceType(value) {
@@ -637,43 +724,26 @@
   }
 
   function drawIslandTileFrontSide(g, cellValue, sx, sy, cellSize) {
-    const edge = getTileEdgeColor(cellValue) || '#1f8a3a';
-    const surface = getTileSurfaceColor(cellValue) || '#2fb84b';
-    const soil = getTileSoilColor(cellValue) || '#8a5a2b';
-    const lipH = cellSize * 0.045;
-    const faceH = cellSize * 0.075;
-    const soilH = cellSize * 0.165;
-    const y0 = sy + cellSize - cellSize * 0.005;
-    beginFill(g, edge, '#1f8a3a');
-    g.drawRect(sx, y0, cellSize, lipH);
+    beginFill(g, getTileEdgeColor(cellValue) || '#1f8a3a');
+    g.drawRect(sx, sy + cellSize, cellSize, cellSize * 0.035);
     g.endFill();
-    beginFill(g, mixColor(surface, '#000000', 0.12), '#279541');
-    g.drawRect(sx, y0 + lipH, cellSize, faceH);
+    beginFill(g, getTileSurfaceColor(cellValue) || '#2fb84b');
+    g.drawRect(sx, sy + cellSize + cellSize * 0.035, cellSize, cellSize * 0.03);
     g.endFill();
-    beginFill(g, soil, '#8a5a2b');
-    g.drawRect(sx, y0 + lipH + faceH, cellSize, soilH);
-    g.endFill();
-    beginFill(g, 'rgba(255,255,255,0.55)', '#ffffff');
-    g.drawRect(sx, y0 + lipH + faceH + soilH, cellSize, Math.max(1, cellSize * 0.018));
+    beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
+    g.drawRect(sx, sy + cellSize + cellSize * 0.065, cellSize, cellSize * 0.12);
     g.endFill();
   }
 
   function drawIslandTileRightSide(g, cellValue, sx, sy, cellSize) {
-    const edge = getTileEdgeColor(cellValue) || '#1f8a3a';
-    const surface = getTileSurfaceColor(cellValue) || '#2fb84b';
-    const soil = getTileSoilColor(cellValue) || '#8a5a2b';
-    const lipW = cellSize * 0.045;
-    const faceW = cellSize * 0.075;
-    const soilW = cellSize * 0.14;
-    const x0 = sx + cellSize - cellSize * 0.005;
-    beginFill(g, edge, '#1f8a3a');
-    g.drawRect(x0, sy, lipW, cellSize);
+    beginFill(g, getTileEdgeColor(cellValue) || '#1f8a3a');
+    g.drawRect(sx + cellSize, sy, cellSize * 0.035, cellSize);
     g.endFill();
-    beginFill(g, mixColor(surface, '#000000', 0.12), '#279541');
-    g.drawRect(x0 + lipW, sy, faceW, cellSize);
+    beginFill(g, getTileSurfaceColor(cellValue) || '#2fb84b');
+    g.drawRect(sx + cellSize + cellSize * 0.035, sy, cellSize * 0.03, cellSize);
     g.endFill();
-    beginFill(g, soil, '#8a5a2b');
-    g.drawRect(x0 + lipW + faceW, sy, soilW, cellSize);
+    beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
+    g.drawRect(sx + cellSize + cellSize * 0.065, sy, cellSize * 0.12, cellSize);
     g.endFill();
   }
 
@@ -790,6 +860,8 @@
       }
     }
     redrawIsland();
+    renderHorizon();
+    resizeClouds();
     spawnSharks();
     rebuildScenarioColliderCells();
     rebuildResourceColliderCells();
@@ -842,6 +914,7 @@
     }
     g.endFill();
 
+    const tileTexture = getTexture('./img/tiles/1.png');
     for (let y = 0; y < GRID_H; y += 1) {
       for (let x = 0; x < GRID_W; x += 1) {
         const cellValue = map[y] && map[y][x];
@@ -850,7 +923,16 @@
         const sy = y * cell - overlap / 2;
         const ww = cell + overlap;
         const hh = cell + overlap;
-        drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radius);
+        if (tileTexture) {
+          const sprite = new PIXI.Sprite(tileTexture);
+          sprite.x = sx;
+          sprite.y = sy;
+          sprite.width = ww;
+          sprite.height = hh + 10;
+          islandLayer.addChild(sprite);
+        } else {
+          drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radius);
+        }
       }
     }
 
@@ -1147,6 +1229,10 @@
     return Boolean((map[y0] && map[y0][x0]) || (map[y1] && map[y1][x1]));
   }
 
+  function scenarioCenterIsOnLand(state) {
+    return Boolean(state && map[state.gridY] && map[state.gridY][state.gridX]);
+  }
+
   function applyPaddingToMap(mapData, padding) {
     const width = mapData[0] ? mapData[0].length : 0;
     const padded = mapData.map((row) => {
@@ -1391,11 +1477,11 @@
     g.lineStyle(0, 0xffffff, 0);
   }
 
-  function drawScenarioSeaGlint(g, x, y, width, height, now, state) {
+  function drawScenarioLandGlint(g, x, y, width, height, now, state) {
     const seed = (((state.gridX * 73 + state.gridY * 41) % 997) + 997) % 997;
-    const t = (now + seed * 13) % SCENARIO_SEA_GLINT_PERIOD_MS;
-    if (t > SCENARIO_SEA_GLINT_ACTIVE_MS) return;
-    const u = t / SCENARIO_SEA_GLINT_ACTIVE_MS;
+    const t = (now + seed * 13) % SCENARIO_GLINT_PERIOD_MS;
+    if (t > SCENARIO_GLINT_ACTIVE_MS) return;
+    const u = t / SCENARIO_GLINT_ACTIVE_MS;
     const alpha = Math.sin(u * Math.PI) * 0.92;
     if (alpha <= 0.01) return;
     const offsetX = Math.sin(seed * 0.37) * width * 0.18;
@@ -1427,7 +1513,7 @@
     const y = (state.gridY + 0.5) * cellPct;
     const baseX = pct2px(x);
     const baseY = pct2px(y);
-    const floating = !scenarioIsOnLand(state, def && def.triggerRadiusCells);
+    const floating = !scenarioCenterIsOnLand(state);
     const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
     const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
     const width = (Number.isFinite(def && def.widthPx) ? def.widthPx : 60) * sizeScale;
@@ -1435,7 +1521,7 @@
     return { baseX, baseY, floating, floatOffset, width, height };
   }
 
-  function hitFloatingScenarioAt(screenX, screenY) {
+  function hitAvailableLandScenarioAt(screenX, screenY) {
     if (!cellPct || activeDialogue) return null;
     const worldX = screenX - worldRoot.x;
     const worldY = screenY - worldRoot.y;
@@ -1446,19 +1532,24 @@
       const def = scenarioById.get(state.id);
       if (!def) continue;
       const metrics = getScenarioRenderMetrics(state, def, now);
-      if (!metrics.floating) continue;
+      if (metrics.floating || !state.opened) continue;
       const cx = metrics.baseX;
       const cy = metrics.baseY + metrics.floatOffset;
-      const halfW = metrics.width * (0.5 + SCENARIO_SEA_GLINT_HIT_PAD);
-      const halfH = metrics.height * (0.5 + SCENARIO_SEA_GLINT_HIT_PAD);
+      const halfW = metrics.width * (0.5 + SCENARIO_GLINT_HIT_PAD);
+      const halfH = metrics.height * (0.5 + SCENARIO_GLINT_HIT_PAD);
       if (Math.abs(worldX - cx) <= halfW && Math.abs(worldY - cy) <= halfH) return { state, def };
     }
     return null;
   }
 
-  function activateFloatingScenarioAt(screenX, screenY) {
-    const hit = hitFloatingScenarioAt(screenX, screenY);
+  function activateAvailableLandScenarioAt(screenX, screenY) {
+    const hit = hitAvailableLandScenarioAt(screenX, screenY);
     return Boolean(hit && activateScenarioObject(hit.state, hit.def));
+  }
+
+  function getScenarioWaterY(def, baseY, floatOffset, height) {
+    const factor = Number.isFinite(def && def.waterShadowYFactor) ? def.waterShadowYFactor : 0.35;
+    return baseY + floatOffset + height * factor;
   }
 
   function renderScenarioObjects(now) {
@@ -1470,7 +1561,7 @@
       if (!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
       activeIds.add(state.id);
       const { baseX, baseY, floating, floatOffset, width, height } = getScenarioRenderMetrics(state, def, now);
-      const waterY = baseY + floatOffset + height * 0.35;
+      const waterY = getScenarioWaterY(def, baseY, floatOffset, height);
 
       if (floating) drawWaterRipples(scenarioGraphics, baseX, waterY, width, height, now, state);
 
@@ -1500,7 +1591,7 @@
         drawRoundedRect(scenarioGraphics, baseX - width / 2, baseY + floatOffset - height / 2, width, height, Math.min(width, height) * 0.2);
         scenarioGraphics.endFill();
       }
-      if (floating && !state.triggered) drawScenarioSeaGlint(scenarioFxGraphics, baseX, baseY + floatOffset, width, height, now, state);
+      if (!floating && state.opened && !state.triggered) drawScenarioLandGlint(scenarioFxGraphics, baseX, baseY + floatOffset, width, height, now, state);
     });
     scenarioSprites.forEach((sprite, id) => {
       if (!activeIds.has(id)) sprite.visible = false;
@@ -2633,6 +2724,10 @@
       width = texture.width * fit;
       height = texture.height * fit;
     }
+    if (isCampfireBuilding(def)) {
+      width *= CAMPFIRE_DISPLAY_SCALE;
+      height *= CAMPFIRE_DISPLAY_SCALE;
+    }
     sprite.visible = true;
     sprite.anchor.set(0.5, Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : 0.76);
     sprite.x = centerX;
@@ -2709,9 +2804,10 @@
       const size = buildingCellPx * 0.82 * (radius * 2 + 1);
       const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
       const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
-      if (isCampfireBuilding(def)) drawCampfireGlow(centerX, centerY, size, now, def);
+      const visualSize = isCampfireBuilding(def) ? size * CAMPFIRE_DISPLAY_SCALE : size;
+      if (isCampfireBuilding(def)) drawCampfireGlow(centerX, centerY, visualSize, now, def);
       if (!renderBuildingSprite(def, centerX, centerY, size, activeBuildingIds)) {
-        drawBuildingPrimitive(buildingsGraphics, def, centerX, centerY, size);
+        drawBuildingPrimitive(buildingsGraphics, def, centerX, centerY, visualSize);
       }
     });
     buildingSprites.forEach((sprite, id) => {
@@ -2752,7 +2848,7 @@
   function onPointerDown(event) {
     if (pointerId !== null || isUiOpen()) return;
     const pos = getPointerPos(event);
-    if (activateFloatingScenarioAt(pos.x, pos.y)) {
+    if (activateAvailableLandScenarioAt(pos.x, pos.y)) {
       event.preventDefault();
       return;
     }
@@ -3317,6 +3413,7 @@
     const finTexture = getTexture('./img/sea/shark-fin.png');
     const activeSharks = new Set();
     sharks.forEach((s, index) => {
+      const prevXPct = Number.isFinite(s.xPct) ? s.xPct : s.sxPct;
       const anchor = anchors[s.anchorIndex % Math.max(1, anchors.length)];
       if (anchor) {
         s.sxPct += (anchor.xPct - s.sxPct) * SHARK_ANCHOR_PULL * dt;
@@ -3340,13 +3437,14 @@
           s.yPct += vy * (minD - d);
         }
       }
+      const vxPct = s.xPct - prevXPct;
+      if (Math.abs(vxPct) > 0.002) s.flip = vxPct > 0 ? -1 : 1;
       const x = pct2px(s.xPct);
       const y = pct2px(s.yPct);
       sharkGraphics.beginFill(0xffffff, 0.5);
       sharkGraphics.drawEllipse(x, y + 4, 16, 6);
       sharkGraphics.endFill();
-      const dx = -Math.sin(s.angle);
-      const flip = dx < 0 ? -1 : 1;
+      const flip = s.flip || 1;
       if (finTexture) {
         let sprite = sharkSprites[index];
         if (!sprite) {
@@ -3392,13 +3490,15 @@
 
   function init() {
     resize();
-    initClouds();
     nextWaterBurstDelay = randomWaterBurstDelay();
     initHeroSprites();
     loadMapData({ initial: true, resetHero: true });
     openedIds = loadOpenedIds();
     scenarioState = loadScenarioState();
     persistScenarioState();
+    renderHorizon();
+    initClouds();
+    resizeClouds();
     rebuildScenarioColliderCells();
     syncDialogueText(null);
     fillOfflineResources();

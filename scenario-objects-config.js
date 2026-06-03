@@ -58,6 +58,7 @@
       fallbackUrl: './images/scenario/lifebuoy-fallback.svg',
       widthPx: 70,
       heightPx: 70,
+      waterShadowYFactor: 0.18,
       colliderRadius: 1,
       triggerRadiusCells: 3,
       dialog: [
