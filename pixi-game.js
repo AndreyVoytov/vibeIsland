@@ -299,6 +299,8 @@
   scenarioSpriteLayer.zIndex = 3;
   const scenarioGraphics = new PIXI.Graphics();
   scenarioGraphics.zIndex = 4;
+  const buildingGlowGraphics = new PIXI.Graphics();
+  buildingGlowGraphics.zIndex = 4.8;
   const buildingsGraphics = new PIXI.Graphics();
   buildingsGraphics.zIndex = 5;
   const buildingSpriteLayer = new PIXI.Container();
@@ -319,6 +321,7 @@
     islandLayer,
     scenarioSpriteLayer,
     scenarioGraphics,
+    buildingGlowGraphics,
     buildingsGraphics,
     buildingSpriteLayer,
     resourceShadowGraphics,
@@ -2197,8 +2200,38 @@
     return true;
   }
 
-  function renderBuildings() {
+  function isCampfireBuilding(def) {
+    return def && def.primitive && def.primitive.kind === 'campfire';
+  }
+
+  function drawCampfireGlow(centerX, centerY, size, now, def) {
+    const primitive = def.primitive || {};
+    const t = now / 1000;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 8.3);
+    const flutter = 0.5 + 0.5 * Math.sin(t * 13.7 + 1.4);
+    const jitterX = Math.sin(t * 17.1) * size * 0.012;
+    const jitterY = Math.cos(t * 11.9) * size * 0.01;
+    const radius = 0.95 + pulse * 0.08 + flutter * 0.045;
+    const alpha = 0.16 + pulse * 0.055 + flutter * 0.035;
+    const x = centerX + jitterX;
+    const y = centerY + size * 0.08 + jitterY;
+
+    beginFill(buildingGlowGraphics, primitive.glow || `rgba(255,180,90,${alpha})`, '#ffb45a');
+    buildingGlowGraphics.drawEllipse(x, y, size * 0.68 * radius, size * 0.38 * radius);
+    buildingGlowGraphics.endFill();
+
+    beginFill(buildingGlowGraphics, `rgba(255,220,120,${alpha * 0.75})`, '#ffdc78');
+    buildingGlowGraphics.drawEllipse(x + size * 0.04 * Math.sin(t * 9.7), y - size * 0.015, size * 0.46 * radius, size * 0.24 * radius);
+    buildingGlowGraphics.endFill();
+
+    beginFill(buildingGlowGraphics, `rgba(255,132,42,${alpha * 0.45})`, '#ff842a');
+    buildingGlowGraphics.drawEllipse(x - size * 0.06 * Math.cos(t * 12.3), y + size * 0.035, size * 0.78 * (1.04 - flutter * 0.06), size * 0.18 * radius);
+    buildingGlowGraphics.endFill();
+  }
+
+  function renderBuildings(now = performance.now()) {
     buildingsGraphics.clear();
+    buildingGlowGraphics.clear();
     const cell = getWorldCellPx();
     const activeBuildingIds = new Set();
     const clearBuildingSprites = () => {
@@ -2232,6 +2265,7 @@
       const size = buildingCellPx * 0.82 * (radius * 2 + 1);
       const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
       const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
+      if (isCampfireBuilding(def)) drawCampfireGlow(centerX, centerY, size, now, def);
       if (!renderBuildingSprite(def, centerX, centerY, size, activeBuildingIds)) {
         drawBuildingPrimitive(buildingsGraphics, def, centerX, centerY, size);
       }
@@ -2846,7 +2880,7 @@
     worldRoot.y = -camera.y + wiggle.y;
     updateAndRenderSharks(deltaMS);
     renderScenarioObjects(now);
-    renderBuildings();
+    renderBuildings(now);
     renderResources(now);
     renderHero(now, deltaMS || (now - lastHeroAnimT));
     lastHeroAnimT = now;
