@@ -115,11 +115,12 @@
   const CLOUD_WRAP_PAD = 180;
   const CLOUD_FRONT_CHANCE = 0.07;
   const SUNSET_HORIZON_ASSET = './img/sea/sunset-horizon.png';
+  const SUNSET_HORIZON_LEFT_EDGE_ASSET = './img/sea/sunset-horizon-left-edge.png';
+  const SUNSET_HORIZON_RIGHT_EDGE_ASSET = './img/sea/sunset-horizon-right-edge.png';
   const HORIZON_WATER_GAP_CELLS = 2.8;
   const HORIZON_LINE_Y_RATIO = 0.67;
   const HORIZON_SIDE_PAD_MULT = 3.6;
   const HORIZON_BOTTOM_FADE_RATIO = 0.34;
-  const HORIZON_EDGE_SAMPLE_PX = 5;
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
@@ -196,6 +197,8 @@
     './img/sea/shark-fin.png',
     WATER_BURST_ASSET,
     SUNSET_HORIZON_ASSET,
+    SUNSET_HORIZON_LEFT_EDGE_ASSET,
+    SUNSET_HORIZON_RIGHT_EDGE_ASSET,
     CLOUD_ASSET,
   ];
 
@@ -444,7 +447,6 @@
   let nextWaterBurstDelay = 0;
   let horizonSprite = null;
   let horizonBackdropGraphics = null;
-  let horizonBackdropTexture = null;
   let horizonLeftEdgeSprite = null;
   let horizonRightEdgeSprite = null;
   let horizonFadeGraphics = null;
@@ -490,35 +492,35 @@
     return toHexColor((r << 16) + (g << 8) + blue);
   }
 
-  function ensureHorizonEdgeSprites(texture) {
+  function ensureHorizonEdgeSprites() {
     if (!horizonBackdropGraphics) {
       horizonBackdropGraphics = new PIXI.Container();
       horizonBackdropGraphics.eventMode = 'none';
       horizonBackdropGraphics.interactiveChildren = false;
       horizonLayer.addChildAt(horizonBackdropGraphics, 0);
     }
-    if (horizonBackdropTexture === texture && horizonLeftEdgeSprite && horizonRightEdgeSprite) return;
-    horizonBackdropGraphics.removeChildren();
-    horizonBackdropTexture = texture;
-    const frame = texture.frame || new PIXI.Rectangle(0, 0, texture.width, texture.height);
-    const strip = Math.max(1, Math.min(HORIZON_EDGE_SAMPLE_PX, Math.floor(frame.width / 2)));
-    const leftTexture = new PIXI.Texture(
-      texture.baseTexture,
-      new PIXI.Rectangle(frame.x, frame.y, strip, frame.height)
-    );
-    const rightTexture = new PIXI.Texture(
-      texture.baseTexture,
-      new PIXI.Rectangle(frame.x + frame.width - strip, frame.y, strip, frame.height)
-    );
-    horizonLeftEdgeSprite = new PIXI.Sprite(leftTexture);
-    horizonRightEdgeSprite = new PIXI.Sprite(rightTexture);
-    horizonLeftEdgeSprite.anchor.set(0, 0);
-    horizonRightEdgeSprite.anchor.set(0, 0);
-    horizonBackdropGraphics.addChild(horizonLeftEdgeSprite, horizonRightEdgeSprite);
+    const leftTexture = getTexture(SUNSET_HORIZON_LEFT_EDGE_ASSET);
+    const rightTexture = getTexture(SUNSET_HORIZON_RIGHT_EDGE_ASSET);
+    if (!leftTexture || !rightTexture) return false;
+    if (!horizonLeftEdgeSprite) {
+      horizonLeftEdgeSprite = new PIXI.Sprite(leftTexture);
+      horizonLeftEdgeSprite.anchor.set(0, 0);
+      horizonBackdropGraphics.addChild(horizonLeftEdgeSprite);
+    } else if (horizonLeftEdgeSprite.texture !== leftTexture) {
+      horizonLeftEdgeSprite.texture = leftTexture;
+    }
+    if (!horizonRightEdgeSprite) {
+      horizonRightEdgeSprite = new PIXI.Sprite(rightTexture);
+      horizonRightEdgeSprite.anchor.set(0, 0);
+      horizonBackdropGraphics.addChild(horizonRightEdgeSprite);
+    } else if (horizonRightEdgeSprite.texture !== rightTexture) {
+      horizonRightEdgeSprite.texture = rightTexture;
+    }
+    return true;
   }
 
-  function drawHorizonBackdrop(x, y, width, height, texture) {
-    ensureHorizonEdgeSprites(texture);
+  function drawHorizonBackdrop(x, y, width, height) {
+    const hasEdges = ensureHorizonEdgeSprites();
     if (!horizonFadeGraphics) {
       horizonFadeGraphics = new PIXI.Graphics();
       horizonLayer.addChild(horizonFadeGraphics);
@@ -526,17 +528,19 @@
     const sidePad = Math.max(gameWidth * HORIZON_SIDE_PAD_MULT, getWorldWidth() * 0.9);
     const bx = x - sidePad;
     const bw = width + sidePad * 2;
-    horizonBackdropGraphics.visible = true;
-    horizonLeftEdgeSprite.x = bx;
-    horizonLeftEdgeSprite.y = y;
-    horizonLeftEdgeSprite.width = sidePad + 1;
-    horizonLeftEdgeSprite.height = height;
-    horizonLeftEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
-    horizonRightEdgeSprite.x = x + width - 1;
-    horizonRightEdgeSprite.y = y;
-    horizonRightEdgeSprite.width = sidePad + 1;
-    horizonRightEdgeSprite.height = height;
-    horizonRightEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
+    horizonBackdropGraphics.visible = hasEdges;
+    if (hasEdges) {
+      horizonLeftEdgeSprite.x = bx;
+      horizonLeftEdgeSprite.y = y;
+      horizonLeftEdgeSprite.width = sidePad + 1;
+      horizonLeftEdgeSprite.height = height;
+      horizonLeftEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
+      horizonRightEdgeSprite.x = x + width - 1;
+      horizonRightEdgeSprite.y = y;
+      horizonRightEdgeSprite.width = sidePad + 1;
+      horizonRightEdgeSprite.height = height;
+      horizonRightEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
+    }
 
     horizonFadeGraphics.clear();
     const fadeStart = y + height * (1 - HORIZON_BOTTOM_FADE_RATIO);
@@ -573,7 +577,7 @@
     horizonSprite.width = width;
     horizonSprite.height = height;
     horizonSprite.alpha = 0.88;
-    drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height, texture);
+    drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height);
     if (horizonFadeGraphics && horizonFadeGraphics.parent === horizonLayer) horizonLayer.setChildIndex(horizonFadeGraphics, horizonLayer.children.length - 1);
   }
 
@@ -1444,16 +1448,75 @@
     return def && Array.isArray(def.drops) ? def.drops : [];
   }
 
+  function makeScenarioDropAvoidSet(sourceState, sourceDef) {
+    const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
+    if (!sourceState) return avoidSet;
+    const radius = Number.isFinite(sourceDef && sourceDef.colliderRadius) ? Math.max(1, Math.round(sourceDef.colliderRadius)) : 1;
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        avoidSet.delete(cellKey(sourceState.gridX + dx, sourceState.gridY + dy));
+      }
+    }
+    return avoidSet;
+  }
+
+  function getScenarioDropTarget(sourceState, startX, startY, angle, dist, avoidSet) {
+    const minMove = Math.max(cellPct * 0.42, SCATTER_MIN_PCT * 0.45);
+    const candidates = [
+      { angle, dist },
+      { angle: angle + 0.5, dist: dist * 1.12 },
+      { angle: angle - 0.5, dist: dist * 1.12 },
+      { angle: angle + 1.1, dist: dist * 0.92 },
+      { angle: angle - 1.1, dist: dist * 0.92 },
+      { angle: angle + Math.PI, dist: dist * 0.75 },
+    ];
+    let best = null;
+    let bestMove = -1;
+    candidates.forEach((candidate) => {
+      const v = vec(candidate.angle);
+      const target = clampToLandSafe(startX + v.x * candidate.dist, startY + v.y * candidate.dist, BERRY_R_PCT, avoidSet);
+      const move = Math.hypot(target.xPct - startX, target.yPct - startY);
+      if (move > bestMove) {
+        best = target;
+        bestMove = move;
+      }
+    });
+    if (best && bestMove >= minMove) return best;
+
+    const ringCells = [];
+    for (let r = 1; r <= 4; r += 1) {
+      for (let dy = -r; dy <= r; dy += 1) {
+        for (let dx = -r; dx <= r; dx += 1) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          const x = sourceState.gridX + dx;
+          const y = sourceState.gridY + dy;
+          if (!isAllowedLandCell(x, y, avoidSet)) continue;
+          const dirDiff = Math.abs(Math.atan2(Math.sin(Math.atan2(dy, dx) - angle), Math.cos(Math.atan2(dy, dx) - angle)));
+          ringCells.push({ x, y, score: dirDiff + r * 0.08 });
+        }
+      }
+      if (ringCells.length) break;
+    }
+    if (ringCells.length) {
+      ringCells.sort((a, b) => a.score - b.score);
+      const cell = ringCells[0];
+      return {
+        xPct: (cell.x + 0.5) * cellPct + rnd(-cellPct * 0.16, cellPct * 0.16),
+        yPct: (cell.y + 0.5) * cellPct + rnd(-cellPct * 0.16, cellPct * 0.16),
+      };
+    }
+    return best || { xPct: startX, yPct: startY };
+  }
+
   function createScenarioDrop(sourceState, rule, index, count, now, avoidSet) {
     const def = getScenarioDropDef(rule && rule.id);
     if (!def || !cellPct) return null;
     const spread = Math.max(SCATTER_MIN_PCT * 0.55, cellPct * 0.55);
     const angle = (Math.PI * 2 * index) / Math.max(1, count) + rnd(-0.45, 0.45);
     const dist = rnd(spread, Math.max(spread + 0.01, SCATTER_MAX_PCT * 0.78));
-    const v = vec(angle);
     const startX = (sourceState.gridX + 0.5) * cellPct;
     const startY = (sourceState.gridY + 0.5) * cellPct;
-    const to = clampToLandSafe(startX + v.x * dist, startY + v.y * dist, BERRY_R_PCT, avoidSet);
+    const to = getScenarioDropTarget(sourceState, startX, startY, angle, dist, avoidSet);
     return {
       uid: nextBerryUid++,
       id: def.id,
@@ -1485,8 +1548,7 @@
     const rules = getScenarioDropRules(def);
     if (!rules.length || !sourceState || !cellPct) return;
     const now = performance.now();
-    const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
-    avoidSet.delete(cellKey(sourceState.gridX, sourceState.gridY));
+    const avoidSet = makeScenarioDropAvoidSet(sourceState, def);
     const expanded = [];
     rules.forEach((rule) => {
       const count = Number.isFinite(rule.count) ? Math.max(1, Math.floor(rule.count)) : 1;
