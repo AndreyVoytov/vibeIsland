@@ -213,7 +213,7 @@
   ];
 
   const SCENARIO_DROP_IMAGE_ASSETS = [
-    './img/scenario-drop/metal-scrap.png',
+    './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
     './img/scenario-drop/nail-puller.png',
     './img/scenario-drop/kettle.png',
     './img/scenario-drop/axe.png',
@@ -458,6 +458,7 @@
   const scenarioDropDefs = Array.isArray(scenarioConfig.drops) ? scenarioConfig.drops : [];
   const BERRIES_LIST = Array.isArray(berriesConfig.berries) ? berriesConfig.berries : [];
   const INVENTORY_ITEMS = Array.isArray(berriesConfig.inventoryItems) ? berriesConfig.inventoryItems : [];
+  const MATERIAL_RESOURCE_CATEGORIES = new Set(['wood', 'metal', 'ore', 'stone']);
   const resourceById = new Map(BERRIES_LIST.map((item) => [item.id, item]));
   const inventoryItemById = new Map(INVENTORY_ITEMS.map((item) => [item.id, item]));
   const scenarioDropById = new Map([...BERRIES_LIST, ...scenarioDropDefs, ...INVENTORY_ITEMS].map((item) => [item.id, item]));
@@ -1082,6 +1083,16 @@
     return getResourceProfitById(def && def.id);
   }
 
+  function isMaterialDropDef(def) {
+    if (!def) return false;
+    const category = def.resourceCategory || def.materialType || def.resourceKind;
+    return Boolean(def.materialItem || def.collectToInventory || MATERIAL_RESOURCE_CATEGORIES.has(category));
+  }
+
+  function isFindingDropDef(def) {
+    return Boolean(def && (def.findingItem || def.scenarioFinding));
+  }
+
   function pickWeightedIndex(list, getW) {
     let sum = 0;
     for (let i = 0; i < list.length; i += 1) sum += Math.max(0, +getW(i) || 0);
@@ -1346,7 +1357,7 @@
         ux: 0,
         uy: 0,
         scenarioDrop: true,
-        special: Boolean(item.special || item.finding || isInventoryDropDef(def)),
+        special: Boolean(((item.special || item.finding) && !isMaterialDropDef(def)) || isFindingDropDef(def)),
       };
     }).filter(Boolean);
   }
@@ -1540,7 +1551,7 @@
       ux: 0,
       uy: 0,
       scenarioDrop: true,
-      special: Boolean(rule.special || rule.finding || isInventoryDropDef(def)),
+      special: Boolean((rule.special || rule.finding || isFindingDropDef(def)) && !isMaterialDropDef(def)),
     };
   }
 
@@ -2178,10 +2189,13 @@
     const primitive = def.primitive || {};
     if (primitive.kind === 'tree') {
       def.__extractParticleDef = {
-        id: def.id,
+        id: def.extractParticleItemId || def.extractParticleDropId || def.id,
+        titleRu: def.extractParticleTitleRu || def.titleRu || def.id,
         assetUrl: def.extractParticleAssetUrl || '',
         widthPx: Number.isFinite(def.extractParticleWidthPx) ? def.extractParticleWidthPx : 48,
         heightPx: Number.isFinite(def.extractParticleHeightPx) ? def.extractParticleHeightPx : 34,
+        inventoryItem: true,
+        resourceCategory: 'wood',
         primitive: { kind: 'log', bark: primitive.trunk || '#6d4a2f', core: '#c89a5b' },
       };
     } else {
@@ -2520,7 +2534,7 @@
   }
 
   function isInventoryDropDef(def) {
-    return Boolean(def && (def.inventoryItem || inventoryItemById.has(def.id)));
+    return Boolean(def && (def.inventoryItem || inventoryItemById.has(def.id) || isMaterialDropDef(def)));
   }
 
   function collectInventoryDrop(def) {

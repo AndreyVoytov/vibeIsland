@@ -4,10 +4,11 @@
     {
       id: 'metal-scrap',
       titleRu: 'Кусочки металла',
-      assetUrl: './img/scenario-drop/metal-scrap.png',
+      assetUrl: './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
       widthPx: 40,
       heightPx: 32,
-      profit: 12,
+      inventoryItem: true,
+      resourceCategory: 'metal',
     },
     {
       id: 'pine-log',
@@ -15,7 +16,8 @@
       assetUrl: './img/mineable/log-pine.png',
       widthPx: 50,
       heightPx: 38,
-      profit: 6,
+      inventoryItem: true,
+      resourceCategory: 'wood',
       primitive: { kind: 'log', bark: '#6d4a2f', core: '#c89a5b' },
     },
   ];

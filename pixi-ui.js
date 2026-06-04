@@ -34,9 +34,14 @@
     './img/rare/colorado-beetle.png',
     './img/ui/inventory-bag.png',
     './img/ui/shine.png',
+    './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
     './img/scenario-drop/nail-puller.png',
     './img/scenario-drop/kettle.png',
     './img/scenario-drop/axe.png',
+    './img/mineable/log-pine.png',
+    './img/mineable/log-birch.png',
+    './img/mineable/log-dead.png',
+    './img/mineable/log-snow-pine.png',
   ]);
   Array.from({ length: 10 }, (_, index) => `./img/building/drill-${index + 1}.png`)
     .forEach((url) => KNOWN_LOCAL_ASSETS.add(url));
