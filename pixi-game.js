@@ -224,6 +224,39 @@
     './img/mineable/log-pine.png',
   ];
 
+  const DROP_OUTLINE_BASE_ASSETS = [
+    './img/berry/strawberry.png',
+    './img/berry/blueberry.png',
+    './img/berry/raspberry.png',
+    './img/berry/tomato.png',
+    './img/berry/champignon.png',
+    './img/berry/beet.png',
+    './img/berry/radish.png',
+    './img/berry/potato.png',
+    './img/rare/pine-cone.png',
+    './img/rare/colorado-beetle.png',
+    './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
+    './img/scenario-drop/nail-puller.png',
+    './img/scenario-drop/kettle.png',
+    './img/scenario-drop/axe.png',
+    './img/mineable/log-pine.png',
+    './img/mineable/log-birch.png',
+    './img/mineable/log-dead.png',
+    './img/mineable/log-snow-pine.png',
+  ];
+
+  function getDropOutlineAssetUrl(url) {
+    if (!url || !String(url).includes('.png')) return '';
+    const [path, query] = String(url).split('?');
+    if (!path.endsWith('.png')) return '';
+    const outlined = path.replace(/\.png$/, '-drop-outline.png');
+    return query ? `${outlined}?${query}` : outlined;
+  }
+
+  const DROP_OUTLINE_IMAGE_ASSETS = DROP_OUTLINE_BASE_ASSETS
+    .map(getDropOutlineAssetUrl)
+    .filter(Boolean);
+
   const KNOWN_ASSETS = new Set([
     './img/berry/1.png',
     './img/building/campfire.png',
@@ -247,6 +280,7 @@
   SEA_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SCENARIO_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SCENARIO_DROP_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  DROP_OUTLINE_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   HERO_SPRITES.forEach((name) => KNOWN_ASSETS.add(`./img/hero/${name}.png`));
 
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -2947,7 +2981,8 @@
     if (be.onBush && be.def && be.def.bushType === 'centered') return false;
     if (be.onBush && be.def && be.def.bushAssetUrl) return false;
     const def = be.def || {};
-    const texture = getTexture(def.assetUrl);
+    const outlineUrl = !be.onBush ? (def.dropAssetUrl || getDropOutlineAssetUrl(def.assetUrl)) : '';
+    const texture = getTexture(outlineUrl) || getTexture(def.assetUrl);
     if (!texture) return false;
     if (!be.uid) be.uid = nextBerryUid++;
     let sprite = berrySprites.get(be.uid);
