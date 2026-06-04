@@ -33,6 +33,10 @@
     './img/rare/pine-cone.png',
     './img/rare/colorado-beetle.png',
     './img/ui/inventory-bag.png',
+    './img/ui/shine.png',
+    './img/scenario-drop/nail-puller.png',
+    './img/scenario-drop/kettle.png',
+    './img/scenario-drop/axe.png',
   ]);
   Array.from({ length: 10 }, (_, index) => `./img/building/drill-${index + 1}.png`)
     .forEach((url) => KNOWN_LOCAL_ASSETS.add(url));
@@ -357,6 +361,10 @@
   const closeInventory = document.getElementById('closeInventory');
   const inventoryList = document.getElementById('inventoryList');
   const inventoryBadge = document.getElementById('inventoryBadge');
+  const findingOverlay = document.getElementById('findingOverlay');
+  const findingItem = document.getElementById('findingItem');
+  const findingTitle = document.getElementById('findingTitle');
+  const findingOk = document.getElementById('findingOk');
   const panelOverlay = document.getElementById('panelOverlay');
   const idleOverlay = document.getElementById('idleOverlay');
   const idlePanel = document.getElementById('idlePanel');
@@ -366,6 +374,7 @@
   const upgradeMarker = document.getElementById('upgradeMarker');
   const resourceCards = new Map();
   const EXPANSION_DELAY_MS = 1500;
+  const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
 
   function setImageWithFallback(img, key) {
     const asset = uiConfig.uiAssets[key] || {};
@@ -678,6 +687,113 @@
     });
   }
 
+  function getInventoryItemInfo(detail) {
+    if (!detail || !detail.id) return null;
+    const configured = inventoryItems.find((item) => item.id === detail.id) || {};
+    return {
+      id: detail.id,
+      titleRu: detail.titleRu || configured.titleRu || detail.id,
+      assetUrl: detail.assetUrl || configured.assetUrl || '',
+      widthPx: Number.isFinite(detail.widthPx) ? detail.widthPx : (Number.isFinite(configured.widthPx) ? configured.widthPx : 48),
+      heightPx: Number.isFinite(detail.heightPx) ? detail.heightPx : (Number.isFinite(configured.heightPx) ? configured.heightPx : 48),
+      dropUid: detail.dropUid,
+      startX: Number.isFinite(detail.startX) ? detail.startX : null,
+      startY: Number.isFinite(detail.startY) ? detail.startY : null,
+    };
+  }
+
+  function addInventoryItem(id) {
+    if (!id) return;
+    const user = getUserState();
+    if (!user.inventory || typeof user.inventory !== 'object') user.inventory = {};
+    user.inventory[id] = Math.max(0, Number(user.inventory[id]) || 0) + 1;
+    setUserState(user);
+    localStorage.setItem('inventoryUpdatedAt', String(Date.now()));
+    renderInventory();
+  }
+
+  let activeFinding = null;
+  let findingSettledTimer = null;
+
+  function clearFindingTimer() {
+    if (!findingSettledTimer) return;
+    clearTimeout(findingSettledTimer);
+    findingSettledTimer = null;
+  }
+
+  function showFindingItem(rawDetail) {
+    const detail = getInventoryItemInfo(rawDetail);
+    if (!detail || !findingOverlay || !findingItem || !findingTitle || !findingOk) return;
+    activeFinding = detail;
+    clearFindingTimer();
+    togglePanel(false);
+    toggleInventory(false);
+    localStorage.setItem(PENDING_FOUND_ITEM_KEY, JSON.stringify(detail));
+
+    const overlayRect = findingOverlay.getBoundingClientRect();
+    const itemW = Math.max(88, Math.min(150, detail.widthPx * 2.45));
+    const itemH = Math.max(88, Math.min(150, detail.heightPx * 2.45));
+    const fromX = (detail.startX === null ? overlayRect.width * 0.5 : detail.startX - overlayRect.left) - itemW / 2;
+    const fromY = (detail.startY === null ? overlayRect.height * 0.5 : detail.startY - overlayRect.top) - itemH / 2;
+    const centerX = overlayRect.width * 0.5 - itemW / 2;
+    const centerY = overlayRect.height * 0.4 - itemH / 2;
+
+    findingTitle.textContent = `находка: ${detail.titleRu}`;
+    findingItem.alt = detail.titleRu;
+    findingItem.src = knownAssetUrl(detail.assetUrl) || detail.assetUrl || '';
+    findingItem.style.width = `${itemW}px`;
+    findingItem.style.height = `${itemH}px`;
+    findingItem.style.transition = 'none';
+    findingItem.style.opacity = '0';
+    findingItem.style.transform = `translate(${fromX}px, ${fromY}px) scale(0.45)`;
+    findingOk.disabled = true;
+
+    findingOverlay.classList.remove('settled');
+    findingOverlay.classList.add('open');
+    findingOverlay.setAttribute('aria-hidden', 'false');
+
+    requestAnimationFrame(() => {
+      findingItem.style.transition = 'transform 0.62s cubic-bezier(.18,.84,.26,1), opacity 0.24s ease';
+      findingItem.style.opacity = '1';
+      findingItem.style.transform = `translate(${centerX}px, ${centerY}px) scale(1.18)`;
+      findingSettledTimer = setTimeout(() => {
+        findingOverlay.classList.add('settled');
+        findingOk.disabled = false;
+      }, 620);
+    });
+  }
+
+  function hideFindingOverlay() {
+    findingOverlay.classList.remove('open', 'settled');
+    findingOverlay.setAttribute('aria-hidden', 'true');
+    findingItem.style.opacity = '0';
+    activeFinding = null;
+    clearFindingTimer();
+  }
+
+  function finishFindingItem() {
+    if (!activeFinding || !findingOverlay || !findingItem || !inventoryButton) return;
+    const detail = activeFinding;
+    findingOk.disabled = true;
+    findingOverlay.classList.remove('settled');
+
+    const overlayRect = findingOverlay.getBoundingClientRect();
+    const targetRect = inventoryButton.getBoundingClientRect();
+    const itemRect = findingItem.getBoundingClientRect();
+    const targetX = targetRect.left - overlayRect.left + targetRect.width / 2 - itemRect.width / 2;
+    const targetY = targetRect.top - overlayRect.top + targetRect.height / 2 - itemRect.height / 2;
+    findingItem.style.transition = 'transform 0.48s cubic-bezier(.45,0,.2,1), opacity 0.48s ease';
+    findingItem.style.transform = `translate(${targetX}px, ${targetY}px) scale(0.28)`;
+    findingItem.style.opacity = '0.85';
+
+    setTimeout(() => {
+      addInventoryItem(detail.id);
+      localStorage.removeItem(PENDING_FOUND_ITEM_KEY);
+      window.dispatchEvent(new CustomEvent('vibe-found-item-complete', { detail }));
+      hideFindingOverlay();
+    }, 500);
+  }
+
   function syncPanelOverlay() {
     const shopOpen = shopPanel.classList.contains('open');
     const inventoryOpen = inventoryPanel && inventoryPanel.classList.contains('open');
@@ -729,6 +845,8 @@
   closePanel.addEventListener('click', () => togglePanel(false));
   if (inventoryButton) inventoryButton.addEventListener('click', () => toggleInventory());
   if (closeInventory) closeInventory.addEventListener('click', () => toggleInventory(false));
+  if (findingOk) findingOk.addEventListener('click', finishFindingItem);
+  window.addEventListener('vibe-found-item', (event) => showFindingItem(event.detail || {}));
   panelOverlay.addEventListener('click', () => {
     togglePanel(false);
     toggleInventory(false);
@@ -740,6 +858,12 @@
   setLastActiveAt();
   renderResources();
   renderInventory();
+  try {
+    const pendingFinding = JSON.parse(localStorage.getItem(PENDING_FOUND_ITEM_KEY) || 'null');
+    if (pendingFinding && pendingFinding.id) setTimeout(() => showFindingItem(pendingFinding), 300);
+  } catch (err) {
+    localStorage.removeItem(PENDING_FOUND_ITEM_KEY);
+  }
   setInterval(() => {
     renderResources();
     renderInventory();

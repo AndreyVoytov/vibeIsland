@@ -295,6 +295,86 @@
       font-size:14px;
       text-align:center;
     }
+    .finding-overlay{
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,0);
+      opacity:0;
+      pointer-events:none;
+      overflow:hidden;
+      z-index:30;
+      transition:background 0.28s ease, opacity 0.28s ease;
+    }
+    .finding-overlay.open{
+      background:rgba(0,0,0,0.72);
+      opacity:1;
+      pointer-events:auto;
+    }
+    .finding-shine{
+      position:absolute;
+      left:50%;
+      top:40%;
+      width:188px;
+      height:188px;
+      object-fit:contain;
+      opacity:0;
+      transform:translate(-50%, -50%) scale(0.72);
+      transition:opacity 0.24s ease, transform 0.34s ease;
+      animation:finding-spin 5s linear infinite;
+      pointer-events:none;
+    }
+    .finding-overlay.settled .finding-shine{
+      opacity:0.95;
+      transform:translate(-50%, -50%) scale(1);
+    }
+    .finding-item{
+      position:absolute;
+      left:0;
+      top:0;
+      width:96px;
+      height:96px;
+      object-fit:contain;
+      opacity:0;
+      filter:drop-shadow(0 14px 18px rgba(0,0,0,0.45));
+      will-change:transform, opacity;
+      pointer-events:none;
+      z-index:2;
+    }
+    .finding-caption{
+      position:absolute;
+      left:50%;
+      top:calc(40% + 112px);
+      transform:translateX(-50%);
+      width:min(320px, calc(100% - 32px));
+      text-align:center;
+      opacity:0;
+      transition:opacity 0.24s ease;
+      z-index:3;
+    }
+    .finding-caption strong{
+      display:block;
+      font-size:20px;
+      font-weight:700;
+      text-shadow:0 3px 10px rgba(0,0,0,0.6);
+    }
+    .finding-ok{
+      margin-top:18px;
+      min-width:136px;
+      height:44px;
+      border:none;
+      border-radius:14px;
+      background:#2ecc71;
+      color:#0d2b0f;
+      font-size:16px;
+      font-weight:700;
+      box-shadow:0 8px 18px rgba(0,0,0,0.36);
+      cursor:pointer;
+    }
+    .finding-overlay.settled .finding-caption{opacity:1;}
+    @keyframes finding-spin{
+      from{transform:translate(-50%, -50%) scale(1) rotate(0deg);}
+      to{transform:translate(-50%, -50%) scale(1) rotate(360deg);}
+    }
     .resource-card{
       display:flex;
       align-items:center;
@@ -401,17 +481,25 @@
         </div>
         <div id="inventoryList" class="inventory-list"></div>
       </div>
+      <div id="findingOverlay" class="finding-overlay" aria-hidden="true" data-ui-control>
+        <img id="findingShine" class="finding-shine" src="./img/ui/shine.png" alt="" />
+        <img id="findingItem" class="finding-item" alt="" />
+        <div class="finding-caption">
+          <strong id="findingTitle">находка</strong>
+          <button id="findingOk" class="finding-ok" type="button" data-ui-control>хорошо</button>
+        </div>
+      </div>
     </div>
     <div id="runtimeError" class="runtime-error"></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
-  <script src="./berries-config.js?v=20260604-inventory-rare-tiles"></script>
+  <script src="./berries-config.js?v=20260604-scenario-drops"></script>
   <script src="./buildings-config.js"></script>
-  <script src="./scenario-objects-config.js?v=20260604-inventory-rare-tiles"></script>
+  <script src="./scenario-objects-config.js?v=20260604-scenario-drops"></script>
   <script src="./ui-config.js"></script>
   <script src="./enlarge-config.js"></script>
-  <script src="./pixi-game.js?v=20260604-inventory-rare-tiles"></script>
-  <script src="./pixi-ui.js?v=20260604-inventory-rare-tiles"></script>
+  <script src="./pixi-game.js?v=20260604-scenario-drops"></script>
+  <script src="./pixi-ui.js?v=20260604-scenario-drops"></script>
 </body>
 </html>

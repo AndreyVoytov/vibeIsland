@@ -89,6 +89,8 @@
 
   const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
   const SCENARIO_STATE_KEY = 'scenarioObjectsState';
+  const SCENARIO_DROPS_KEY = 'scenarioDropsState';
+  const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
   const SCENARIO_COLLIDER_CELLS_KEY = 'scenarioColliderCells';
   const SCENARIO_COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
   const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
@@ -99,6 +101,7 @@
   const SCENARIO_GLINT_PERIOD_MS = 3400;
   const SCENARIO_GLINT_ACTIVE_MS = 950;
   const SCENARIO_GLINT_HIT_PAD = 0.28;
+  const SCENARIO_DROP_FLY_MS = 280;
   const WATER_BURST_ASSET = './img/sea/water-foam-burst.png';
   const WATER_BURST_MIN_DELAY_MS = 900;
   const WATER_BURST_MAX_DELAY_MS = 2300;
@@ -204,6 +207,14 @@
     './images/scenario/lifebuoy.png',
   ];
 
+  const SCENARIO_DROP_IMAGE_ASSETS = [
+    './img/scenario-drop/metal-scrap.png',
+    './img/scenario-drop/nail-puller.png',
+    './img/scenario-drop/kettle.png',
+    './img/scenario-drop/axe.png',
+    './img/mineable/log-pine.png',
+  ];
+
   const KNOWN_ASSETS = new Set([
     './img/berry/1.png',
     './img/building/campfire.png',
@@ -226,6 +237,7 @@
   BUILDING_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SEA_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SCENARIO_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  SCENARIO_DROP_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   HERO_SPRITES.forEach((name) => KNOWN_ASSETS.add(`./img/hero/${name}.png`));
 
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -436,10 +448,12 @@
   const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
   const scenarioObjects = Array.isArray(scenarioConfig.objects) ? scenarioConfig.objects : [];
   const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
+  const scenarioDropDefs = Array.isArray(scenarioConfig.drops) ? scenarioConfig.drops : [];
   const BERRIES_LIST = Array.isArray(berriesConfig.berries) ? berriesConfig.berries : [];
   const INVENTORY_ITEMS = Array.isArray(berriesConfig.inventoryItems) ? berriesConfig.inventoryItems : [];
   const resourceById = new Map(BERRIES_LIST.map((item) => [item.id, item]));
   const inventoryItemById = new Map(INVENTORY_ITEMS.map((item) => [item.id, item]));
+  const scenarioDropById = new Map([...BERRIES_LIST, ...scenarioDropDefs, ...INVENTORY_ITEMS].map((item) => [item.id, item]));
   const getResourceWeight = typeof berriesConfig.getResourceWeight === 'function'
     ? berriesConfig.getResourceWeight
     : () => 1;
@@ -1033,6 +1047,11 @@
     return found && typeof found.profit === 'number' ? found.profit : 1;
   }
 
+  function getCollectProfit(def) {
+    if (def && Number.isFinite(def.profit)) return def.profit;
+    return getResourceProfitById(def && def.id);
+  }
+
   function pickWeightedIndex(list, getW) {
     let sum = 0;
     for (let i = 0; i < list.length; i += 1) sum += Math.max(0, +getW(i) || 0);
@@ -1182,6 +1201,7 @@
 
   let openedIds = loadOpenedIds();
   let scenarioState = [];
+  let scenarioDrops = [];
   let activeDialogue = null;
   let lastDialogueText = '';
   const scenarioSprites = new Map();
@@ -1262,6 +1282,69 @@
     localStorage.setItem(SCENARIO_STATE_KEY, JSON.stringify(scenarioState));
   }
 
+  function getScenarioDropDef(id) {
+    if (!id) return null;
+    return scenarioDropById.get(id) || resourceById.get(id) || inventoryItemById.get(id) || null;
+  }
+
+  function loadScenarioDrops() {
+    const stored = safeJson(SCENARIO_DROPS_KEY, []);
+    if (!Array.isArray(stored)) return [];
+    return stored.map((item) => {
+      const def = getScenarioDropDef(item && item.id);
+      if (!def || !Number.isFinite(item.xPct) || !Number.isFinite(item.yPct)) return null;
+      return {
+        uid: Number.isFinite(item.uid) ? item.uid : nextBerryUid++,
+        id: item.id,
+        def,
+        sourceId: item.sourceId || '',
+        onBush: false,
+        xPct: item.xPct,
+        yPct: item.yPct,
+        scale: Number.isFinite(item.scale) ? item.scale : 1,
+        t0: performance.now(),
+        alive: item.alive !== false,
+        x0: Number.isFinite(item.x0) ? item.x0 : item.xPct,
+        y0: Number.isFinite(item.y0) ? item.y0 : item.yPct,
+        tx: Number.isFinite(item.tx) ? item.tx : item.xPct,
+        ty: Number.isFinite(item.ty) ? item.ty : item.yPct,
+        flying: Boolean(item.flying),
+        tFly0: Number.isFinite(item.tFly0) ? item.tFly0 : 0,
+        flyDur: Number.isFinite(item.flyDur) ? item.flyDur : SCENARIO_DROP_FLY_MS,
+        stage: item.stage || 'idle',
+        tPick0: 0,
+        ux: 0,
+        uy: 0,
+        scenarioDrop: true,
+        special: Boolean(item.special || item.finding || isInventoryDropDef(def)),
+      };
+    }).filter(Boolean);
+  }
+
+  function persistScenarioDrops() {
+    const compact = scenarioDrops
+      .filter((drop) => drop && drop.stage !== 'done')
+      .map((drop) => ({
+        uid: drop.uid,
+        id: drop.id || (drop.def && drop.def.id),
+        sourceId: drop.sourceId || '',
+        xPct: drop.xPct,
+        yPct: drop.yPct,
+        x0: drop.x0,
+        y0: drop.y0,
+        tx: drop.tx,
+        ty: drop.ty,
+        scale: drop.scale,
+        alive: drop.alive !== false,
+        flying: Boolean(drop.flying),
+        tFly0: drop.flying ? drop.tFly0 : 0,
+        flyDur: drop.flyDur || SCENARIO_DROP_FLY_MS,
+        stage: drop.stage || 'idle',
+        special: Boolean(drop.special),
+      }));
+    localStorage.setItem(SCENARIO_DROPS_KEY, JSON.stringify(compact));
+  }
+
   function getInwardStep(def) {
     const inward = {
       east: { x: -1, y: 0 },
@@ -1331,12 +1414,72 @@
     return Math.hypot(dx, dy) <= radius;
   }
 
+  function getScenarioDropRules(def) {
+    return def && Array.isArray(def.drops) ? def.drops : [];
+  }
+
+  function createScenarioDrop(sourceState, rule, index, count, now, avoidSet) {
+    const def = getScenarioDropDef(rule && rule.id);
+    if (!def || !cellPct) return null;
+    const spread = Math.max(SCATTER_MIN_PCT * 0.55, cellPct * 0.55);
+    const angle = (Math.PI * 2 * index) / Math.max(1, count) + rnd(-0.45, 0.45);
+    const dist = rnd(spread, Math.max(spread + 0.01, SCATTER_MAX_PCT * 0.78));
+    const v = vec(angle);
+    const startX = (sourceState.gridX + 0.5) * cellPct;
+    const startY = (sourceState.gridY + 0.5) * cellPct;
+    const to = clampToLandSafe(startX + v.x * dist, startY + v.y * dist, BERRY_R_PCT, avoidSet);
+    return {
+      uid: nextBerryUid++,
+      id: def.id,
+      def,
+      sourceId: sourceState.id,
+      onBush: false,
+      xPct: startX,
+      yPct: startY,
+      scale: 1,
+      t0: now,
+      alive: true,
+      x0: startX,
+      y0: startY,
+      tx: to.xPct,
+      ty: to.yPct,
+      flying: true,
+      tFly0: now,
+      flyDur: SCENARIO_DROP_FLY_MS,
+      stage: 'idle',
+      tPick0: 0,
+      ux: 0,
+      uy: 0,
+      scenarioDrop: true,
+      special: Boolean(rule.special || rule.finding || isInventoryDropDef(def)),
+    };
+  }
+
+  function spawnScenarioDrops(sourceState, def) {
+    const rules = getScenarioDropRules(def);
+    if (!rules.length || !sourceState || !cellPct) return;
+    const now = performance.now();
+    const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
+    avoidSet.delete(cellKey(sourceState.gridX, sourceState.gridY));
+    const expanded = [];
+    rules.forEach((rule) => {
+      const count = Number.isFinite(rule.count) ? Math.max(1, Math.floor(rule.count)) : 1;
+      for (let i = 0; i < count; i += 1) expanded.push(rule);
+    });
+    expanded.forEach((rule, index) => {
+      const drop = createScenarioDrop(sourceState, rule, index, expanded.length, now, avoidSet);
+      if (drop) scenarioDrops.push(drop);
+    });
+    persistScenarioDrops();
+  }
+
   function activateScenarioObject(state, def) {
     if (!state || !def || state.triggered || activeDialogue) return false;
     state.triggered = true;
     state.opened = true;
     openedIds.add(state.id);
     if (def.transformOnApproach) state.transformed = true;
+    spawnScenarioDrops(state, def);
     persistOpenedIds();
     persistScenarioState();
     rebuildScenarioColliderCells();
@@ -1428,7 +1571,7 @@
     const cells = new Set();
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
-      if (!def || !scenarioIsOnLand(state)) return;
+      if (!def || state.triggered || !scenarioIsOnLand(state)) return;
       const radius = Number.isFinite(def.colliderRadius) ? Math.max(1, Math.round(def.colliderRadius)) : 1;
       for (let dy = -radius; dy <= radius; dy += 1) {
         for (let dx = -radius; dx <= radius; dx += 1) cells.add(cellKey(state.gridX + dx, state.gridY + dy));
@@ -1615,6 +1758,7 @@
     const activeIds = new Set();
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
+      if (state.triggered) return;
       if (!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
       activeIds.add(state.id);
       const { baseX, baseY, floating, floatOffset, width, height } = getScenarioRenderMetrics(state, def, now);
@@ -1711,6 +1855,19 @@
       });
       if (b.stage === 'growing' || b.stage === 'ripe') nextBusy.add(cellKey(b.gridX, b.gridY));
     });
+    scenarioDrops.forEach((drop) => {
+      const shiftPoint = (xKey, yKey) => {
+        if (!Number.isFinite(drop[xKey]) || !Number.isFinite(drop[yKey])) return;
+        const gridX = drop[xKey] / prevCellPct + shiftX;
+        const gridY = drop[yKey] / prevCellPct + shiftY;
+        drop[xKey] = gridX * cellPct;
+        drop[yKey] = gridY * cellPct;
+      };
+      shiftPoint('xPct', 'yPct');
+      shiftPoint('x0', 'y0');
+      shiftPoint('tx', 'ty');
+    });
+    if (scenarioDrops.length) persistScenarioDrops();
     busy.clear();
     nextBusy.forEach((key) => busy.add(key));
   }
@@ -2040,14 +2197,16 @@
     markResourceSeen();
   }
 
+  function updateFlyingDrop(be, now) {
+    if (!be || !be.flying) return;
+    const k = outCub(clamp((now - be.tFly0) / be.flyDur, 0, 1));
+    be.xPct = be.x0 + (be.tx - be.x0) * k;
+    be.yPct = be.y0 + (be.ty - be.y0) * k;
+    if (k >= 1) be.flying = false;
+  }
+
   function updateFlyingParticles(b, now) {
-    b.berries.forEach((be) => {
-      if (!be.flying) return;
-      const k = outCub(clamp((now - be.tFly0) / be.flyDur, 0, 1));
-      be.xPct = be.x0 + (be.tx - be.x0) * k;
-      be.yPct = be.y0 + (be.ty - be.y0) * k;
-      if (k >= 1) be.flying = false;
-    });
+    b.berries.forEach((be) => updateFlyingDrop(be, now));
   }
 
   function spawnWoodChips(b, now) {
@@ -2294,8 +2453,53 @@
     }
     localStorage.setItem('berriesCollected', String((+localStorage.getItem('berriesCollected') || 0) + 1));
     const user = getUserState();
-    user.money = (user.money || 0) + getResourceProfitById(be.def && be.def.id);
+    user.money = (user.money || 0) + getCollectProfit(be.def);
     setUserState(user);
+  }
+
+  function getDropScreenPosition(drop) {
+    return {
+      x: Math.round(worldRoot.x + pct2px(drop.xPct)),
+      y: Math.round(worldRoot.y + pct2px(drop.yPct)),
+    };
+  }
+
+  function beginScenarioFoundItem(drop) {
+    if (!drop || !drop.def || drop.stage === 'finding' || drop.stage === 'done') return;
+    const pos = getDropScreenPosition(drop);
+    const detail = {
+      id: drop.def.id,
+      dropUid: drop.uid,
+      titleRu: drop.def.titleRu || drop.def.id,
+      assetUrl: drop.def.assetUrl || '',
+      widthPx: Number.isFinite(drop.def.widthPx) ? drop.def.widthPx : 48,
+      heightPx: Number.isFinite(drop.def.heightPx) ? drop.def.heightPx : 48,
+      startX: pos.x,
+      startY: pos.y,
+    };
+    drop.alive = false;
+    drop.stage = 'finding';
+    persistScenarioDrops();
+    localStorage.setItem(PENDING_FOUND_ITEM_KEY, JSON.stringify(detail));
+    window.dispatchEvent(new CustomEvent('vibe-found-item', { detail }));
+  }
+
+  function completeScenarioFoundItem(detail) {
+    const uid = detail && Number(detail.dropUid);
+    if (!Number.isFinite(uid)) return;
+    const before = scenarioDrops.length;
+    scenarioDrops = scenarioDrops.filter((drop) => drop.uid !== uid);
+    if (scenarioDrops.length !== before) persistScenarioDrops();
+  }
+
+  function collectScenarioDropInstant(drop) {
+    if (!drop || drop.stage === 'finding') return;
+    if (drop.special) {
+      beginScenarioFoundItem(drop);
+      return;
+    }
+    collectBerryInstant(drop);
+    persistScenarioDrops();
   }
 
   function collectUnderBuildings() {
@@ -2338,7 +2542,7 @@
     const hy = pct2px(hyPct);
     const pickTargetYPct = hyPct - PICK_TARGET_UP_CELLS * cellPct;
 
-    bushes.forEach((b) => b.berries.forEach((be) => {
+    const updatePickAnimation = (be, onCollect) => {
       if (be.stage === 'collectOut') {
         const u = clamp((now - be.tPick0) / PICK_OUT_MS, 0, 1);
         be.xPct = lerp(be.x0, be.x0 + be.ux * PICK_OUT_DIST_PCT * PICK_R_PCT, u);
@@ -2353,9 +2557,23 @@
         const u = clamp((now - be.tPick0) / PICK_IN_MS, 0, 1);
         be.xPct = lerp(be.x0, hxPct, u);
         be.yPct = lerp(be.y0, pickTargetYPct, u);
-        if (u >= 1) collectBerryInstant(be);
+        if (u >= 1) onCollect(be);
       }
-    }));
+    };
+
+    bushes.forEach((b) => b.berries.forEach((be) => updatePickAnimation(be, collectBerryInstant)));
+    let scenarioDropsChanged = false;
+    scenarioDrops.forEach((drop) => {
+      const beforeFlying = drop.flying;
+      updateFlyingDrop(drop, now);
+      const beforeStage = drop.stage;
+      updatePickAnimation(drop, collectScenarioDropInstant);
+      if (drop.stage !== beforeStage || drop.flying !== beforeFlying) scenarioDropsChanged = true;
+    });
+    const beforeDropCount = scenarioDrops.length;
+    scenarioDrops = scenarioDrops.filter((drop) => drop.stage !== 'done');
+    if (scenarioDrops.length !== beforeDropCount) scenarioDropsChanged = true;
+    if (scenarioDropsChanged) persistScenarioDrops();
 
     if (now - lastPickMs < PICK_COOLDOWN_MS) return;
     const cand = [];
@@ -2366,10 +2584,21 @@
         if (under || d <= pct2px(PICK_R_PCT)) cand.push({ be, d });
       }
     }));
+    scenarioDrops.forEach((be) => {
+      if (be.stage === 'idle' && be.alive && !be.flying) {
+        const d = Math.hypot(pct2px(be.xPct) - hx, pct2px(be.yPct) - hy);
+        const under = isInHeroRect(be.xPct, be.yPct, hxPct, hyPct);
+        if (under || d <= pct2px(PICK_R_PCT)) cand.push({ be, d });
+      }
+    });
     if (!cand.length) return;
     cand.sort((a, b) => a.d - b.d);
     const be = cand[0].be;
     lastPickMs = now;
+    if (be.scenarioDrop && be.special) {
+      beginScenarioFoundItem(be);
+      return;
+    }
     const ux = be.xPct - hxPct;
     const uy = be.yPct - hyPct;
     const len = Math.hypot(ux, uy) || 1;
@@ -2680,6 +2909,29 @@
     g.endFill();
   }
 
+  function drawScenarioDropGlint(g, drop, now) {
+    if (!drop || !drop.special || drop.flying || drop.stage !== 'idle' || !drop.alive) return;
+    const t = (now + (drop.uid % 997) * 17) % SCENARIO_GLINT_PERIOD_MS;
+    if (t > SCENARIO_GLINT_ACTIVE_MS) return;
+    const u = t / SCENARIO_GLINT_ACTIVE_MS;
+    const alpha = Math.sin(u * Math.PI) * 0.95;
+    if (alpha <= 0.01) return;
+    const x = pct2px(drop.xPct);
+    const y = pct2px(drop.yPct) - pct2px(0.75);
+    const r = Math.max(7, pct2px(1.4 + u * 0.8));
+    g.lineStyle(Math.max(1, r * 0.08), 0xffffff, alpha);
+    g.moveTo(x - r, y);
+    g.lineTo(x + r, y);
+    g.moveTo(x, y - r);
+    g.lineTo(x, y + r);
+    g.lineStyle(Math.max(1, r * 0.045), 0xfff0a8, alpha * 0.7);
+    g.drawCircle(x, y, r * (0.5 + u * 0.65));
+    g.lineStyle(0, 0xffffff, 0);
+    g.beginFill(0xffffff, alpha);
+    g.drawCircle(x, y, Math.max(1.4, r * 0.13));
+    g.endFill();
+  }
+
   function renderResources(now) {
     resourceGraphics.clear();
     resourceShadowGraphics.clear();
@@ -2701,6 +2953,10 @@
       if (b.woodChips && b.woodChips.length) b.woodChips.forEach((chip) => drawWoodChip(resourceGraphics, chip, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
       if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
+    });
+    scenarioDrops.forEach((drop) => {
+      drawBerry(resourceGraphics, drop, activeBerrySpriteIds);
+      drawScenarioDropGlint(resourceGraphics, drop, now);
     });
     resourceSprites.forEach((sprite, id) => {
       if (activeSpriteIds.has(id)) return;
@@ -2911,7 +3167,7 @@
   }
 
   function isUiOpen() {
-    return Boolean(document.querySelector('.panel-overlay.open,.shop-panel.open,.idle-panel.open'));
+    return Boolean(document.querySelector('.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open'));
   }
 
   function onPointerDown(event) {
@@ -3564,7 +3820,12 @@
     loadMapData({ initial: true, resetHero: true });
     openedIds = loadOpenedIds();
     scenarioState = loadScenarioState();
+    scenarioDrops = loadScenarioDrops();
+    scenarioDrops.forEach((drop) => {
+      if (Number.isFinite(drop.uid) && drop.uid >= nextBerryUid) nextBerryUid = drop.uid + 1;
+    });
     persistScenarioState();
+    persistScenarioDrops();
     renderHorizon();
     initClouds();
     resizeClouds();
@@ -3619,6 +3880,7 @@
   window.addEventListener('storage', (event) => {
     if (event.key === 'map' || event.key === SCENARIO_OPENED_KEY) onMapChanged();
   });
+  window.addEventListener('vibe-found-item-complete', (event) => completeScenarioFoundItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', onMapChanged);
   window.addEventListener('beforeunload', markResourceSeen);
   window.addEventListener('pagehide', markResourceSeen);

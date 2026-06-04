@@ -1,5 +1,25 @@
 /* scenario-objects-config.js */
 (function (global) {
+  const drops = [
+    {
+      id: 'metal-scrap',
+      titleRu: 'Кусочки металла',
+      assetUrl: './img/scenario-drop/metal-scrap.png',
+      widthPx: 40,
+      heightPx: 32,
+      profit: 12,
+    },
+    {
+      id: 'pine-log',
+      titleRu: 'Еловые бревна',
+      assetUrl: './img/mineable/log-pine.png',
+      widthPx: 50,
+      heightPx: 38,
+      profit: 6,
+      primitive: { kind: 'log', bark: '#6d4a2f', core: '#c89a5b' },
+    },
+  ];
+
   const objects = [
     {
       id: 'plane-wing',
@@ -12,6 +32,10 @@
       heightPx: 48,
       colliderRadius: 1,
       triggerRadiusCells: 3,
+      drops: [
+        { id: 'metal-scrap', count: 5 },
+        { id: 'nail-puller', count: 1, special: true },
+      ],
       dialog: [
         'Крыло… значит, самолёт точно упал здесь.',
         'Нужно собраться. Я один, но остров живой.',
@@ -28,6 +52,12 @@
       heightPx: 54,
       colliderRadius: 1,
       triggerRadiusCells: 3,
+      drops: [
+        { id: 'strawberry', count: 3 },
+        { id: 'blueberry', count: 2 },
+        { id: 'raspberry', count: 2 },
+        { id: 'kettle', count: 1, special: true },
+      ],
       dialog: [
         'Чемодан уцелел. Внутри — немного сухих вещей.',
         'Если найду ещё обломки, может быть, соберу укрытие.',
@@ -44,6 +74,10 @@
       heightPx: 50,
       colliderRadius: 1,
       triggerRadiusCells: 3,
+      drops: [
+        { id: 'pine-log', count: 4 },
+        { id: 'axe', count: 1, special: true },
+      ],
       dialog: [
         'Ящик с припасами… или это всё, что осталось от груза.',
         'Придётся собирать всё полезное по крупицам.',
@@ -106,5 +140,6 @@
 
   global.ScenarioObjectsConfig = {
     objects,
+    drops,
   };
 })(window);

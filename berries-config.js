@@ -17,6 +17,30 @@
       heightPx: 30,
       inventoryItem: true,
     },
+    {
+      id: 'nail-puller',
+      titleRu: 'Гвоздодёр',
+      assetUrl: './img/scenario-drop/nail-puller.png',
+      widthPx: 50,
+      heightPx: 38,
+      inventoryItem: true,
+    },
+    {
+      id: 'kettle',
+      titleRu: 'Котелок',
+      assetUrl: './img/scenario-drop/kettle.png',
+      widthPx: 46,
+      heightPx: 46,
+      inventoryItem: true,
+    },
+    {
+      id: 'axe',
+      titleRu: 'Топор',
+      assetUrl: './img/scenario-drop/axe.png',
+      widthPx: 48,
+      heightPx: 48,
+      inventoryItem: true,
+    },
   ];
 
   /** @type {{id:string,titleRu:string,assetUrl:string,widthPx:number,heightPx:number,primitive:{base?:string,highlight?:string,kind?:string,cap?:string,stem?:string,spots?:string,root?:string,leaf?:string},bushType?:string,bushScale?:number,bushAssetUrl?:string,bushPrimitive?:{kind?:string,cap?:string,capShade?:string,stem?:string,grass?:string,spots?:string,root?:string,leaf?:string,shadow?:string}}[]} */
