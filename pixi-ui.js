@@ -439,7 +439,7 @@
     return chosen ? chosen.profit : 0;
   }
 
-  const WORLD_ZOOM = 1.265;
+  const WORLD_ZOOM = 1.15;
   function getWorldCellPx() {
     const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
     const baseGridW = Number(localStorage.getItem('baseGridW') || '0');

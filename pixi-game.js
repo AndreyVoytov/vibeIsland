@@ -23,7 +23,7 @@
   const DEFAULT_MAP_WIDTH = 25;
   const DEFAULT_MAP_HEIGHT = 25;
   const DEFAULT_ISLAND_SIZE = 18;
-  const WORLD_ZOOM = 1.265;
+  const WORLD_ZOOM = 1.15;
   const BASE_CELL_PX = 28;
 
   const SPAWN_MS = 1000;
@@ -114,6 +114,8 @@
   const CLOUD_COUNT = 6;
   const CLOUD_WRAP_PAD = 180;
   const CLOUD_FRONT_CHANCE = 0.07;
+  const CLOUD_SHADOW_ALPHA = 0.11;
+  const CLOUD_FOREGROUND_SHADOW_ALPHA = 0.12;
   const SUNSET_HORIZON_ASSET = './img/sea/sunset-horizon.png';
   const SUNSET_HORIZON_LEFT_EDGE_ASSET = './img/sea/sunset-horizon-left-edge.png';
   const SUNSET_HORIZON_RIGHT_EDGE_ASSET = './img/sea/sunset-horizon-right-edge.png';
@@ -124,6 +126,8 @@
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
+  const RESOURCE_AURA_PERIOD_MS = 1900;
+  const RESOURCE_AURA_PARTICLES = 4;
 
   const SHARK_N = 5;
   const SHARK_WANDER_R = 7;
@@ -367,6 +371,8 @@
   waterFxLayer.zIndex = 1.35;
   waterFxLayer.eventMode = 'none';
   waterFxLayer.interactiveChildren = false;
+  const cloudShadowGraphics = new PIXI.Graphics();
+  cloudShadowGraphics.zIndex = 1.8;
   const sharkSpriteLayer = new PIXI.Container();
   sharkSpriteLayer.zIndex = 1.5;
   const islandLayer = new PIXI.Container();
@@ -404,6 +410,7 @@
     cloudLayer,
     sharkGraphics,
     waterFxLayer,
+    cloudShadowGraphics,
     sharkSpriteLayer,
     islandLayer,
     scenarioSpriteLayer,
@@ -693,18 +700,20 @@
   }
 
   function renderCloudShadows() {
+    cloudShadowGraphics.clear();
     foregroundCloudShadowGraphics.clear();
     clouds.forEach((cloud) => {
-      if (!cloud.foreground) return;
-      const alpha = 0.12 * (cloud.alpha || 1);
-      beginFill(foregroundCloudShadowGraphics, `rgba(18,36,62,${alpha})`, '#12243e');
-      foregroundCloudShadowGraphics.drawEllipse(
+      const target = cloud.foreground ? foregroundCloudShadowGraphics : cloudShadowGraphics;
+      const alphaBase = cloud.foreground ? CLOUD_FOREGROUND_SHADOW_ALPHA : CLOUD_SHADOW_ALPHA;
+      const alpha = alphaBase * (cloud.alpha || 1);
+      beginFill(target, `rgba(18,36,62,${alpha})`, '#12243e');
+      target.drawEllipse(
         cloud.x,
         cloud.y + cloud.visualHeight * 0.64,
         cloud.visualWidth * 0.45,
         Math.max(8, cloud.visualHeight * 0.18)
       );
-      foregroundCloudShadowGraphics.endFill();
+      target.endFill();
     });
   }
 
@@ -848,6 +857,54 @@
     g.endFill();
   }
 
+  function hasIslandCell(x, y) {
+    return Boolean(map[y] && map[y][x]);
+  }
+
+  function drawIslandWaterOutline(g, cellSize) {
+    const passes = [
+      { offset: cellSize * 0.21, thickness: cellSize * 0.22, alpha: 0.13 },
+      { offset: cellSize * 0.11, thickness: cellSize * 0.12, alpha: 0.2 },
+    ];
+    passes.forEach((pass) => {
+      g.beginFill(0x0c205c, pass.alpha);
+      const inset = cellSize * 0.05;
+      for (let y = 0; y < GRID_H; y += 1) {
+        for (let x = 0; x < GRID_W; x += 1) {
+          if (!hasIslandCell(x, y)) continue;
+          const sx = x * cellSize;
+          const sy = y * cellSize;
+          const radius = pass.thickness * 0.55;
+          if (!hasIslandCell(x - 1, y)) {
+            drawRoundedRect(g, sx - pass.offset, sy + inset, pass.thickness, cellSize - inset * 2, radius);
+          }
+          if (!hasIslandCell(x + 1, y)) {
+            drawRoundedRect(g, sx + cellSize + pass.offset - pass.thickness, sy + inset, pass.thickness, cellSize - inset * 2, radius);
+          }
+          if (!hasIslandCell(x, y - 1)) {
+            drawRoundedRect(g, sx + inset, sy - pass.offset, cellSize - inset * 2, pass.thickness, radius);
+          }
+          if (!hasIslandCell(x, y + 1)) {
+            drawRoundedRect(g, sx + inset, sy + cellSize + pass.offset - pass.thickness, cellSize - inset * 2, pass.thickness, radius);
+          }
+          if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y - 1)) {
+            g.drawCircle(sx, sy, pass.thickness * 0.62);
+          }
+          if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y - 1)) {
+            g.drawCircle(sx + cellSize, sy, pass.thickness * 0.62);
+          }
+          if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y + 1)) {
+            g.drawCircle(sx, sy + cellSize, pass.thickness * 0.62);
+          }
+          if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y + 1)) {
+            g.drawCircle(sx + cellSize, sy + cellSize, pass.thickness * 0.62);
+          }
+        }
+      }
+      g.endFill();
+    });
+  }
+
   function getIslandBoundsCells(landCells) {
     if (!landCells.length) return null;
     let minX = Infinity;
@@ -982,27 +1039,7 @@
     if (!cell || !GRID_W) return;
     const g = new PIXI.Graphics();
     islandLayer.addChild(g);
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (let y = 0; y < GRID_H; y += 1) {
-      for (let x = 0; x < GRID_W; x += 1) {
-        if (!map[y] || !map[y][x]) continue;
-        minX = Math.min(minX, x * cell);
-        minY = Math.min(minY, y * cell);
-        maxX = Math.max(maxX, (x + 1) * cell);
-        maxY = Math.max(maxY, (y + 1) * cell);
-      }
-    }
-    if (Number.isFinite(minX)) {
-      const w = maxX - minX;
-      const h = maxY - minY;
-      beginFill(g, 'rgba(12,32,92,0.35)', '#0c205c');
-      drawRoundedRect(g, minX - w * 0.04, minY - h * 0.045 + h * 0.015, w * 1.08, h * 1.09, Math.min(w, h) * 0.02);
-      g.endFill();
-    }
+    drawIslandWaterOutline(g, cell);
 
     const radius = cell * 0.22;
     const overlap = cell * 0.12;
@@ -3048,6 +3085,68 @@
     g.endFill();
   }
 
+  function getResourceAuraBounds(b, visual, now) {
+    const primitive = visual.primitive || (b.berryDef && b.berryDef.primitive) || {};
+    const centered = visual.type === 'centered' || primitive.kind === 'tree';
+    const x = pct2px(b.xPct);
+    const y = pct2px(b.yPct);
+    if (!centered) {
+      const r = pct2px(BUSH_R_PCT);
+      return { x, y, width: r * 2.8, height: r * 2.6, topY: y - r * 1.55, baseY: y + r * 0.28, primitive };
+    }
+    const scaleParts = getCenteredBushScale(now, b);
+    const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const fallbackH = pct2px(BUSH_R_PCT) * 5;
+    const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
+    const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
+    const width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
+    const height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
+    const anchorY = Number.isFinite(visual.anchorY) ? visual.anchorY : 0.86;
+    return { x, y, width, height, topY: y - height * anchorY, baseY: y, primitive };
+  }
+
+  function drawResourceAuraParticles(g, b, visual, now) {
+    if (!b || b.stage !== 'ripe') return;
+    const mature = clamp((now - b.t0 - BUSH_GROW_MS) / 700, 0, 1);
+    if (mature <= 0) return;
+    const bounds = getResourceAuraBounds(b, visual, now);
+    const tree = bounds.primitive.kind === 'tree';
+    const count = tree ? RESOURCE_AURA_PARTICLES + 3 : RESOURCE_AURA_PARTICLES;
+    const seedBase = ((b.uid || (b.gridX * 37 + b.gridY * 71)) * 97) % 1009;
+    const cell = getWorldCellPx();
+    for (let i = 0; i < count; i += 1) {
+      const seed = seedBase + i * 173;
+      const period = RESOURCE_AURA_PERIOD_MS * (0.82 + ((seed % 29) / 100));
+      const u = ((now + seed * 19) % period) / period;
+      const pulse = Math.sin(u * Math.PI);
+      const alpha = pulse * mature * (tree ? 0.46 : 0.38);
+      if (alpha <= 0.015) continue;
+      const spread = bounds.width * (tree ? 0.28 : 0.36);
+      const drift = bounds.height * (tree ? 0.3 : 0.42);
+      const startY = tree ? lerp(bounds.topY + bounds.height * 0.28, bounds.baseY - bounds.height * 0.12, (seed % 7) / 6) : bounds.baseY - bounds.height * 0.18;
+      const x = bounds.x + Math.sin(seed * 12.989 + u * Math.PI * 2.2) * spread * (0.35 + ((seed % 11) / 18));
+      const y = startY - u * drift + Math.cos(seed * 7.31 + u * Math.PI * 2) * Math.max(1, cell * 0.04);
+      const r = clamp(bounds.width * (0.014 + ((seed % 5) * 0.0025)), 1.5, tree ? 4.4 : 3.8);
+      g.beginFill(0xffe8a8, alpha * 0.48);
+      g.drawCircle(x, y, r * 2.35);
+      g.endFill();
+      g.beginFill(0xfffff2, alpha * 0.95);
+      g.drawCircle(x, y, r);
+      g.endFill();
+      if (u > 0.34 && u < 0.78) {
+        const lineAlpha = alpha * 0.42;
+        const l = r * 2.3;
+        g.lineStyle(Math.max(1, r * 0.36), 0xfff4be, lineAlpha);
+        g.moveTo(x - l, y);
+        g.lineTo(x + l, y);
+        g.moveTo(x, y - l);
+        g.lineTo(x, y + l);
+        g.lineStyle(0, 0xffffff, 0);
+      }
+    }
+  }
+
   function renderResources(now) {
     resourceGraphics.clear();
     resourceShadowGraphics.clear();
@@ -3069,6 +3168,7 @@
       if (b.woodChips && b.woodChips.length) b.woodChips.forEach((chip) => drawWoodChip(resourceGraphics, chip, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
       if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
+      drawResourceAuraParticles(resourceGraphics, b, visual, now);
       if (b.stage === 'exploded' && b.shadowFadeUntil && now < b.shadowFadeUntil) {
         drawResourceTreeShadow(b, visual, now, (b.shadowFadeUntil - now) / TREE_SHADOW_FADE_MS);
       }
