@@ -1126,8 +1126,10 @@
   function getUserState() {
     let user = safeJson('user', {});
     if (typeof user.money !== 'number' || Number.isNaN(user.money)) user.money = 0;
+    if (typeof user.rainbowStones !== 'number' || Number.isNaN(user.rainbowStones)) user.rainbowStones = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
     if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
+    ensureUserStats(user);
     if (BERRIES_LIST[0]) user.unlockedResources[BERRIES_LIST[0].id] = true;
     const campfire = buildingDefs.find((item) => item.id === 'campfire');
     if (campfire) user.unlockedResources[campfire.id] = true;
@@ -1137,6 +1139,52 @@
 
   function setUserState(user) {
     localStorage.setItem('user', JSON.stringify(user));
+  }
+
+  function getInventoryTotal(user) {
+    const inventory = user && user.inventory && typeof user.inventory === 'object' ? user.inventory : {};
+    return Object.values(inventory).reduce((sum, count) => {
+      const value = Math.max(0, Math.floor(Number(count) || 0));
+      return sum + value;
+    }, 0);
+  }
+
+  function ensureUserStats(user) {
+    if (!user.stats || typeof user.stats !== 'object' || Array.isArray(user.stats)) user.stats = {};
+    const stats = user.stats;
+    const moneyEarned = Math.max(0, Math.floor(Number(stats.moneyEarned) || 0));
+    const currentMoney = Math.max(0, Math.floor(Number(user.money) || 0));
+    stats.moneyEarned = Math.max(moneyEarned, currentMoney);
+    const legacyFoodCount = Math.max(0, Math.floor(Number(localStorage.getItem('berriesCollected') || 0) || 0));
+    const inventoryTotal = getInventoryTotal(user);
+    stats.itemsCollected = Math.max(0, Math.floor(Number(stats.itemsCollected) || 0), legacyFoodCount + inventoryTotal);
+    if (!stats.itemsCollectedById || typeof stats.itemsCollectedById !== 'object' || Array.isArray(stats.itemsCollectedById)) {
+      stats.itemsCollectedById = {};
+    }
+    Object.entries(user.inventory || {}).forEach(([id, count]) => {
+      stats.itemsCollectedById[id] = Math.max(
+        Math.floor(Number(stats.itemsCollectedById[id]) || 0),
+        Math.max(0, Math.floor(Number(count) || 0))
+      );
+    });
+    return stats;
+  }
+
+  function addMoneyEarnedStat(user, amount) {
+    const value = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!value) return;
+    const stats = ensureUserStats(user);
+    stats.moneyEarned = Math.max(0, Math.floor(Number(stats.moneyEarned) || 0)) + value;
+  }
+
+  function addItemCollectedStat(user, id, amount = 1) {
+    const value = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!value) return;
+    const stats = ensureUserStats(user);
+    stats.itemsCollected = Math.max(0, Math.floor(Number(stats.itemsCollected) || 0)) + value;
+    if (id) {
+      stats.itemsCollectedById[id] = Math.max(0, Math.floor(Number(stats.itemsCollectedById[id]) || 0)) + value;
+    }
   }
 
   function getUnlockedResourceIds() {
@@ -2613,6 +2661,7 @@
     const user = getUserState();
     if (!user.inventory || typeof user.inventory !== 'object') user.inventory = {};
     user.inventory[def.id] = Math.max(0, Number(user.inventory[def.id]) || 0) + 1;
+    addItemCollectedStat(user, def.id, 1);
     setUserState(user);
     localStorage.setItem('inventoryUpdatedAt', String(Date.now()));
   }
@@ -2627,7 +2676,10 @@
     }
     localStorage.setItem('berriesCollected', String((+localStorage.getItem('berriesCollected') || 0) + 1));
     const user = getUserState();
-    user.money = (user.money || 0) + getCollectProfit(be.def);
+    const profit = getCollectProfit(be.def);
+    user.money = (user.money || 0) + profit;
+    addMoneyEarnedStat(user, profit);
+    addItemCollectedStat(user, be.def && be.def.id, 1);
     setUserState(user);
   }
 

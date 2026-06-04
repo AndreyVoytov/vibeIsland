@@ -34,6 +34,7 @@
     './img/rare/colorado-beetle.png',
     './img/ui/inventory-bag.png',
     './img/ui/shine.png',
+    './img/ui/rainbow-stone.png',
     './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
     './img/scenario-drop/nail-puller.png',
     './img/scenario-drop/kettle.png',
@@ -51,6 +52,65 @@
     './img/mineable/dead_tree1.png',
     './img/mineable/snow_pine1.png',
   ].forEach((url) => KNOWN_LOCAL_ASSETS.add(url));
+
+  const QUESTS = [
+    {
+      id: 'earn-25',
+      type: 'moneyEarned',
+      title: 'Заработай 25',
+      target: 25,
+      reward: { type: 'rainbowStones', amount: 1 },
+    },
+    {
+      id: 'collect-8',
+      type: 'itemsCollected',
+      title: 'Собери 8 предметов',
+      target: 8,
+      reward: { type: 'money', amount: 30 },
+    },
+    {
+      id: 'earn-150',
+      type: 'moneyEarned',
+      title: 'Заработай 150',
+      target: 150,
+      reward: { type: 'rainbowStones', amount: 2 },
+    },
+    {
+      id: 'collect-25',
+      type: 'itemsCollected',
+      title: 'Собери 25 предметов',
+      target: 25,
+      reward: { type: 'money', amount: 120 },
+    },
+    {
+      id: 'earn-500',
+      type: 'moneyEarned',
+      title: 'Заработай 500',
+      target: 500,
+      reward: { type: 'rainbowStones', amount: 3 },
+    },
+    {
+      id: 'collect-60',
+      type: 'itemsCollected',
+      title: 'Собери 60 предметов',
+      target: 60,
+      reward: { type: 'money', amount: 320 },
+    },
+    {
+      id: 'earn-1500',
+      type: 'moneyEarned',
+      title: 'Заработай 1.5k',
+      target: 1500,
+      reward: { type: 'rainbowStones', amount: 5 },
+    },
+    {
+      id: 'collect-150',
+      type: 'itemsCollected',
+      title: 'Собери 150 предметов',
+      target: 150,
+      reward: { type: 'money', amount: 900 },
+    },
+  ];
 
   const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
@@ -357,6 +417,8 @@
   });
 
   const moneyValue = document.getElementById('moneyValue');
+  const gemValue = document.getElementById('gemValue');
+  const gemIcon = document.getElementById('gemIcon');
   const shopButton = document.getElementById('shopButton');
   const shopPanel = document.getElementById('shopPanel');
   const closePanel = document.getElementById('closePanel');
@@ -377,6 +439,18 @@
   const idleClose = document.getElementById('idleClose');
   const resourceList = document.getElementById('resourceList');
   const upgradeMarker = document.getElementById('upgradeMarker');
+  const questStage = document.getElementById('questStage');
+  const questTrackFill = document.getElementById('questTrackFill');
+  const questMilestones = document.getElementById('questMilestones');
+  const questCard = document.getElementById('questCard');
+  const questIcon = document.getElementById('questIcon');
+  const questTitle = document.getElementById('questTitle');
+  const questProgressFill = document.getElementById('questProgressFill');
+  const questProgressText = document.getElementById('questProgressText');
+  const questReward = document.getElementById('questReward');
+  const questRewardIcon = document.getElementById('questRewardIcon');
+  const questRewardValue = document.getElementById('questRewardValue');
+  const questClaim = document.getElementById('questClaim');
   const resourceCards = new Map();
   const EXPANSION_DELAY_MS = 1500;
   const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
@@ -396,6 +470,7 @@
   setImageWithFallback(document.getElementById('coinIcon'), 'coin');
   setImageWithFallback(document.getElementById('cartIcon'), 'cart');
   setImageWithFallback(document.getElementById('arrowIcon'), 'arrowUp');
+  setImageWithFallback(gemIcon, 'rainbowStone');
   if (inventoryIcon) inventoryIcon.src = knownAssetUrl('./img/ui/inventory-bag.png') || './img/ui/inventory-bag.png';
 
   function getUserState() {
@@ -406,8 +481,11 @@
       user = {};
     }
     if (typeof user.money !== 'number' || Number.isNaN(user.money)) user.money = 0;
+    if (typeof user.rainbowStones !== 'number' || Number.isNaN(user.rainbowStones)) user.rainbowStones = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
     if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
+    ensureUserStats(user);
+    ensureQuestState(user);
     const defaultUnlocks = [];
     const campfire = buildingResources.find((item) => item.id === 'campfire');
     if (campfire) defaultUnlocks.push(campfire.id);
@@ -419,6 +497,50 @@
 
   function setUserState(user) {
     localStorage.setItem('user', JSON.stringify(user));
+  }
+
+  function ensureUserStats(user) {
+    if (!user.stats || typeof user.stats !== 'object' || Array.isArray(user.stats)) user.stats = {};
+    const stats = user.stats;
+    const currentMoney = Math.max(0, Math.floor(Number(user.money) || 0));
+    stats.moneyEarned = Math.max(0, Math.floor(Number(stats.moneyEarned) || 0), currentMoney);
+    const legacyFoodCount = Math.max(0, Math.floor(Number(localStorage.getItem('berriesCollected') || 0) || 0));
+    const inventoryTotal = getInventoryTotal(user);
+    stats.itemsCollected = Math.max(0, Math.floor(Number(stats.itemsCollected) || 0), legacyFoodCount + inventoryTotal);
+    if (!stats.itemsCollectedById || typeof stats.itemsCollectedById !== 'object' || Array.isArray(stats.itemsCollectedById)) {
+      stats.itemsCollectedById = {};
+    }
+    Object.entries(user.inventory || {}).forEach(([id, count]) => {
+      stats.itemsCollectedById[id] = Math.max(
+        Math.floor(Number(stats.itemsCollectedById[id]) || 0),
+        Math.max(0, Math.floor(Number(count) || 0))
+      );
+    });
+    return stats;
+  }
+
+  function addMoneyEarnedStat(user, amount) {
+    const value = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!value) return;
+    const stats = ensureUserStats(user);
+    stats.moneyEarned = Math.max(0, Math.floor(Number(stats.moneyEarned) || 0)) + value;
+  }
+
+  function addItemCollectedStat(user, id, amount = 1) {
+    const value = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!value) return;
+    const stats = ensureUserStats(user);
+    stats.itemsCollected = Math.max(0, Math.floor(Number(stats.itemsCollected) || 0)) + value;
+    if (id) {
+      stats.itemsCollectedById[id] = Math.max(0, Math.floor(Number(stats.itemsCollectedById[id]) || 0)) + value;
+    }
+  }
+
+  function ensureQuestState(user) {
+    if (!user.questLine || typeof user.questLine !== 'object' || Array.isArray(user.questLine)) user.questLine = {};
+    const index = Math.floor(Number(user.questLine.index) || 0);
+    user.questLine.index = Math.min(Math.max(0, index), QUESTS.length);
+    return user.questLine;
   }
 
   function getHeroState() {
@@ -504,6 +626,7 @@
     if (result.income <= 0) return;
     const user = getUserState();
     user.money += result.income;
+    addMoneyEarnedStat(user, result.income);
     setUserState(user);
     showIdlePanel(result.income);
     renderResources();
@@ -618,9 +741,145 @@
     return { card, button, label, check };
   }
 
+  function formatCompactNumber(value) {
+    const number = Math.max(0, Math.floor(Number(value) || 0));
+    if (number >= 1000000) {
+      const rounded = number / 1000000;
+      return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}m`;
+    }
+    if (number >= 1000) {
+      const rounded = number / 1000;
+      return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}k`;
+    }
+    return String(number);
+  }
+
+  function getQuestCurrent(quest, user) {
+    const stats = ensureUserStats(user);
+    if (quest.type === 'moneyEarned') return Math.floor(Number(stats.moneyEarned) || 0);
+    if (quest.type === 'itemsCollected') return Math.floor(Number(stats.itemsCollected) || 0);
+    return 0;
+  }
+
+  function getQuestIconUrl(quest) {
+    if (quest && quest.type === 'moneyEarned') return uiConfig.uiAssets.coin || {};
+    return { url: './img/ui/inventory-bag.png' };
+  }
+
+  function getRewardIconAsset(reward) {
+    if (reward && reward.type === 'rainbowStones') return uiConfig.uiAssets.rainbowStone || {};
+    return uiConfig.uiAssets.coin || {};
+  }
+
+  function setUiAssetImage(img, asset) {
+    if (!img) return;
+    if (asset && asset.url && knownAssetUrl(asset.url)) {
+      img.src = asset.url;
+      img.onerror = () => {
+        if (asset.fallback) img.src = asset.fallback;
+      };
+      return;
+    }
+    if (asset && asset.fallback) {
+      img.src = asset.fallback;
+      return;
+    }
+    if (asset && asset.url) {
+      img.src = asset.url;
+      img.onerror = () => { img.style.visibility = 'hidden'; };
+      return;
+    }
+    img.style.visibility = 'hidden';
+  }
+
+  function buildQuestMilestones() {
+    if (!questMilestones || questMilestones.childElementCount) return;
+    QUESTS.forEach((quest, index) => {
+      const dot = document.createElement('span');
+      dot.className = 'quest-milestone';
+      dot.style.left = `${((index + 0.5) / QUESTS.length) * 100}%`;
+      dot.dataset.questId = quest.id;
+      questMilestones.appendChild(dot);
+    });
+  }
+
+  function applyQuestReward(user, reward) {
+    const amount = Math.max(0, Math.floor(Number(reward && reward.amount) || 0));
+    if (!amount) return;
+    if (reward.type === 'rainbowStones') {
+      user.rainbowStones = Math.max(0, Math.floor(Number(user.rainbowStones) || 0)) + amount;
+      return;
+    }
+    user.money = Math.max(0, Math.floor(Number(user.money) || 0)) + amount;
+    addMoneyEarnedStat(user, amount);
+  }
+
+  function claimQuestReward() {
+    const user = getUserState();
+    const questState = ensureQuestState(user);
+    const index = questState.index;
+    const quest = QUESTS[index];
+    if (!quest) return;
+    const current = getQuestCurrent(quest, user);
+    if (current < quest.target) return;
+    applyQuestReward(user, quest.reward);
+    questState.index = Math.min(index + 1, QUESTS.length);
+    questState.updatedAt = Date.now();
+    setUserState(user);
+    renderResources();
+    renderInventory();
+    renderQuestLine();
+  }
+
+  function renderQuestLine() {
+    buildQuestMilestones();
+    const user = getUserState();
+    const questState = ensureQuestState(user);
+    const index = questState.index;
+    const quest = QUESTS[index];
+    const done = !quest;
+    const target = quest ? Math.max(1, Math.floor(Number(quest.target) || 1)) : 1;
+    const current = quest ? getQuestCurrent(quest, user) : target;
+    const progress = done ? 1 : Math.min(1, current / target);
+    const totalProgress = QUESTS.length ? ((Math.min(index, QUESTS.length) + progress) / QUESTS.length) * 100 : 100;
+
+    if (questStage) questStage.textContent = `1-${Math.min(index + 1, QUESTS.length)}`;
+    if (questTrackFill) questTrackFill.style.width = `${Math.min(100, Math.max(0, totalProgress))}%`;
+    if (questMilestones) {
+      Array.from(questMilestones.children).forEach((dot, dotIndex) => {
+        dot.classList.toggle('done', dotIndex < index || done);
+        dot.classList.toggle('current', dotIndex === index && !done);
+        dot.classList.toggle('ready', dotIndex === index && !done && progress >= 1);
+      });
+    }
+
+    if (!questCard || !questTitle) return;
+    questCard.classList.toggle('finished', done);
+    questCard.classList.toggle('complete', !done && progress >= 1);
+
+    if (done) {
+      setUiAssetImage(questIcon, uiConfig.uiAssets.rainbowStone || {});
+      questTitle.textContent = 'Все задания выполнены';
+      if (questProgressFill) questProgressFill.style.width = '100%';
+      if (questProgressText) questProgressText.textContent = '';
+      return;
+    }
+
+    setUiAssetImage(questIcon, getQuestIconUrl(quest));
+    questTitle.textContent = progress >= 1 ? 'Награда' : quest.title;
+    if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
+    if (questProgressText) {
+      questProgressText.textContent = `${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)}`;
+    }
+    if (questReward) questReward.style.display = '';
+    if (questRewardIcon) setUiAssetImage(questRewardIcon, getRewardIconAsset(quest.reward));
+    if (questRewardValue) questRewardValue.textContent = `x${formatCompactNumber(quest.reward && quest.reward.amount)}`;
+  }
+
   function renderResources() {
     const user = getUserState();
     moneyValue.textContent = user.money;
+    if (gemValue) gemValue.textContent = formatCompactNumber(user.rainbowStones);
     let canUpgrade = false;
     resources.forEach((res) => {
       const unlocked = !!user.unlockedResources[res.id];
@@ -712,6 +971,7 @@
     const user = getUserState();
     if (!user.inventory || typeof user.inventory !== 'object') user.inventory = {};
     user.inventory[id] = Math.max(0, Number(user.inventory[id]) || 0) + 1;
+    addItemCollectedStat(user, id, 1);
     setUserState(user);
     localStorage.setItem('inventoryUpdatedAt', String(Date.now()));
     renderInventory();
@@ -851,6 +1111,7 @@
   if (inventoryButton) inventoryButton.addEventListener('click', () => toggleInventory());
   if (closeInventory) closeInventory.addEventListener('click', () => toggleInventory(false));
   if (findingOk) findingOk.addEventListener('click', finishFindingItem);
+  if (questClaim) questClaim.addEventListener('click', claimQuestReward);
   window.addEventListener('vibe-found-item', (event) => showFindingItem(event.detail || {}));
   panelOverlay.addEventListener('click', () => {
     togglePanel(false);
@@ -863,6 +1124,7 @@
   setLastActiveAt();
   renderResources();
   renderInventory();
+  renderQuestLine();
   try {
     const pendingFinding = JSON.parse(localStorage.getItem(PENDING_FOUND_ITEM_KEY) || 'null');
     if (pendingFinding && pendingFinding.id) setTimeout(() => showFindingItem(pendingFinding), 300);
@@ -872,10 +1134,12 @@
   setInterval(() => {
     renderResources();
     renderInventory();
+    renderQuestLine();
   }, 400);
   window.addEventListener('storage', () => {
     renderResources();
     renderInventory();
+    renderQuestLine();
   });
   window.addEventListener('pagehide', setLastActiveAt);
   window.addEventListener('beforeunload', setLastActiveAt);

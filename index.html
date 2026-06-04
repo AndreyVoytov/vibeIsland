@@ -57,10 +57,19 @@
       pointer-events:none;
       z-index:2;
     }
-    .money-pill{
+    .wallet-row{
       position:absolute;
       top:14px;
       right:14px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      pointer-events:none;
+      z-index:7;
+    }
+    .money-pill,
+    .gem-pill{
+      position:static;
       display:flex;
       align-items:center;
       gap:8px;
@@ -70,8 +79,227 @@
       box-shadow:0 4px 12px rgba(0,0,0,0.35);
       pointer-events:auto;
     }
-    .money-pill img{width:20px;height:20px;display:block;}
-    .money-pill span{font-weight:600;font-size:16px;}
+    .money-pill img,
+    .gem-pill img{width:20px;height:20px;display:block;object-fit:contain;}
+    .money-pill span,
+    .gem-pill span{font-weight:600;font-size:16px;}
+    .quest-strip{
+      position:absolute;
+      top:14px;
+      left:14px;
+      right:188px;
+      height:34px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      pointer-events:auto;
+      z-index:6;
+    }
+    .quest-level-pill{
+      min-width:54px;
+      height:32px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:linear-gradient(180deg,#f8fbff,#d5eaff);
+      border:2px solid #357fc7;
+      color:#1d5b96;
+      font-size:14px;
+      font-weight:800;
+      box-shadow:0 3px 8px rgba(0,0,0,0.22);
+      flex-shrink:0;
+    }
+    .quest-track{
+      position:relative;
+      height:12px;
+      flex:1;
+      min-width:72px;
+      border-radius:999px;
+      background:#efe3d6;
+      box-shadow:inset 0 2px 3px rgba(0,0,0,0.26), 0 2px 7px rgba(0,0,0,0.2);
+      overflow:visible;
+    }
+    .quest-track-fill{
+      position:absolute;
+      left:0;
+      top:0;
+      height:100%;
+      width:0%;
+      border-radius:999px;
+      background:linear-gradient(90deg,#28cf6b,#20b9f2);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.45);
+      transition:width 0.25s ease;
+    }
+    .quest-milestones{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+    }
+    .quest-milestone{
+      position:absolute;
+      top:50%;
+      width:22px;
+      height:22px;
+      border-radius:999px;
+      transform:translate(-50%, -50%);
+      background:#f3b535;
+      border:2px solid rgba(84,48,14,0.45);
+      box-shadow:0 2px 5px rgba(0,0,0,0.24);
+    }
+    .quest-milestone.done,
+    .quest-milestone.ready{
+      background:#35cf64;
+      border-color:#1f8d3f;
+    }
+    .quest-milestone.current{
+      width:24px;
+      height:24px;
+      box-shadow:0 0 0 3px rgba(255,255,255,0.45), 0 2px 5px rgba(0,0,0,0.28);
+    }
+    .quest-milestone::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:7px;
+      height:7px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.78);
+      transform:translate(-50%, -50%);
+    }
+    .quest-milestone.done::after,
+    .quest-milestone.ready::after{
+      width:10px;
+      height:6px;
+      border-left:3px solid #fff;
+      border-bottom:3px solid #fff;
+      border-radius:0;
+      background:transparent;
+      transform:translate(-50%, -62%) rotate(-45deg);
+    }
+    .quest-card{
+      position:absolute;
+      top:56px;
+      left:50%;
+      transform:translateX(-50%);
+      width:min(330px, calc(100% - 132px));
+      min-height:50px;
+      display:grid;
+      grid-template-columns:42px 1fr auto;
+      align-items:center;
+      gap:10px;
+      padding:8px 10px;
+      border-radius:12px;
+      background:#f3dfc6;
+      border:2px solid rgba(71,49,34,0.45);
+      box-shadow:0 6px 14px rgba(0,0,0,0.28);
+      color:#3f2a19;
+      pointer-events:auto;
+      z-index:6;
+      box-sizing:border-box;
+      transition:background 0.2s ease, transform 0.2s ease;
+    }
+    .quest-card.complete{
+      background:#49ef24;
+      border-color:#219a26;
+      color:#174b12;
+    }
+    .quest-icon{
+      width:38px;
+      height:38px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.62);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.65);
+    }
+    .quest-icon img{
+      width:28px;
+      height:28px;
+      object-fit:contain;
+    }
+    .quest-main{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .quest-title{
+      font-size:14px;
+      line-height:1.1;
+      font-weight:800;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .quest-progress-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .quest-progress{
+      height:9px;
+      flex:1;
+      min-width:54px;
+      border-radius:999px;
+      background:rgba(66,47,28,0.22);
+      overflow:hidden;
+    }
+    .quest-progress-fill{
+      height:100%;
+      width:0%;
+      border-radius:999px;
+      background:#18bce9;
+      transition:width 0.25s ease;
+    }
+    .quest-card.complete .quest-progress-fill{background:#fff;}
+    .quest-progress-text{
+      min-width:44px;
+      text-align:right;
+      font-size:12px;
+      font-weight:800;
+    }
+    .quest-reward{
+      display:flex;
+      align-items:center;
+      gap:5px;
+      justify-content:flex-end;
+      min-width:58px;
+      font-size:13px;
+      font-weight:900;
+    }
+    .quest-reward img{
+      width:20px;
+      height:20px;
+      object-fit:contain;
+    }
+    .quest-claim{
+      width:34px;
+      height:34px;
+      border:none;
+      border-radius:999px;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      background:#18b34b;
+      color:#fff;
+      font-size:22px;
+      line-height:1;
+      font-weight:900;
+      box-shadow:0 3px 8px rgba(0,0,0,0.28);
+      cursor:pointer;
+    }
+    .quest-card.complete .quest-reward{display:none;}
+    .quest-card.complete .quest-claim{display:flex;}
+    .quest-card.finished{
+      grid-template-columns:42px 1fr;
+      width:min(300px, calc(100% - 132px));
+    }
+    .quest-card.finished .quest-reward,
+    .quest-card.finished .quest-claim,
+    .quest-card.finished .quest-progress-row{display:none;}
     .shop-button{
       position:absolute;
       bottom:16px;
@@ -418,6 +646,29 @@
       background:#2ecc71;
       color:#0d2b0f;
     }
+    @media (max-width:600px){
+      .wallet-row{
+        top:10px;
+        right:10px;
+      }
+      .money-pill,
+      .gem-pill{
+        padding:5px 9px;
+        gap:6px;
+      }
+      .money-pill span,
+      .gem-pill span{font-size:15px;}
+      .quest-strip{
+        top:54px;
+        left:10px;
+        right:10px;
+      }
+      .quest-card{
+        top:94px;
+        width:calc(100% - 20px);
+      }
+      .quest-card.finished{width:calc(100% - 20px);}
+    }
     .resource-card.available .unlock-button span{color:rgba(13,43,15,0.55);}
     .unlock-button.locked{
       background:rgba(220,80,80,0.35);
@@ -446,9 +697,41 @@
   <div id="gameShell">
     <div id="pixiMount"></div>
     <div id="uiRoot">
-      <div class="money-pill" data-ui-control>
-        <img id="coinIcon" alt="coin" />
-        <span id="moneyValue">0</span>
+      <div class="quest-strip" data-ui-control>
+        <div id="questStage" class="quest-level-pill">1-1</div>
+        <div class="quest-track">
+          <div id="questTrackFill" class="quest-track-fill"></div>
+          <div id="questMilestones" class="quest-milestones"></div>
+        </div>
+      </div>
+      <div id="questCard" class="quest-card" data-ui-control>
+        <div class="quest-icon">
+          <img id="questIcon" alt="quest" />
+        </div>
+        <div class="quest-main">
+          <div id="questTitle" class="quest-title">Задание</div>
+          <div class="quest-progress-row">
+            <div class="quest-progress">
+              <div id="questProgressFill" class="quest-progress-fill"></div>
+            </div>
+            <div id="questProgressText" class="quest-progress-text">0/0</div>
+          </div>
+        </div>
+        <div id="questReward" class="quest-reward">
+          <img id="questRewardIcon" alt="reward" />
+          <span id="questRewardValue">0</span>
+        </div>
+        <button id="questClaim" class="quest-claim" type="button" aria-label="Забрать награду" data-ui-control>✓</button>
+      </div>
+      <div class="wallet-row" data-ui-control>
+        <div class="money-pill">
+          <img id="coinIcon" alt="coin" />
+          <span id="moneyValue">0</span>
+        </div>
+        <div class="gem-pill">
+          <img id="gemIcon" alt="rainbow stones" />
+          <span id="gemValue">0</span>
+        </div>
       </div>
       <button id="shopButton" class="shop-button" aria-label="Открыть магазин" data-ui-control>
         <img id="cartIcon" alt="cart" />
@@ -497,9 +780,9 @@
   <script src="./berries-config.js?v=20260605-material-inventory"></script>
   <script src="./buildings-config.js"></script>
   <script src="./scenario-objects-config.js?v=20260605-material-inventory"></script>
-  <script src="./ui-config.js"></script>
+  <script src="./ui-config.js?v=20260605-quests"></script>
   <script src="./enlarge-config.js"></script>
-  <script src="./pixi-game.js?v=20260605-drop-outlines"></script>
-  <script src="./pixi-ui.js?v=20260605-visual-polish"></script>
+  <script src="./pixi-game.js?v=20260605-quests"></script>
+  <script src="./pixi-ui.js?v=20260605-quests"></script>
 </body>
 </html>

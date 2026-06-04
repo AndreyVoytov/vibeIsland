@@ -36,6 +36,21 @@
           '</svg>'
       ),
     },
+    rainbowStone: {
+      url: './img/ui/rainbow-stone.png',
+      fallback: svgDataUri(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
+          "<path d='M9 24l10-13h26l10 13-23 34z' fill='#ffffff' opacity='0.95'/>" +
+          "<path d='M12 25l9-11 8 11z' fill='#72eaff'/>" +
+          "<path d='M21 14h16l-8 11z' fill='#eaffff'/>" +
+          "<path d='M37 14h8l7 11H29z' fill='#ffe65a'/>" +
+          "<path d='M12 25h17L32 58z' fill='#2489ff'/>" +
+          "<path d='M29 25h23L32 58z' fill='#ff4fc4'/>" +
+          "<path d='M23 38l9 20 9-20z' fill='#4df0ff' opacity='0.85'/>" +
+          "<path d='M9 24l10-13h26l10 13-23 34z' fill='none' stroke='#2b79b8' stroke-width='2'/>" +
+          '</svg>'
+      ),
+    },
     arrowUp: {
       url: './img/ui/arrow-up.png',
       fallback: svgDataUri(
