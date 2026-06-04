@@ -46,6 +46,7 @@
   const WOOD_CHIP_SPD_MAX = 14;
   const TREE_CHOP_SHAKE_MS = 520;
   const TREE_CHOP_SHAKE_ROT = 0.11;
+  const TREE_SHADOW_FADE_MS = 300;
   const BERRY_R_PCT = 1.2;
   const BUSH_R_PCT = 3.7;
   const BUSH_TOP_GROW_MULT = 1.2;
@@ -118,6 +119,7 @@
   const HORIZON_LINE_Y_RATIO = 0.67;
   const HORIZON_SIDE_PAD_MULT = 3.6;
   const HORIZON_BOTTOM_FADE_RATIO = 0.34;
+  const HORIZON_EDGE_SAMPLE_PX = 5;
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
@@ -349,7 +351,7 @@
   worldRoot.sortableChildren = true;
   worldRoot.zIndex = 1;
   const cloudLayer = new PIXI.Container();
-  cloudLayer.zIndex = 0.5;
+  cloudLayer.zIndex = 3.35;
   cloudLayer.eventMode = 'none';
   cloudLayer.interactiveChildren = false;
   const screenLayer = new PIXI.Container();
@@ -442,6 +444,9 @@
   let nextWaterBurstDelay = 0;
   let horizonSprite = null;
   let horizonBackdropGraphics = null;
+  let horizonBackdropTexture = null;
+  let horizonLeftEdgeSprite = null;
+  let horizonRightEdgeSprite = null;
   let horizonFadeGraphics = null;
 
   const buildingDefs = buildingsConfig.buildings || [];
@@ -485,11 +490,35 @@
     return toHexColor((r << 16) + (g << 8) + blue);
   }
 
-  function drawHorizonBackdrop(x, y, width, height) {
+  function ensureHorizonEdgeSprites(texture) {
     if (!horizonBackdropGraphics) {
-      horizonBackdropGraphics = new PIXI.Graphics();
+      horizonBackdropGraphics = new PIXI.Container();
+      horizonBackdropGraphics.eventMode = 'none';
+      horizonBackdropGraphics.interactiveChildren = false;
       horizonLayer.addChildAt(horizonBackdropGraphics, 0);
     }
+    if (horizonBackdropTexture === texture && horizonLeftEdgeSprite && horizonRightEdgeSprite) return;
+    horizonBackdropGraphics.removeChildren();
+    horizonBackdropTexture = texture;
+    const frame = texture.frame || new PIXI.Rectangle(0, 0, texture.width, texture.height);
+    const strip = Math.max(1, Math.min(HORIZON_EDGE_SAMPLE_PX, Math.floor(frame.width / 2)));
+    const leftTexture = new PIXI.Texture(
+      texture.baseTexture,
+      new PIXI.Rectangle(frame.x, frame.y, strip, frame.height)
+    );
+    const rightTexture = new PIXI.Texture(
+      texture.baseTexture,
+      new PIXI.Rectangle(frame.x + frame.width - strip, frame.y, strip, frame.height)
+    );
+    horizonLeftEdgeSprite = new PIXI.Sprite(leftTexture);
+    horizonRightEdgeSprite = new PIXI.Sprite(rightTexture);
+    horizonLeftEdgeSprite.anchor.set(0, 0);
+    horizonRightEdgeSprite.anchor.set(0, 0);
+    horizonBackdropGraphics.addChild(horizonLeftEdgeSprite, horizonRightEdgeSprite);
+  }
+
+  function drawHorizonBackdrop(x, y, width, height, texture) {
+    ensureHorizonEdgeSprites(texture);
     if (!horizonFadeGraphics) {
       horizonFadeGraphics = new PIXI.Graphics();
       horizonLayer.addChild(horizonFadeGraphics);
@@ -497,20 +526,17 @@
     const sidePad = Math.max(gameWidth * HORIZON_SIDE_PAD_MULT, getWorldWidth() * 0.9);
     const bx = x - sidePad;
     const bw = width + sidePad * 2;
-    const bands = [
-      [0, 0.22, 0xb45fa6],
-      [0.22, 0.43, 0xef6e74],
-      [0.43, 0.62, 0xffad65],
-      [0.62, 0.69, 0xffd56f],
-      [0.69, 0.78, 0x3475d5],
-      [0.78, 1, 0x1e6fff],
-    ];
-    horizonBackdropGraphics.clear();
-    bands.forEach(([from, to, color]) => {
-      horizonBackdropGraphics.beginFill(color, 1);
-      horizonBackdropGraphics.drawRect(bx, y + height * from, bw, Math.ceil(height * (to - from)) + 1);
-      horizonBackdropGraphics.endFill();
-    });
+    horizonBackdropGraphics.visible = true;
+    horizonLeftEdgeSprite.x = bx;
+    horizonLeftEdgeSprite.y = y;
+    horizonLeftEdgeSprite.width = sidePad + 1;
+    horizonLeftEdgeSprite.height = height;
+    horizonLeftEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
+    horizonRightEdgeSprite.x = x + width - 1;
+    horizonRightEdgeSprite.y = y;
+    horizonRightEdgeSprite.width = sidePad + 1;
+    horizonRightEdgeSprite.height = height;
+    horizonRightEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
 
     horizonFadeGraphics.clear();
     const fadeStart = y + height * (1 - HORIZON_BOTTOM_FADE_RATIO);
@@ -547,7 +573,7 @@
     horizonSprite.width = width;
     horizonSprite.height = height;
     horizonSprite.alpha = 0.88;
-    drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height);
+    drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height, texture);
     if (horizonFadeGraphics && horizonFadeGraphics.parent === horizonLayer) horizonLayer.setChildIndex(horizonFadeGraphics, horizonLayer.children.length - 1);
   }
 
@@ -2335,6 +2361,7 @@
     b.extractStage = nextStage;
     if (b.extractStage >= stages.length) {
       b.stage = 'exploded';
+      if (isTreeDef(b.berryDef)) b.shadowFadeUntil = now + TREE_SHADOW_FADE_MS;
       busy.delete(cellKey(b.gridX, b.gridY));
       unregisterResourceCollider(b);
       clearResourceChopTarget(b);
@@ -2698,6 +2725,23 @@
     return primitive.kind === 'tree';
   }
 
+  function drawResourceTreeShadow(b, visual, now, alpha = 1) {
+    if (!shouldDrawTreeShadow(b, visual)) return;
+    const scaleParts = getCenteredBushScale(now, b);
+    const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const fallbackH = pct2px(BUSH_R_PCT) * 5;
+    const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
+    const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
+    const width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
+    const height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
+    const x = pct2px(b.xPct);
+    const y = pct2px(b.yPct);
+    beginFill(resourceShadowGraphics, `rgba(0,0,0,${0.24 * clamp(alpha, 0, 1)})`, '#000000');
+    resourceShadowGraphics.drawEllipse(x, y + height * 0.045, width * 0.28, Math.max(3, height * 0.045));
+    resourceShadowGraphics.endFill();
+  }
+
   function getTreeChopRotation(b, now) {
     if (!b || !b.chopHitAt || !isTreeDef(b.berryDef)) return 0;
     const t = (now - b.chopHitAt) / TREE_CHOP_SHAKE_MS;
@@ -2730,11 +2774,7 @@
     const y = pct2px(b.yPct);
     const width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
     const height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
-    if (shouldDrawTreeShadow(b, visual)) {
-      beginFill(resourceShadowGraphics, 'rgba(0,0,0,0.24)', '#000000');
-      resourceShadowGraphics.drawEllipse(x, y + height * 0.045, width * 0.28, Math.max(3, height * 0.045));
-      resourceShadowGraphics.endFill();
-    }
+    drawResourceTreeShadow(b, visual, now, 1);
     sprite.visible = true;
     sprite.anchor.set(0.5, Number.isFinite(visual.anchorY) ? visual.anchorY : 0.86);
     sprite.x = x;
@@ -2953,6 +2993,9 @@
       if (b.woodChips && b.woodChips.length) b.woodChips.forEach((chip) => drawWoodChip(resourceGraphics, chip, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
       if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
+      if (b.stage === 'exploded' && b.shadowFadeUntil && now < b.shadowFadeUntil) {
+        drawResourceTreeShadow(b, visual, now, (b.shadowFadeUntil - now) / TREE_SHADOW_FADE_MS);
+      }
     });
     scenarioDrops.forEach((drop) => {
       drawBerry(resourceGraphics, drop, activeBerrySpriteIds);
