@@ -23,7 +23,7 @@
   const DEFAULT_MAP_WIDTH = 25;
   const DEFAULT_MAP_HEIGHT = 25;
   const DEFAULT_ISLAND_SIZE = 18;
-  const WORLD_ZOOM = 1.15;
+  const WORLD_ZOOM = 1.265;
   const BASE_CELL_PX = 28;
 
   const SPAWN_MS = 1000;
@@ -113,6 +113,8 @@
   const SUNSET_HORIZON_ASSET = './img/sea/sunset-horizon.png';
   const HORIZON_WATER_GAP_CELLS = 2.8;
   const HORIZON_LINE_Y_RATIO = 0.67;
+  const HORIZON_SIDE_PAD_MULT = 3.6;
+  const HORIZON_BOTTOM_FADE_RATIO = 0.34;
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
@@ -171,6 +173,8 @@
     './img/berry/beet-bush.png',
     './img/berry/radish-bush.png',
     './img/berry/potato-bush.png',
+    './img/rare/pine-cone.png',
+    './img/rare/colorado-beetle.png',
   ];
 
   const BUILDING_IMAGE_ASSETS = [
@@ -206,6 +210,8 @@
     './img/building/campfire2.png',
     './img/island_shadow.png',
     './img/tiles/1.png',
+    './img/tiles/dead.png',
+    './img/tiles/snow.png',
     './images/scenario/wood-crate-fallback.svg',
     './images/scenario/suitcase-fallback.svg',
     './images/scenario/radio-buoy-fallback.svg',
@@ -423,13 +429,17 @@
   const waterBursts = [];
   let nextWaterBurstDelay = 0;
   let horizonSprite = null;
+  let horizonBackdropGraphics = null;
+  let horizonFadeGraphics = null;
 
   const buildingDefs = buildingsConfig.buildings || [];
   const buildingById = new Map(buildingDefs.map((item) => [item.id, item]));
   const scenarioObjects = Array.isArray(scenarioConfig.objects) ? scenarioConfig.objects : [];
   const scenarioById = new Map(scenarioObjects.map((obj) => [obj.id, obj]));
   const BERRIES_LIST = Array.isArray(berriesConfig.berries) ? berriesConfig.berries : [];
+  const INVENTORY_ITEMS = Array.isArray(berriesConfig.inventoryItems) ? berriesConfig.inventoryItems : [];
   const resourceById = new Map(BERRIES_LIST.map((item) => [item.id, item]));
+  const inventoryItemById = new Map(INVENTORY_ITEMS.map((item) => [item.id, item]));
   const getResourceWeight = typeof berriesConfig.getResourceWeight === 'function'
     ? berriesConfig.getResourceWeight
     : () => 1;
@@ -461,6 +471,45 @@
     return toHexColor((r << 16) + (g << 8) + blue);
   }
 
+  function drawHorizonBackdrop(x, y, width, height) {
+    if (!horizonBackdropGraphics) {
+      horizonBackdropGraphics = new PIXI.Graphics();
+      horizonLayer.addChildAt(horizonBackdropGraphics, 0);
+    }
+    if (!horizonFadeGraphics) {
+      horizonFadeGraphics = new PIXI.Graphics();
+      horizonLayer.addChild(horizonFadeGraphics);
+    }
+    const sidePad = Math.max(gameWidth * HORIZON_SIDE_PAD_MULT, getWorldWidth() * 0.9);
+    const bx = x - sidePad;
+    const bw = width + sidePad * 2;
+    const bands = [
+      [0, 0.22, 0xb45fa6],
+      [0.22, 0.43, 0xef6e74],
+      [0.43, 0.62, 0xffad65],
+      [0.62, 0.69, 0xffd56f],
+      [0.69, 0.78, 0x3475d5],
+      [0.78, 1, 0x1e6fff],
+    ];
+    horizonBackdropGraphics.clear();
+    bands.forEach(([from, to, color]) => {
+      horizonBackdropGraphics.beginFill(color, 1);
+      horizonBackdropGraphics.drawRect(bx, y + height * from, bw, Math.ceil(height * (to - from)) + 1);
+      horizonBackdropGraphics.endFill();
+    });
+
+    horizonFadeGraphics.clear();
+    const fadeStart = y + height * (1 - HORIZON_BOTTOM_FADE_RATIO);
+    const steps = 18;
+    for (let i = 0; i < steps; i += 1) {
+      const t = i / Math.max(1, steps - 1);
+      const alpha = t * t * 0.98;
+      horizonFadeGraphics.beginFill(0x1e6fff, alpha);
+      horizonFadeGraphics.drawRect(bx, fadeStart + (height - (fadeStart - y)) * (i / steps), bw, Math.ceil((height * HORIZON_BOTTOM_FADE_RATIO) / steps) + 1);
+      horizonFadeGraphics.endFill();
+    }
+  }
+
   function renderHorizon() {
     const texture = getTexture(SUNSET_HORIZON_ASSET);
     if (!texture) return;
@@ -484,6 +533,8 @@
     horizonSprite.width = width;
     horizonSprite.height = height;
     horizonSprite.alpha = 0.88;
+    drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height);
+    if (horizonFadeGraphics && horizonFadeGraphics.parent === horizonLayer) horizonLayer.setChildIndex(horizonFadeGraphics, horizonLayer.children.length - 1);
   }
 
   function createCloud(index) {
@@ -677,8 +728,8 @@
 
   const SURFACE_DEFS = {
     grass: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
-    dead: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
-    snow: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
+    dead: { color: '#706a4b', edge: '#514b38', soil: '#5b4430', tileUrl: './img/tiles/dead.png' },
+    snow: { color: '#dff4ff', edge: '#9cc8d2', soil: '#756555', tileUrl: './img/tiles/snow.png' },
   };
 
   function getTileSurfaceType(value) {
@@ -689,6 +740,11 @@
 
   function getSurfaceDef(value) {
     return SURFACE_DEFS[getTileSurfaceType(value)] || SURFACE_DEFS.grass;
+  }
+
+  function getTileTextureForCell(value) {
+    const surface = getSurfaceDef(value);
+    return getTexture(surface.tileUrl || './img/tiles/1.png') || getTexture('./img/tiles/1.png');
   }
 
   function getTileSurfaceColor(value) {
@@ -914,7 +970,6 @@
     }
     g.endFill();
 
-    const tileTexture = getTexture('./img/tiles/1.png');
     for (let y = 0; y < GRID_H; y += 1) {
       for (let x = 0; x < GRID_W; x += 1) {
         const cellValue = map[y] && map[y][x];
@@ -923,6 +978,7 @@
         const sy = y * cell - overlap / 2;
         const ww = cell + overlap;
         const hh = cell + overlap;
+        const tileTexture = getTileTextureForCell(cellValue);
         if (tileTexture) {
           const sprite = new PIXI.Sprite(tileTexture);
           sprite.x = sx;
@@ -955,6 +1011,7 @@
     let user = safeJson('user', {});
     if (typeof user.money !== 'number' || Number.isNaN(user.money)) user.money = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
+    if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
     if (BERRIES_LIST[0]) user.unlockedResources[BERRIES_LIST[0].id] = true;
     const campfire = buildingDefs.find((item) => item.id === 'campfire');
     if (campfire) user.unlockedResources[campfire.id] = true;
@@ -2032,7 +2089,8 @@
     if (!rule || typeof rule !== 'object') return null;
     if (rule.def && typeof rule.def === 'object') return rule.def;
     const id = rule.id || rule.resourceId || rule.dropId;
-    return id ? resourceById.get(id) : null;
+    if (!id) return null;
+    return inventoryItemById.get(id) || resourceById.get(id);
   }
 
   function shouldRollRareDrop(rule, phase) {
@@ -2118,7 +2176,6 @@
     b.extractStage = nextStage;
     if (b.extractStage >= stages.length) {
       b.stage = 'exploded';
-      if (isTreeDef(b.berryDef)) b.felledVisualUntil = now + TREE_CHOP_SHAKE_MS;
       busy.delete(cellKey(b.gridX, b.gridY));
       unregisterResourceCollider(b);
       clearResourceChopTarget(b);
@@ -2193,6 +2250,7 @@
           const to = clampToLandSafe(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT, avoidSet);
           Object.assign(be, { x0: be.xPct, y0: be.yPct, tx: to.xPct, ty: to.yPct, flying: true, tFly0: now, flyDur: BERRY_FLY_MS, onBush: false, scale: 1 });
         });
+        spawnRareDrops(b, now, avoidSet, 'final');
         b.stage = 'exploded';
         busy.delete(cellKey(b.gridX, b.gridY));
         localStorage.setItem('heroAction', JSON.stringify({ chopAt: now }));
@@ -2209,15 +2267,31 @@
       });
       updateFlyingParticles(b, now);
       const hasWoodChips = Boolean(b.woodChips && b.woodChips.length);
-      const hasFelledVisual = Boolean(b.felledVisualUntil && now < b.felledVisualUntil);
-      if (!b.leafs.length && !hasWoodChips && !hasFelledVisual && b.berries.every((be) => !be.alive)) b.stage = 'dead';
+      if (!b.leafs.length && !hasWoodChips && b.berries.every((be) => !be.alive)) b.stage = 'dead';
     }
+  }
+
+  function isInventoryDropDef(def) {
+    return Boolean(def && (def.inventoryItem || inventoryItemById.has(def.id)));
+  }
+
+  function collectInventoryDrop(def) {
+    if (!def || !def.id) return;
+    const user = getUserState();
+    if (!user.inventory || typeof user.inventory !== 'object') user.inventory = {};
+    user.inventory[def.id] = Math.max(0, Number(user.inventory[def.id]) || 0) + 1;
+    setUserState(user);
+    localStorage.setItem('inventoryUpdatedAt', String(Date.now()));
   }
 
   function collectBerryInstant(be) {
     if (!be || !be.alive) return;
     be.alive = false;
     be.stage = 'done';
+    if (isInventoryDropDef(be.def)) {
+      collectInventoryDrop(be.def);
+      return;
+    }
     localStorage.setItem('berriesCollected', String((+localStorage.getItem('berriesCollected') || 0) + 1));
     const user = getUserState();
     user.money = (user.money || 0) + getResourceProfitById(be.def && be.def.id);
@@ -2395,10 +2469,6 @@
     return primitive.kind === 'tree';
   }
 
-  function shouldKeepFelledTreeVisual(b, now) {
-    return Boolean(b && b.stage === 'exploded' && isTreeDef(b.berryDef) && b.felledVisualUntil && now < b.felledVisualUntil);
-  }
-
   function getTreeChopRotation(b, now) {
     if (!b || !b.chopHitAt || !isTreeDef(b.berryDef)) return 0;
     const t = (now - b.chopHitAt) / TREE_CHOP_SHAKE_MS;
@@ -2409,8 +2479,7 @@
   }
 
   function renderBushSprite(b, now, visual, activeSpriteIds) {
-    const keepFelledVisual = shouldKeepFelledTreeVisual(b, now);
-    if ((b.stage === 'exploded' && !keepFelledVisual) || b.stage === 'dead') return false;
+    if (b.stage === 'exploded' || b.stage === 'dead') return false;
     const texture = getBushSpriteTexture(b, visual);
     if (!texture) return false;
     if (!b.uid) b.uid = nextBushUid++;
@@ -2444,7 +2513,7 @@
     sprite.width = width;
     sprite.height = height;
     sprite.rotation = getTreeChopRotation(b, now);
-    sprite.alpha = keepFelledVisual ? clamp((b.felledVisualUntil - now) / TREE_CHOP_SHAKE_MS, 0, 1) : 1;
+    sprite.alpha = 1;
     sprite.zIndex = sprite.y;
     activeSpriteIds.add(b.uid);
     return true;

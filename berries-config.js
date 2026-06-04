@@ -1,5 +1,24 @@
 /* berries-config.js */
 (function (global) {
+  const inventoryItems = [
+    {
+      id: 'pine-cone',
+      titleRu: 'Шишка',
+      assetUrl: './img/rare/pine-cone.png',
+      widthPx: 34,
+      heightPx: 34,
+      inventoryItem: true,
+    },
+    {
+      id: 'colorado-beetle',
+      titleRu: 'Колорадский жук',
+      assetUrl: './img/rare/colorado-beetle.png',
+      widthPx: 36,
+      heightPx: 30,
+      inventoryItem: true,
+    },
+  ];
+
   /** @type {{id:string,titleRu:string,assetUrl:string,widthPx:number,heightPx:number,primitive:{base?:string,highlight?:string,kind?:string,cap?:string,stem?:string,spots?:string,root?:string,leaf?:string},bushType?:string,bushScale?:number,bushAssetUrl?:string,bushPrimitive?:{kind?:string,cap?:string,capShade?:string,stem?:string,grass?:string,spots?:string,root?:string,leaf?:string,shadow?:string}}[]} */
   const berries = [
     {
@@ -56,9 +75,9 @@
       assetUrl: './img/berry/champignon.png',
       widthPx: 44,
       heightPx: 44,
-      bushWidthPx: 104,
-      bushHeightPx: 104,
-      bushScale: 0.95,
+      bushWidthPx: 87,
+      bushHeightPx: 87,
+      bushScale: 0.79,
       primitive: {
         kind: 'mushroom',
         cap: '#f4eee6',
@@ -112,12 +131,12 @@
       unlockCost: 2250,
       minSpawnRadius: 7,
       assetUrl: './img/berry/radish.png',
-      widthPx: 38,
-      heightPx: 44,
+      widthPx: 46,
+      heightPx: 53,
       bushAssetUrl: './img/berry/radish-bush.png',
-      bushWidthPx: 92,
-      bushHeightPx: 98,
-      bushScale: 0.9,
+      bushWidthPx: 110,
+      bushHeightPx: 118,
+      bushScale: 1.08,
       primitive: {
         kind: 'beet',
         root: '#e03939',
@@ -166,6 +185,9 @@
       extractParticleAssetUrl: './img/mineable/log-pine.png',
       extractParticleWidthPx: 50,
       extractParticleHeightPx: 38,
+      rareDrops: [
+        { id: 'pine-cone', chance: 0.01, on: 'final' },
+      ],
       primitive: {
         kind: 'tree',
         trunk: '#6d4a2f',
@@ -316,6 +338,9 @@
       extractParticleAssetUrl: './img/mineable/log-snow-pine.png',
       extractParticleWidthPx: 52,
       extractParticleHeightPx: 36,
+      rareDrops: [
+        { id: 'pine-cone', chance: 0.01, on: 'final' },
+      ],
       primitive: {
         kind: 'tree',
         trunk: '#6d4a2f',
@@ -338,12 +363,15 @@
       unlockCost: 3250,
       minSpawnRadius: 7,
       assetUrl: './img/berry/potato.png',
-      widthPx: 42,
-      heightPx: 36,
+      widthPx: 50,
+      heightPx: 43,
       bushAssetUrl: './img/berry/potato-bush.png',
-      bushWidthPx: 96,
-      bushHeightPx: 92,
-      bushScale: 0.9,
+      bushWidthPx: 115,
+      bushHeightPx: 110,
+      bushScale: 1.08,
+      rareDrops: [
+        { id: 'colorado-beetle', chance: 0.01, on: 'final' },
+      ],
       primitive: {
         kind: 'beet',
         root: '#c6a46c',
@@ -383,6 +411,7 @@
 
   global.BerriesConfig = {
     berries,
+    inventoryItems,
     getResourceWeight,
   };
 })(window);

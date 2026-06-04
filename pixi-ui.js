@@ -5,6 +5,7 @@
   const enlargeConfig = window.EnlargeConfig || { expansions: [] };
   const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
+  const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
   const KNOWN_LOCAL_ASSETS = new Set([
     './img/berry/1.png',
     './img/berry/strawberry.png',
@@ -29,6 +30,9 @@
     './img/building/campfire4.png',
     './img/building/whetstone.png',
     './img/building/forge.png',
+    './img/rare/pine-cone.png',
+    './img/rare/colorado-beetle.png',
+    './img/ui/inventory-bag.png',
   ]);
   Array.from({ length: 10 }, (_, index) => `./img/building/drill-${index + 1}.png`)
     .forEach((url) => KNOWN_LOCAL_ASSETS.add(url));
@@ -347,6 +351,12 @@
   const shopButton = document.getElementById('shopButton');
   const shopPanel = document.getElementById('shopPanel');
   const closePanel = document.getElementById('closePanel');
+  const inventoryButton = document.getElementById('inventoryButton');
+  const inventoryIcon = document.getElementById('inventoryIcon');
+  const inventoryPanel = document.getElementById('inventoryPanel');
+  const closeInventory = document.getElementById('closeInventory');
+  const inventoryList = document.getElementById('inventoryList');
+  const inventoryBadge = document.getElementById('inventoryBadge');
   const panelOverlay = document.getElementById('panelOverlay');
   const idleOverlay = document.getElementById('idleOverlay');
   const idlePanel = document.getElementById('idlePanel');
@@ -372,6 +382,7 @@
   setImageWithFallback(document.getElementById('coinIcon'), 'coin');
   setImageWithFallback(document.getElementById('cartIcon'), 'cart');
   setImageWithFallback(document.getElementById('arrowIcon'), 'arrowUp');
+  if (inventoryIcon) inventoryIcon.src = knownAssetUrl('./img/ui/inventory-bag.png') || './img/ui/inventory-bag.png';
 
   function getUserState() {
     let user = {};
@@ -382,6 +393,7 @@
     }
     if (typeof user.money !== 'number' || Number.isNaN(user.money)) user.money = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
+    if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
     const defaultUnlocks = [];
     const campfire = buildingResources.find((item) => item.id === 'campfire');
     if (campfire) defaultUnlocks.push(campfire.id);
@@ -413,7 +425,7 @@
     return chosen ? chosen.profit : 0;
   }
 
-  const WORLD_ZOOM = 1.15;
+  const WORLD_ZOOM = 1.265;
   function getWorldCellPx() {
     const gameW = parseFloat(localStorage.getItem('gameWidth')) || innerWidth;
     const baseGridW = Number(localStorage.getItem('baseGridW') || '0');
@@ -615,6 +627,76 @@
     upgradeMarker.classList.toggle('hidden', !canUpgrade);
   }
 
+  function getInventoryTotal(user) {
+    const inventory = user.inventory || {};
+    return Object.values(inventory).reduce((sum, count) => {
+      const value = Number(count) || 0;
+      return sum + Math.max(0, Math.floor(value));
+    }, 0);
+  }
+
+  function renderInventory() {
+    const user = getUserState();
+    const inventory = user.inventory || {};
+    const total = getInventoryTotal(user);
+    if (inventoryBadge) {
+      inventoryBadge.textContent = String(total);
+      inventoryBadge.classList.toggle('hidden', total <= 0);
+    }
+    if (!inventoryList) return;
+
+    inventoryList.innerHTML = '';
+    const visibleItems = inventoryItems.filter((item) => Math.max(0, Math.floor(Number(inventory[item.id]) || 0)) > 0);
+    if (!visibleItems.length) {
+      const empty = document.createElement('div');
+      empty.className = 'inventory-empty';
+      empty.textContent = 'Пока пусто';
+      inventoryList.appendChild(empty);
+      return;
+    }
+
+    visibleItems.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'inventory-item';
+      row.setAttribute('data-ui-control', '');
+
+      const icon = document.createElement('img');
+      icon.alt = item.titleRu || item.id;
+      icon.src = knownAssetUrl(item.assetUrl) || item.assetUrl || '';
+      icon.onerror = () => { icon.style.visibility = 'hidden'; };
+
+      const title = document.createElement('span');
+      title.textContent = item.titleRu || item.id;
+
+      const count = document.createElement('strong');
+      count.textContent = `x${Math.max(0, Math.floor(Number(inventory[item.id]) || 0))}`;
+
+      row.appendChild(icon);
+      row.appendChild(title);
+      row.appendChild(count);
+      inventoryList.appendChild(row);
+    });
+  }
+
+  function syncPanelOverlay() {
+    const shopOpen = shopPanel.classList.contains('open');
+    const inventoryOpen = inventoryPanel && inventoryPanel.classList.contains('open');
+    panelOverlay.classList.toggle('open', shopOpen || inventoryOpen);
+  }
+
+  function toggleInventory(forceOpen) {
+    if (!inventoryPanel) return;
+    const open = typeof forceOpen === 'boolean' ? forceOpen : !inventoryPanel.classList.contains('open');
+    if (open) {
+      shopPanel.classList.remove('open');
+      shopPanel.setAttribute('aria-hidden', 'true');
+    }
+    inventoryPanel.classList.toggle('open', open);
+    inventoryPanel.setAttribute('aria-hidden', String(!open));
+    syncPanelOverlay();
+    if (open) renderInventory();
+  }
+
   function focusCheapestLocked() {
     const user = getUserState();
     const cheapest = resources.find((res) => !user.unlockedResources[res.id]);
@@ -630,9 +712,13 @@
 
   function togglePanel(forceOpen) {
     const open = typeof forceOpen === 'boolean' ? forceOpen : !shopPanel.classList.contains('open');
+    if (open && inventoryPanel) {
+      inventoryPanel.classList.remove('open');
+      inventoryPanel.setAttribute('aria-hidden', 'true');
+    }
     shopPanel.classList.toggle('open', open);
     shopPanel.setAttribute('aria-hidden', String(!open));
-    panelOverlay.classList.toggle('open', open);
+    syncPanelOverlay();
     if (open) {
       renderResources();
       requestAnimationFrame(focusCheapestLocked);
@@ -641,15 +727,27 @@
 
   shopButton.addEventListener('click', () => togglePanel());
   closePanel.addEventListener('click', () => togglePanel(false));
-  panelOverlay.addEventListener('click', () => togglePanel(false));
+  if (inventoryButton) inventoryButton.addEventListener('click', () => toggleInventory());
+  if (closeInventory) closeInventory.addEventListener('click', () => toggleInventory(false));
+  panelOverlay.addEventListener('click', () => {
+    togglePanel(false);
+    toggleInventory(false);
+  });
   idleClose.addEventListener('click', hideIdlePanel);
   idleOverlay.addEventListener('click', hideIdlePanel);
 
   applyIdleIncome();
   setLastActiveAt();
   renderResources();
-  setInterval(renderResources, 400);
-  window.addEventListener('storage', renderResources);
+  renderInventory();
+  setInterval(() => {
+    renderResources();
+    renderInventory();
+  }, 400);
+  window.addEventListener('storage', () => {
+    renderResources();
+    renderInventory();
+  });
   window.addEventListener('pagehide', setLastActiveAt);
   window.addEventListener('beforeunload', setLastActiveAt);
   document.addEventListener('visibilitychange', () => {
