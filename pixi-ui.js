@@ -911,19 +911,25 @@
     let canUpgrade = false;
     resources.forEach((res) => {
       const unlocked = !!user.unlockedResources[res.id];
-      const canBuy = user.money >= res.unlockCost && !unlocked;
+      if (unlocked) {
+        const existing = resourceCards.get(res.id);
+        if (existing && existing.card && existing.card.parentNode) existing.card.parentNode.removeChild(existing.card);
+        resourceCards.delete(res.id);
+        return;
+      }
+      const canBuy = user.money >= res.unlockCost;
       if (canBuy) canUpgrade = true;
       let entry = resourceCards.get(res.id);
       if (!entry) {
         entry = createResourceCard(res);
         resourceCards.set(res.id, entry);
       }
-      entry.card.className = 'resource-card ' + (unlocked ? 'unlocked' : canBuy ? 'available clickable' : 'locked');
+      entry.card.className = 'resource-card ' + (canBuy ? 'available clickable' : 'locked');
       entry.label.textContent = res.unlockCost;
       entry.button.className = 'unlock-button' + (canBuy ? '' : ' locked');
       entry.button.disabled = !canBuy;
-      entry.button.style.display = unlocked ? 'none' : 'flex';
-      entry.check.style.display = unlocked ? 'block' : 'none';
+      entry.button.style.display = 'flex';
+      entry.check.style.display = 'none';
     });
     upgradeMarker.classList.toggle('hidden', !canUpgrade);
   }
