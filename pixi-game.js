@@ -915,42 +915,41 @@
   }
 
   function drawIslandWaterOutline(g, cellSize) {
+    const mainThickness = clamp(cellSize * 0.24, 10, 15);
     const passes = [
-      { offset: cellSize * 0.21, thickness: cellSize * 0.22, alpha: 0.13 },
-      { offset: cellSize * 0.11, thickness: cellSize * 0.12, alpha: 0.2 },
+      { offset: mainThickness + 8, thickness: mainThickness + 8, alpha: 0.2 },
+      { offset: mainThickness, thickness: mainThickness, alpha: 0.62 },
     ];
     passes.forEach((pass) => {
-      g.beginFill(0x0c205c, pass.alpha);
-      const inset = cellSize * 0.05;
+      g.beginFill(0x061b58, pass.alpha);
       for (let y = 0; y < GRID_H; y += 1) {
         for (let x = 0; x < GRID_W; x += 1) {
           if (!hasIslandCell(x, y)) continue;
           const sx = x * cellSize;
           const sy = y * cellSize;
-          const radius = pass.thickness * 0.55;
           if (!hasIslandCell(x - 1, y)) {
-            drawRoundedRect(g, sx - pass.offset, sy + inset, pass.thickness, cellSize - inset * 2, radius);
+            g.drawRect(sx - pass.offset, sy, pass.thickness, cellSize);
           }
           if (!hasIslandCell(x + 1, y)) {
-            drawRoundedRect(g, sx + cellSize + pass.offset - pass.thickness, sy + inset, pass.thickness, cellSize - inset * 2, radius);
+            g.drawRect(sx + cellSize + pass.offset - pass.thickness, sy, pass.thickness, cellSize);
           }
           if (!hasIslandCell(x, y - 1)) {
-            drawRoundedRect(g, sx + inset, sy - pass.offset, cellSize - inset * 2, pass.thickness, radius);
+            g.drawRect(sx, sy - pass.offset, cellSize, pass.thickness);
           }
           if (!hasIslandCell(x, y + 1)) {
-            drawRoundedRect(g, sx + inset, sy + cellSize + pass.offset - pass.thickness, cellSize - inset * 2, pass.thickness, radius);
+            g.drawRect(sx, sy + cellSize + pass.offset - pass.thickness, cellSize, pass.thickness);
           }
           if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y - 1)) {
-            g.drawCircle(sx, sy, pass.thickness * 0.62);
+            g.drawCircle(sx, sy, pass.thickness);
           }
           if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y - 1)) {
-            g.drawCircle(sx + cellSize, sy, pass.thickness * 0.62);
+            g.drawCircle(sx + cellSize, sy, pass.thickness);
           }
           if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y + 1)) {
-            g.drawCircle(sx, sy + cellSize, pass.thickness * 0.62);
+            g.drawCircle(sx, sy + cellSize, pass.thickness);
           }
           if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y + 1)) {
-            g.drawCircle(sx + cellSize, sy + cellSize, pass.thickness * 0.62);
+            g.drawCircle(sx + cellSize, sy + cellSize, pass.thickness);
           }
         }
       }
