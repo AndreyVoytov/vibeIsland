@@ -35,6 +35,7 @@
     './img/ui/inventory-bag.png',
     './img/ui/shine.png',
     './img/ui/rainbow-stone.png',
+    './img/ui/hero-portrait.png',
     './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
     './img/scenario-drop/nail-puller.png',
     './img/scenario-drop/kettle.png',
@@ -419,6 +420,10 @@
   const moneyValue = document.getElementById('moneyValue');
   const gemValue = document.getElementById('gemValue');
   const gemIcon = document.getElementById('gemIcon');
+  const heroPortrait = document.getElementById('heroPortrait');
+  const playerLevel = document.getElementById('playerLevel');
+  const playerXpFill = document.getElementById('playerXpFill');
+  const playerXpText = document.getElementById('playerXpText');
   const shopButton = document.getElementById('shopButton');
   const shopPanel = document.getElementById('shopPanel');
   const closePanel = document.getElementById('closePanel');
@@ -471,6 +476,7 @@
   setImageWithFallback(document.getElementById('cartIcon'), 'cart');
   setImageWithFallback(document.getElementById('arrowIcon'), 'arrowUp');
   setImageWithFallback(gemIcon, 'rainbowStone');
+  setImageWithFallback(heroPortrait, 'heroPortrait');
   if (inventoryIcon) inventoryIcon.src = knownAssetUrl('./img/ui/inventory-bag.png') || './img/ui/inventory-bag.png';
 
   function getUserState() {
@@ -485,6 +491,7 @@
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
     if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
     ensureUserStats(user);
+    ensurePlayerProgress(user);
     ensureQuestState(user);
     const defaultUnlocks = [];
     const campfire = buildingResources.find((item) => item.id === 'campfire');
@@ -541,6 +548,25 @@
     const index = Math.floor(Number(user.questLine.index) || 0);
     user.questLine.index = Math.min(Math.max(0, index), QUESTS.length);
     return user.questLine;
+  }
+
+  function getXpNeededForLevel(level) {
+    return Math.max(1, Math.floor(Number(level) || 1)) * 100;
+  }
+
+  function ensurePlayerProgress(user) {
+    if (!user.player || typeof user.player !== 'object' || Array.isArray(user.player)) user.player = {};
+    let level = Math.max(1, Math.floor(Number(user.player.level) || 1));
+    let xp = Math.max(0, Math.floor(Number(user.player.xp) || 0));
+    let guard = 0;
+    while (xp >= getXpNeededForLevel(level) && guard < 10000) {
+      xp -= getXpNeededForLevel(level);
+      level += 1;
+      guard += 1;
+    }
+    user.player.level = level;
+    user.player.xp = xp;
+    return user.player;
   }
 
   function getHeroState() {
@@ -856,6 +882,7 @@
     if (!questCard || !questTitle) return;
     questCard.classList.toggle('finished', done);
     questCard.classList.toggle('complete', !done && progress >= 1);
+    questCard.hidden = done;
 
     if (done) {
       setUiAssetImage(questIcon, uiConfig.uiAssets.rainbowStone || {});
@@ -865,6 +892,7 @@
       return;
     }
 
+    questCard.hidden = false;
     setUiAssetImage(questIcon, getQuestIconUrl(quest));
     questTitle.textContent = progress >= 1 ? 'Награда' : quest.title;
     if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
@@ -898,6 +926,16 @@
       entry.check.style.display = unlocked ? 'block' : 'none';
     });
     upgradeMarker.classList.toggle('hidden', !canUpgrade);
+  }
+
+  function renderPlayerProgress() {
+    const user = getUserState();
+    const player = ensurePlayerProgress(user);
+    const needed = getXpNeededForLevel(player.level);
+    const xp = Math.min(player.xp, needed);
+    if (playerLevel) playerLevel.textContent = String(player.level);
+    if (playerXpFill) playerXpFill.style.width = `${Math.round((xp / needed) * 100)}%`;
+    if (playerXpText) playerXpText.textContent = `${xp}/${needed}`;
   }
 
   function getInventoryTotal(user) {
@@ -1123,6 +1161,7 @@
   applyIdleIncome();
   setLastActiveAt();
   renderResources();
+  renderPlayerProgress();
   renderInventory();
   renderQuestLine();
   try {
@@ -1133,11 +1172,13 @@
   }
   setInterval(() => {
     renderResources();
+    renderPlayerProgress();
     renderInventory();
     renderQuestLine();
   }, 400);
   window.addEventListener('storage', () => {
     renderResources();
+    renderPlayerProgress();
     renderInventory();
     renderQuestLine();
   });

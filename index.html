@@ -83,10 +83,90 @@
     .gem-pill img{width:20px;height:20px;display:block;object-fit:contain;}
     .money-pill span,
     .gem-pill span{font-weight:600;font-size:16px;}
-    .quest-strip{
+    .profile-panel{
       position:absolute;
       top:14px;
       left:14px;
+      width:150px;
+      height:54px;
+      display:grid;
+      grid-template-columns:52px 1fr;
+      align-items:center;
+      gap:8px;
+      padding:5px 9px 5px 5px;
+      border-radius:16px;
+      background:rgba(12,48,106,0.74);
+      border:2px solid rgba(255,255,255,0.28);
+      box-shadow:0 5px 14px rgba(0,0,0,0.3);
+      box-sizing:border-box;
+      pointer-events:auto;
+      z-index:7;
+    }
+    .profile-avatar{
+      width:44px;
+      height:44px;
+      border-radius:14px;
+      overflow:hidden;
+      background:linear-gradient(180deg,#eef7ff,#b7dcff);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.75), 0 2px 6px rgba(0,0,0,0.22);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .profile-avatar img{
+      width:52px;
+      height:52px;
+      object-fit:contain;
+      transform:translateY(2px);
+    }
+    .profile-meta{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .profile-level{
+      display:flex;
+      align-items:baseline;
+      gap:4px;
+      color:#fff;
+      line-height:1;
+      text-shadow:0 2px 4px rgba(0,0,0,0.35);
+    }
+    .profile-level span{
+      font-size:11px;
+      font-weight:800;
+      opacity:0.82;
+    }
+    .profile-level strong{
+      font-size:18px;
+      font-weight:900;
+    }
+    .xp-track{
+      height:8px;
+      border-radius:999px;
+      background:rgba(0,0,0,0.34);
+      overflow:hidden;
+      box-shadow:inset 0 1px 2px rgba(0,0,0,0.45);
+    }
+    .xp-track-fill{
+      height:100%;
+      width:0%;
+      border-radius:999px;
+      background:linear-gradient(90deg,#7cf15d,#25d3ff);
+      transition:width 0.25s ease;
+    }
+    .xp-text{
+      color:rgba(255,255,255,0.86);
+      font-size:10px;
+      font-weight:800;
+      line-height:1;
+      text-align:right;
+    }
+    .quest-strip{
+      position:absolute;
+      top:14px;
+      left:178px;
       right:188px;
       height:34px;
       display:flex;
@@ -205,6 +285,7 @@
       border-color:#219a26;
       color:#174b12;
     }
+    .quest-card[hidden]{display:none;}
     .quest-icon{
       width:38px;
       height:38px;
@@ -651,6 +732,25 @@
         top:10px;
         right:10px;
       }
+      .profile-panel{
+        top:10px;
+        left:10px;
+        width:124px;
+        height:48px;
+        grid-template-columns:44px 1fr;
+        gap:6px;
+        padding:4px 7px 4px 4px;
+      }
+      .profile-avatar{
+        width:40px;
+        height:40px;
+        border-radius:13px;
+      }
+      .profile-avatar img{
+        width:48px;
+        height:48px;
+      }
+      .profile-level strong{font-size:16px;}
       .money-pill,
       .gem-pill{
         padding:5px 9px;
@@ -659,12 +759,12 @@
       .money-pill span,
       .gem-pill span{font-size:15px;}
       .quest-strip{
-        top:54px;
+        top:66px;
         left:10px;
         right:10px;
       }
       .quest-card{
-        top:94px;
+        top:106px;
         width:calc(100% - 20px);
       }
       .quest-card.finished{width:calc(100% - 20px);}
@@ -697,6 +797,21 @@
   <div id="gameShell">
     <div id="pixiMount"></div>
     <div id="uiRoot">
+      <div class="profile-panel" data-ui-control>
+        <div class="profile-avatar">
+          <img id="heroPortrait" alt="hero" />
+        </div>
+        <div class="profile-meta">
+          <div class="profile-level">
+            <span>ур.</span>
+            <strong id="playerLevel">1</strong>
+          </div>
+          <div class="xp-track">
+            <div id="playerXpFill" class="xp-track-fill"></div>
+          </div>
+          <div id="playerXpText" class="xp-text">0/100</div>
+        </div>
+      </div>
       <div class="quest-strip" data-ui-control>
         <div id="questStage" class="quest-level-pill">1-1</div>
         <div class="quest-track">
@@ -780,9 +895,9 @@
   <script src="./berries-config.js?v=20260605-material-inventory"></script>
   <script src="./buildings-config.js"></script>
   <script src="./scenario-objects-config.js?v=20260605-material-inventory"></script>
-  <script src="./ui-config.js?v=20260605-quests"></script>
+  <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js"></script>
-  <script src="./pixi-game.js?v=20260605-quests"></script>
-  <script src="./pixi-ui.js?v=20260605-quests"></script>
+  <script src="./pixi-game.js?v=20260605-player-xp"></script>
+  <script src="./pixi-ui.js?v=20260605-player-xp"></script>
 </body>
 </html>

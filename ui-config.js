@@ -51,6 +51,19 @@
           '</svg>'
       ),
     },
+    heroPortrait: {
+      url: './img/ui/hero-portrait.png',
+      fallback: svgDataUri(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
+          "<rect x='15' y='18' width='34' height='32' rx='10' fill='#f0a9a3' stroke='#b45f58' stroke-width='3'/>" +
+          "<path d='M12 24c8-14 32-14 40 0v8H12z' fill='#f5f6f0' stroke='#333' stroke-width='2'/>" +
+          "<path d='M35 13c9 2 15 9 17 19H35z' fill='#d64d42'/>" +
+          "<path d='M10 32h44' stroke='#b83d37' stroke-width='5' stroke-linecap='round'/>" +
+          "<circle cx='25' cy='37' r='3' fill='#222'/>" +
+          "<circle cx='39' cy='37' r='3' fill='#222'/>" +
+          '</svg>'
+      ),
+    },
     arrowUp: {
       url: './img/ui/arrow-up.png',
       fallback: svgDataUri(

@@ -125,6 +125,7 @@
   const HORIZON_BOTTOM_FADE_RATIO = 0.34;
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
+  const HORIZON_TOP_OVERSCAN_PX = 2;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
   const RESOURCE_AURA_PERIOD_MS = 1900;
   const RESOURCE_AURA_PARTICLES = 4;
@@ -488,6 +489,7 @@
   let nextWaterBurstDelay = 0;
   let horizonSprite = null;
   let horizonBackdropGraphics = null;
+  let horizonTopFillGraphics = null;
   let horizonLeftEdgeSprite = null;
   let horizonRightEdgeSprite = null;
   let horizonFadeGraphics = null;
@@ -541,6 +543,10 @@
       horizonBackdropGraphics.interactiveChildren = false;
       horizonLayer.addChildAt(horizonBackdropGraphics, 0);
     }
+    if (!horizonTopFillGraphics) {
+      horizonTopFillGraphics = new PIXI.Graphics();
+      horizonBackdropGraphics.addChildAt(horizonTopFillGraphics, 0);
+    }
     const leftTexture = getTexture(SUNSET_HORIZON_LEFT_EDGE_ASSET);
     const rightTexture = getTexture(SUNSET_HORIZON_RIGHT_EDGE_ASSET);
     if (!leftTexture || !rightTexture) return false;
@@ -570,7 +576,17 @@
     const sidePad = Math.max(gameWidth * HORIZON_SIDE_PAD_MULT, getWorldWidth() * 0.9);
     const bx = x - sidePad;
     const bw = width + sidePad * 2;
-    horizonBackdropGraphics.visible = hasEdges;
+    horizonBackdropGraphics.visible = true;
+    horizonTopFillGraphics.clear();
+    const topFillY = Math.min(y - 1, -gameHeight * 2 - HORIZON_TOP_OVERSCAN_PX);
+    const topFillHeight = Math.max(0, y - topFillY + 1);
+    const topSteps = 10;
+    for (let i = 0; i < topSteps; i += 1) {
+      const t = i / Math.max(1, topSteps - 1);
+      beginFill(horizonTopFillGraphics, mixColor('#8d6fd8', '#ac67a2', t), '#ac67a2');
+      horizonTopFillGraphics.drawRect(bx, topFillY + topFillHeight * (i / topSteps), bw, Math.ceil(topFillHeight / topSteps) + 1);
+      horizonTopFillGraphics.endFill();
+    }
     if (hasEdges) {
       horizonLeftEdgeSprite.x = bx;
       horizonLeftEdgeSprite.y = y;
@@ -613,11 +629,14 @@
     const height = clamp(width * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.26));
     const topRef = getTopScenarioOrIslandWorldY();
     const gap = Math.max(cell * HORIZON_WATER_GAP_CELLS, gameHeight * 0.055);
+    const baseY = topRef - gap - height * HORIZON_LINE_Y_RATIO;
+    const topY = Math.min(baseY, -HORIZON_TOP_OVERSCAN_PX);
+    const displayHeight = height + (baseY - topY);
     horizonSprite.visible = true;
     horizonSprite.x = (worldW - width) / 2;
-    horizonSprite.y = topRef - gap - height * HORIZON_LINE_Y_RATIO;
+    horizonSprite.y = topY;
     horizonSprite.width = width;
-    horizonSprite.height = height;
+    horizonSprite.height = displayHeight;
     horizonSprite.alpha = 0.88;
     drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height);
     if (horizonFadeGraphics && horizonFadeGraphics.parent === horizonLayer) horizonLayer.setChildIndex(horizonFadeGraphics, horizonLayer.children.length - 1);
@@ -1130,6 +1149,7 @@
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
     if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
     ensureUserStats(user);
+    ensurePlayerProgress(user);
     if (BERRIES_LIST[0]) user.unlockedResources[BERRIES_LIST[0].id] = true;
     const campfire = buildingDefs.find((item) => item.id === 'campfire');
     if (campfire) user.unlockedResources[campfire.id] = true;
@@ -1185,6 +1205,42 @@
     if (id) {
       stats.itemsCollectedById[id] = Math.max(0, Math.floor(Number(stats.itemsCollectedById[id]) || 0)) + value;
     }
+  }
+
+  function getXpNeededForLevel(level) {
+    return Math.max(1, Math.floor(Number(level) || 1)) * 100;
+  }
+
+  function ensurePlayerProgress(user) {
+    if (!user.player || typeof user.player !== 'object' || Array.isArray(user.player)) user.player = {};
+    let level = Math.max(1, Math.floor(Number(user.player.level) || 1));
+    let xp = Math.max(0, Math.floor(Number(user.player.xp) || 0));
+    let guard = 0;
+    while (xp >= getXpNeededForLevel(level) && guard < 10000) {
+      xp -= getXpNeededForLevel(level);
+      level += 1;
+      guard += 1;
+    }
+    user.player.level = level;
+    user.player.xp = xp;
+    return user.player;
+  }
+
+  function addPlayerExperience(amount = 1) {
+    const value = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!value) return;
+    const user = getUserState();
+    const player = ensurePlayerProgress(user);
+    player.xp += value;
+    ensurePlayerProgress(user);
+    setUserState(user);
+    localStorage.setItem('playerProgressUpdatedAt', String(Date.now()));
+  }
+
+  function awardChopExperience(b) {
+    if (!b || b.xpAwarded) return;
+    b.xpAwarded = true;
+    addPlayerExperience(1);
   }
 
   function getUnlockedResourceIds() {
@@ -2555,6 +2611,7 @@
     spawnRareDrops(b, now, avoidSet, willFinish ? 'final' : 'hit');
     b.extractStage = nextStage;
     if (b.extractStage >= stages.length) {
+      awardChopExperience(b);
       b.stage = 'exploded';
       if (isTreeDef(b.berryDef)) b.shadowFadeUntil = now + TREE_SHADOW_FADE_MS;
       busy.delete(cellKey(b.gridX, b.gridY));
@@ -2632,6 +2689,7 @@
           Object.assign(be, { x0: be.xPct, y0: be.yPct, tx: to.xPct, ty: to.yPct, flying: true, tFly0: now, flyDur: BERRY_FLY_MS, onBush: false, scale: 1 });
         });
         spawnRareDrops(b, now, avoidSet, 'final');
+        awardChopExperience(b);
         b.stage = 'exploded';
         busy.delete(cellKey(b.gridX, b.gridY));
         localStorage.setItem('heroAction', JSON.stringify({ chopAt: now }));
