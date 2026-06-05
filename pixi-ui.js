@@ -8,7 +8,7 @@
   const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
   const KNOWN_LOCAL_ASSETS = new Set([
     './img/berry/1.png',
-    './img/berry/strawberry.png',
+    './img/berry/strawberry-item.png',
     './img/berry/blueberry.png',
     './img/berry/raspberry.png',
     './img/berry/tomato.png',

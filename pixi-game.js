@@ -168,7 +168,7 @@
   ];
 
   const BERRY_IMAGE_ASSETS = [
-    './img/berry/strawberry.png',
+    './img/berry/strawberry-item.png',
     './img/berry/blueberry.png',
     './img/berry/raspberry.png',
     './img/berry/tomato.png',
@@ -226,7 +226,7 @@
   ];
 
   const DROP_OUTLINE_BASE_ASSETS = [
-    './img/berry/strawberry.png',
+    './img/berry/strawberry-item.png',
     './img/berry/blueberry.png',
     './img/berry/raspberry.png',
     './img/berry/tomato.png',
