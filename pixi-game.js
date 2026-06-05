@@ -3261,27 +3261,27 @@
     const cell = getWorldCellPx();
     for (let i = 0; i < count; i += 1) {
       const seed = seedBase + i * 173;
-      const period = RESOURCE_AURA_PERIOD_MS * (0.82 + ((seed % 29) / 100));
+      const period = RESOURCE_AURA_PERIOD_MS * 2 * (0.82 + ((seed % 29) / 100));
       const u = ((now + seed * 19) % period) / period;
       const pulse = Math.sin(u * Math.PI);
       const alpha = pulse * mature * (tree ? 0.46 : 0.38);
       if (alpha <= 0.015) continue;
-      const spread = bounds.width * (tree ? 0.28 : 0.36);
+      const spread = bounds.width * (tree ? 0.14 : 0.18);
       const drift = bounds.height * (tree ? 0.3 : 0.42);
       const startY = tree ? lerp(bounds.topY + bounds.height * 0.28, bounds.baseY - bounds.height * 0.12, (seed % 7) / 6) : bounds.baseY - bounds.height * 0.18;
       const x = bounds.x + Math.sin(seed * 12.989 + u * Math.PI * 2.2) * spread * (0.35 + ((seed % 11) / 18));
       const y = startY - u * drift + Math.cos(seed * 7.31 + u * Math.PI * 2) * Math.max(1, cell * 0.04);
       const r = clamp(bounds.width * (0.014 + ((seed % 5) * 0.0025)), 1.5, tree ? 4.4 : 3.8);
-      g.beginFill(0xffe8a8, alpha * 0.48);
+      g.beginFill(0xffd15c, alpha * 0.5);
       g.drawCircle(x, y, r * 2.35);
       g.endFill();
-      g.beginFill(0xfffff2, alpha * 0.95);
+      g.beginFill(0xfff08a, alpha * 0.95);
       g.drawCircle(x, y, r);
       g.endFill();
       if (u > 0.34 && u < 0.78) {
         const lineAlpha = alpha * 0.42;
         const l = r * 2.3;
-        g.lineStyle(Math.max(1, r * 0.36), 0xfff4be, lineAlpha);
+        g.lineStyle(Math.max(1, r * 0.36), 0xffdc64, lineAlpha);
         g.moveTo(x - l, y);
         g.lineTo(x + l, y);
         g.moveTo(x, y - l);
