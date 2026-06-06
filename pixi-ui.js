@@ -12,6 +12,58 @@
   const CROPS_PER_TWO_EXPANSIONS = 5;
   const METERS_PER_TWO_EXPANSIONS = 4;
   const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
+  const SPECIAL_PROFIT_UPGRADES = [
+    {
+      id: 'upgrade-sharp-sight',
+      title: 'Зоркость',
+      assetUrl: './img/upgrade/sharp-sight.png',
+      unlockCost: 800,
+      requiredMeters: 18,
+      resourceIds: ['strawberry', 'blueberry', 'raspberry'],
+      bonusPercent: 100,
+      detail: 'Первые ягоды +100%',
+    },
+    {
+      id: 'upgrade-mushroom-sense',
+      title: 'Грибное чутьё',
+      assetUrl: './img/upgrade/mushroom-sense.png',
+      unlockCost: 1600,
+      requiredMeters: 18,
+      resourceIds: ['champignon'],
+      bonusPercent: 200,
+      detail: 'Шампиньоны +200%',
+    },
+    {
+      id: 'upgrade-digging-technique',
+      title: 'Техника копания',
+      assetUrl: './img/upgrade/digging-technique.png',
+      unlockCost: 3800,
+      requiredMeters: 22,
+      resourceIds: ['potato'],
+      bonusPercent: 200,
+      detail: 'Картофель +200%',
+    },
+    {
+      id: 'upgrade-root-care',
+      title: 'Корнеплодный уход',
+      assetUrl: './img/upgrade/root-care.png',
+      unlockCost: 5200,
+      requiredMeters: 22,
+      resourceIds: ['beet', 'radish'],
+      bonusPercent: 150,
+      detail: 'Свёкла и редиска +150%',
+    },
+    {
+      id: 'upgrade-tomato-watering',
+      title: 'Томатный полив',
+      assetUrl: './img/upgrade/tomato-watering.png',
+      unlockCost: 6500,
+      requiredMeters: 22,
+      resourceIds: ['tomato'],
+      bonusPercent: 200,
+      detail: 'Помидоры +200%',
+    },
+  ];
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
   const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
   const SCENARIO_STATE_KEY = 'scenarioObjectsState';
@@ -46,6 +98,11 @@
     './img/ui/rainbow-stone.png',
     './img/ui/hero-portrait.png',
     './images/scenario/boat-repaired.png',
+    './img/upgrade/sharp-sight.png',
+    './img/upgrade/digging-technique.png',
+    './img/upgrade/mushroom-sense.png',
+    './img/upgrade/root-care.png',
+    './img/upgrade/tomato-watering.png',
     './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
     './img/scenario-drop/nail-puller.png',
     './img/scenario-drop/kettle.png',
@@ -201,7 +258,7 @@
     if (def && def.surfaceColor) return def.surfaceColor;
     if (def && def.surfaceType === 'dead') return '#6f684a';
     if (def && def.surfaceType === 'snow') return '#dff4ff';
-    return '#2fb84b';
+    return '#a9c745';
   }
 
   function getExpansionSurfaceValue(def) {
@@ -368,9 +425,19 @@
     return level * 100;
   }
 
-  function applyProfitBonus(value, user) {
+  function getSpecialProfitBonusPercent(user, resourceId) {
+    if (!resourceId) return 0;
+    const unlocked = user && user.unlockedResources ? user.unlockedResources : {};
+    return SPECIAL_PROFIT_UPGRADES.reduce((sum, upgrade) => {
+      if (!unlocked[upgrade.id]) return sum;
+      if (!upgrade.resourceIds.includes(resourceId)) return sum;
+      return sum + Math.max(0, Math.floor(Number(upgrade.bonusPercent) || 0));
+    }, 0);
+  }
+
+  function applyProfitBonus(value, user, resourceId) {
     const base = Math.max(0, Number(value) || 0);
-    const bonus = getTentProfitBonusPercent(user);
+    const bonus = getTentProfitBonusPercent(user) + getSpecialProfitBonusPercent(user, resourceId);
     return Math.floor(base * (1 + bonus / 100));
   }
 
@@ -494,6 +561,18 @@
     };
   });
 
+  const specialUpgradeResources = SPECIAL_PROFIT_UPGRADES.map((def) => ({
+    id: def.id,
+    title: def.title,
+    assetUrl: knownAssetUrl(def.assetUrl),
+    unlockCost: Math.max(0, Math.floor(Number(def.unlockCost) || 0)),
+    detail: def.detail,
+    requiredMeters: Math.max(DEFAULT_ISLAND_METERS, Math.floor(Number(def.requiredMeters) || DEFAULT_ISLAND_METERS)),
+    category: 'specialUpgrade',
+    resourceIds: def.resourceIds,
+    bonusPercent: def.bonusPercent,
+  }));
+
   const buildingDefinitions = buildingConfig.buildings || [];
   const buildingById = new Map(buildingDefinitions.map((item) => [item.id, item]));
   const buildingResources = buildingDefinitions.map((def) => {
@@ -554,7 +633,7 @@
   };
 
   const tentUpgradeResources = buildingResources.filter((res) => res.tentUpgrade);
-  const resources = [...berryResources, ...tentUpgradeResources, ...expansionResources, boatRepairResource].sort((a, b) => {
+  const resources = [...berryResources, ...specialUpgradeResources, ...tentUpgradeResources, ...expansionResources, boatRepairResource].sort((a, b) => {
     const diff = a.unlockCost - b.unlockCost;
     if (diff !== 0) return diff;
     return String(a.title).localeCompare(String(b.title));
@@ -729,7 +808,7 @@
       if (!user.unlockedResources[res.id]) return;
       if (!chosen || res.unlockCost > chosen.unlockCost) chosen = res;
     });
-    return chosen ? applyProfitBonus(chosen.profit, user) : 0;
+    return chosen ? applyProfitBonus(chosen.profit, user, chosen.id) : 0;
   }
 
   const WORLD_ZOOM = 1.15;

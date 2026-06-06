@@ -23,6 +23,8 @@
   const DEFAULT_MAP_WIDTH = 25;
   const DEFAULT_MAP_HEIGHT = 25;
   const DEFAULT_ISLAND_SIZE = 18;
+  const SEA_COLOR = 0x00b0fc;
+  const ISLAND_OUTLINE_COLOR = 0x0092dc;
   const WORLD_ZOOM = 1.15;
   const BASE_CELL_PX = 28;
 
@@ -105,6 +107,13 @@
   const BOAT_REPAIR_COST = 100000;
   const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
   const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
+  const SPECIAL_PROFIT_UPGRADES = [
+    { id: 'upgrade-sharp-sight', resourceIds: ['strawberry', 'blueberry', 'raspberry'], bonusPercent: 100 },
+    { id: 'upgrade-mushroom-sense', resourceIds: ['champignon'], bonusPercent: 200 },
+    { id: 'upgrade-digging-technique', resourceIds: ['potato'], bonusPercent: 200 },
+    { id: 'upgrade-root-care', resourceIds: ['beet', 'radish'], bonusPercent: 150 },
+    { id: 'upgrade-tomato-watering', resourceIds: ['tomato'], bonusPercent: 200 },
+  ];
   const NEW_ISLAND_SIZE = 27;
   const NEW_ISLAND_MAP_SIZE = 37;
   const WATER_RIPPLE_PERIOD_MS = 1900;
@@ -341,6 +350,41 @@
     g.drawRoundedRect(x, y, w, h, Math.max(0, r || 0));
   }
 
+  function drawCornerRoundedRect(g, x, y, w, h, radii) {
+    const r = typeof radii === 'number'
+      ? { tl: radii, tr: radii, br: radii, bl: radii }
+      : (radii || {});
+    const tl = clamp(Number(r.tl) || 0, 0, Math.min(w, h) / 2);
+    const tr = clamp(Number(r.tr) || 0, 0, Math.min(w, h) / 2);
+    const br = clamp(Number(r.br) || 0, 0, Math.min(w, h) / 2);
+    const bl = clamp(Number(r.bl) || 0, 0, Math.min(w, h) / 2);
+    g.moveTo(x + tl, y);
+    g.lineTo(x + w - tr, y);
+    if (tr) g.quadraticCurveTo(x + w, y, x + w, y + tr);
+    else g.lineTo(x + w, y);
+    g.lineTo(x + w, y + h - br);
+    if (br) g.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+    else g.lineTo(x + w, y + h);
+    g.lineTo(x + bl, y + h);
+    if (bl) g.quadraticCurveTo(x, y + h, x, y + h - bl);
+    else g.lineTo(x, y + h);
+    g.lineTo(x, y + tl);
+    if (tl) g.quadraticCurveTo(x, y, x + tl, y);
+    else g.lineTo(x, y);
+    g.closePath();
+  }
+
+  function scaleCornerRadii(radii, scale) {
+    if (typeof radii === 'number') return radii * scale;
+    const r = radii || {};
+    return {
+      tl: (Number(r.tl) || 0) * scale,
+      tr: (Number(r.tr) || 0) * scale,
+      br: (Number(r.br) || 0) * scale,
+      bl: (Number(r.bl) || 0) * scale,
+    };
+  }
+
   function safeJson(key, fallback) {
     try {
       return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
@@ -387,7 +431,7 @@
   const app = new PIXI.Application({
     width: Math.max(1, mount.clientWidth || window.innerWidth),
     height: Math.max(1, mount.clientHeight || window.innerHeight),
-    backgroundColor: 0x1e6fff,
+    backgroundColor: SEA_COLOR,
     antialias: false,
     resolution: Math.min(window.devicePixelRatio || 1, 2),
     autoDensity: true,
@@ -638,7 +682,7 @@
     for (let i = 0; i < steps; i += 1) {
       const t = i / Math.max(1, steps - 1);
       const alpha = t * t * 0.98;
-      horizonFadeGraphics.beginFill(0x1e6fff, alpha);
+      horizonFadeGraphics.beginFill(SEA_COLOR, alpha);
       horizonFadeGraphics.drawRect(bx, fadeStart + (height - (fadeStart - y)) * (i / steps), bw, Math.ceil((height * HORIZON_BOTTOM_FADE_RATIO) / steps) + 1);
       horizonFadeGraphics.endFill();
     }
@@ -871,7 +915,7 @@
   }
 
   const SURFACE_DEFS = {
-    grass: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
+    grass: { color: '#a9c745', edge: '#7fa52f', soil: '#8a6b2d' },
     sand: { color: '#e8c982', edge: '#cfa766', soil: '#9a7243' },
     dead: { color: '#706a4b', edge: '#514b38', soil: '#5b4430', tileUrl: './img/tiles/dead.png' },
     snow: { color: '#dff4ff', edge: '#9cc8d2', soil: '#756555', tileUrl: './img/tiles/snow.png' },
@@ -890,7 +934,6 @@
   function getTileTextureForCell(value) {
     const surface = getSurfaceDef(value);
     if (surface.tileUrl) return getTexture(surface.tileUrl);
-    if (getTileSurfaceType(value) === 'grass') return getTexture('./img/tiles/1.png');
     return null;
   }
 
@@ -913,13 +956,13 @@
     return getSurfaceDef(value).soil;
   }
 
-  function drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radius) {
-    const surface = getTileSurfaceColor(cellValue) || '#2fb84b';
-    beginFill(g, surface, '#2fb84b');
-    drawRoundedRect(g, sx, sy, ww, hh, radius);
+  function drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radii) {
+    const surface = getTileSurfaceColor(cellValue) || '#a9c745';
+    beginFill(g, surface, '#a9c745');
+    drawCornerRoundedRect(g, sx, sy, ww, hh, radii);
     g.endFill();
     beginFill(g, 'rgba(255,255,255,0.04)', '#ffffff');
-    drawRoundedRect(g, sx + ww * 0.04, sy + hh * 0.04, ww * 0.92, hh * 0.33, radius * 0.65);
+    drawCornerRoundedRect(g, sx + ww * 0.04, sy + hh * 0.04, ww * 0.92, hh * 0.33, scaleCornerRadii(radii, 0.65));
     g.endFill();
     beginFill(g, 'rgba(0,0,0,0.035)', '#000000');
     g.drawRect(sx + ww * 0.03, sy + hh * 0.72, ww * 0.94, hh * 0.16);
@@ -927,10 +970,10 @@
   }
 
   function drawIslandTileFrontSide(g, cellValue, sx, sy, cellSize) {
-    beginFill(g, getTileEdgeColor(cellValue) || '#1f8a3a');
+    beginFill(g, getTileEdgeColor(cellValue) || '#7fa52f');
     g.drawRect(sx, sy + cellSize, cellSize, cellSize * 0.035);
     g.endFill();
-    beginFill(g, getTileSurfaceColor(cellValue) || '#2fb84b');
+    beginFill(g, getTileSurfaceColor(cellValue) || '#a9c745');
     g.drawRect(sx, sy + cellSize + cellSize * 0.035, cellSize, cellSize * 0.03);
     g.endFill();
     beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
@@ -938,11 +981,62 @@
     g.endFill();
   }
 
+  function drawIslandTileFrontRun(g, cellValue, startX, endX, y, cellSize) {
+    const sx = startX * cellSize;
+    const sy = (y + 1) * cellSize - cellSize * 0.015;
+    const width = (endX - startX + 1) * cellSize;
+    const lip = cellSize * 0.07;
+    const face = cellSize * 0.25;
+    const radius = cellSize * 0.16;
+    beginFill(g, getTileEdgeColor(cellValue) || '#7fa52f');
+    drawCornerRoundedRect(g, sx, sy, width, lip, { bl: radius * 0.35, br: radius * 0.35 });
+    g.endFill();
+    beginFill(g, getTileSurfaceColor(cellValue) || '#a9c745');
+    g.drawRect(sx, sy + lip, width, cellSize * 0.055);
+    g.endFill();
+    beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
+    drawCornerRoundedRect(g, sx, sy + lip + cellSize * 0.055, width, face, { bl: radius, br: radius });
+    g.endFill();
+    beginFill(g, 'rgba(255,255,255,0.07)', '#ffffff');
+    g.drawRect(sx + width * 0.04, sy + lip + cellSize * 0.08, width * 0.92, cellSize * 0.035);
+    g.endFill();
+  }
+
+  function getTileRunKey(value) {
+    return `${getTileSurfaceType(value) || ''}|${getTileSurfaceColor(value) || ''}|${getTileEdgeColor(value) || ''}|${getTileSoilColor(value) || ''}`;
+  }
+
+  function drawIslandFrontSides(g, cellSize) {
+    for (let y = 0; y < GRID_H; y += 1) {
+      let x = 0;
+      while (x < GRID_W) {
+        const cellValue = map[y] && map[y][x];
+        if (!cellValue || (map[y + 1] && map[y + 1][x])) {
+          x += 1;
+          continue;
+        }
+        const runValue = cellValue;
+        const runKey = getTileRunKey(runValue);
+        let endX = x;
+        while (
+          endX + 1 < GRID_W
+          && map[y] && map[y][endX + 1]
+          && !(map[y + 1] && map[y + 1][endX + 1])
+          && getTileRunKey(map[y][endX + 1]) === runKey
+        ) {
+          endX += 1;
+        }
+        drawIslandTileFrontRun(g, runValue, x, endX, y, cellSize);
+        x = endX + 1;
+      }
+    }
+  }
+
   function drawIslandTileRightSide(g, cellValue, sx, sy, cellSize) {
-    beginFill(g, getTileEdgeColor(cellValue) || '#1f8a3a');
+    beginFill(g, getTileEdgeColor(cellValue) || '#7fa52f');
     g.drawRect(sx + cellSize, sy, cellSize * 0.035, cellSize);
     g.endFill();
-    beginFill(g, getTileSurfaceColor(cellValue) || '#2fb84b');
+    beginFill(g, getTileSurfaceColor(cellValue) || '#a9c745');
     g.drawRect(sx + cellSize + cellSize * 0.035, sy, cellSize * 0.03, cellSize);
     g.endFill();
     beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
@@ -954,47 +1048,66 @@
     return Boolean(map[y] && map[y][x]);
   }
 
+  function getIslandTileCornerRadii(x, y, radius) {
+    return {
+      tl: !hasIslandCell(x - 1, y) && !hasIslandCell(x, y - 1) ? radius : 0,
+      tr: !hasIslandCell(x + 1, y) && !hasIslandCell(x, y - 1) ? radius : 0,
+      br: !hasIslandCell(x + 1, y) && !hasIslandCell(x, y + 1) ? radius : 0,
+      bl: !hasIslandCell(x - 1, y) && !hasIslandCell(x, y + 1) ? radius : 0,
+    };
+  }
+
   function drawIslandWaterOutline(g, cellSize) {
-    const mainThickness = clamp(cellSize * 0.24, 10, 15);
-    const passes = [
-      { offset: mainThickness + 8, thickness: mainThickness + 8, alpha: 1 },
-      { offset: mainThickness, thickness: mainThickness, alpha: 1 },
-    ];
-    passes.forEach((pass) => {
-      g.beginFill(0x061b58, pass.alpha);
-      for (let y = 0; y < GRID_H; y += 1) {
-        for (let x = 0; x < GRID_W; x += 1) {
-          if (!hasIslandCell(x, y)) continue;
-          const sx = x * cellSize;
-          const sy = y * cellSize;
-          if (!hasIslandCell(x - 1, y)) {
-            g.drawRect(sx - pass.offset, sy, pass.thickness, cellSize);
-          }
-          if (!hasIslandCell(x + 1, y)) {
-            g.drawRect(sx + cellSize + pass.offset - pass.thickness, sy, pass.thickness, cellSize);
-          }
-          if (!hasIslandCell(x, y - 1)) {
-            g.drawRect(sx, sy - pass.offset, cellSize, pass.thickness);
-          }
-          if (!hasIslandCell(x, y + 1)) {
-            g.drawRect(sx, sy + cellSize + pass.offset - pass.thickness, cellSize, pass.thickness);
-          }
-          if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y - 1)) {
-            g.drawCircle(sx, sy, pass.thickness);
-          }
-          if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y - 1)) {
-            g.drawCircle(sx + cellSize, sy, pass.thickness);
-          }
-          if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y + 1)) {
-            g.drawCircle(sx, sy + cellSize, pass.thickness);
-          }
-          if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y + 1)) {
-            g.drawCircle(sx + cellSize, sy + cellSize, pass.thickness);
-          }
+    const thickness = clamp(cellSize * 0.28, 12, 18);
+    const bottomThickness = thickness + clamp(cellSize * 0.2, 8, 12);
+    g.beginFill(ISLAND_OUTLINE_COLOR, 1);
+    for (let y = 0; y < GRID_H; y += 1) {
+      for (let x = 0; x < GRID_W; x += 1) {
+        if (!hasIslandCell(x, y)) continue;
+        const sx = x * cellSize;
+        const sy = y * cellSize;
+        if (!hasIslandCell(x - 1, y)) {
+          g.drawRect(sx - thickness, sy, thickness, cellSize);
+        }
+        if (!hasIslandCell(x + 1, y)) {
+          g.drawRect(sx + cellSize, sy, thickness, cellSize);
+        }
+        if (!hasIslandCell(x, y - 1)) {
+          g.drawRect(sx, sy - thickness, cellSize, thickness);
+        }
+        if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y - 1)) {
+          g.drawCircle(sx, sy, thickness);
+        }
+        if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y - 1)) {
+          g.drawCircle(sx + cellSize, sy, thickness);
+        }
+        if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y + 1)) {
+          g.drawCircle(sx, sy + cellSize, bottomThickness);
+        }
+        if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y + 1)) {
+          g.drawCircle(sx + cellSize, sy + cellSize, bottomThickness);
         }
       }
-      g.endFill();
-    });
+    }
+    for (let y = 0; y < GRID_H; y += 1) {
+      let x = 0;
+      while (x < GRID_W) {
+        if (!hasIslandCell(x, y) || hasIslandCell(x, y + 1)) {
+          x += 1;
+          continue;
+        }
+        let endX = x;
+        while (endX + 1 < GRID_W && hasIslandCell(endX + 1, y) && !hasIslandCell(endX + 1, y + 1)) {
+          endX += 1;
+        }
+        const sx = x * cellSize - thickness * 0.7;
+        const sy = (y + 1) * cellSize - thickness * 0.2;
+        const width = (endX - x + 1) * cellSize + thickness * 1.4;
+        drawRoundedRect(g, sx, sy, width, bottomThickness, thickness * 0.65);
+        x = endX + 1;
+      }
+    }
+    g.endFill();
   }
 
   function getIslandBoundsCells(landCells) {
@@ -1121,7 +1234,7 @@
 
   function redrawSea() {
     seaGraphics.clear();
-    seaGraphics.beginFill(0x1e6fff);
+    seaGraphics.beginFill(SEA_COLOR);
     seaGraphics.drawRect(0, 0, gameWidth, gameHeight);
     seaGraphics.endFill();
   }
@@ -1162,7 +1275,7 @@
           sprite.height = hh + 10;
           islandLayer.addChild(sprite);
         } else {
-          drawIslandTileTop(g, cellValue, sx, sy, ww, hh, radius);
+          drawIslandTileTop(g, cellValue, sx, sy, ww, hh, getIslandTileCornerRadii(x, y, radius));
         }
       }
     }
@@ -1172,14 +1285,12 @@
         if (!map[y] || !map[y][x]) continue;
         const sx = x * cell;
         const sy = y * cell;
-        if (!map[y + 1] || !map[y + 1][x]) {
-          drawIslandTileFrontSide(g, map[y][x], sx, sy, cell);
-        }
         if (!map[y][x + 1]) {
           drawIslandTileRightSide(g, map[y][x], sx, sy, cell);
         }
       }
     }
+    drawIslandFrontSides(g, cell);
   }
 
   function getUserState() {
@@ -1302,15 +1413,25 @@
     return level * 100;
   }
 
-  function applyProfitBonus(value, user = getUserState()) {
+  function getSpecialProfitBonusPercent(user, resourceId) {
+    if (!resourceId) return 0;
+    const unlocked = user && user.unlockedResources ? user.unlockedResources : {};
+    return SPECIAL_PROFIT_UPGRADES.reduce((sum, upgrade) => {
+      if (!unlocked[upgrade.id]) return sum;
+      if (!upgrade.resourceIds.includes(resourceId)) return sum;
+      return sum + Math.max(0, Math.floor(Number(upgrade.bonusPercent) || 0));
+    }, 0);
+  }
+
+  function applyProfitBonus(value, user = getUserState(), resourceId = '') {
     const base = Math.max(0, Number(value) || 0);
-    const bonus = getTentProfitBonusPercent(user);
+    const bonus = getTentProfitBonusPercent(user) + getSpecialProfitBonusPercent(user, resourceId);
     return Math.floor(base * (1 + bonus / 100));
   }
 
   function getCollectProfit(def) {
     const baseProfit = def && Number.isFinite(def.profit) ? def.profit : getResourceProfitById(def && def.id);
-    return applyProfitBonus(baseProfit);
+    return applyProfitBonus(baseProfit, getUserState(), def && def.id);
   }
 
   function isMaterialDropDef(def) {
