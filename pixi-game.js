@@ -40,6 +40,8 @@
   const LEAF_LIFE_MS = 700;
   const LEAF_SPD_MIN = 6;
   const LEAF_SPD_MAX = 10;
+  const RESOURCE_BURST_COUNT = 34;
+  const CENTERED_RESOURCE_BURST_COUNT = 58;
   const WOOD_CHIP_COUNT = 9;
   const WOOD_CHIP_LIFE_MS = 560;
   const WOOD_CHIP_SPD_MIN = 7;
@@ -97,6 +99,13 @@
   const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
   const DIALOGUE_TEXT_AT_KEY = 'scenarioDialogueTextAt';
   const DIALOGUE_TEXT_TTL_MS = 15000;
+  const ISLAND_RUN_KEY = 'islandRun';
+  const BOAT_REPAIRED_KEY = 'boatRepaired';
+  const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
+  const BOAT_REPAIR_COST = 100000;
+  const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
+  const NEW_ISLAND_SIZE = 9;
+  const NEW_ISLAND_MAP_SIZE = 17;
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
   const SCENARIO_GLINT_PERIOD_MS = 3400;
@@ -465,6 +474,20 @@
   const joystickGraphics = new PIXI.Graphics();
   joystickGraphics.zIndex = 10;
   screenLayer.addChild(joystickGraphics);
+  const transitionGraphics = new PIXI.Graphics();
+  transitionGraphics.zIndex = 30;
+  const transitionText = new PIXI.Text('', new PIXI.TextStyle({
+    fontFamily: 'Segoe UI, system-ui, sans-serif',
+    fontSize: 28,
+    fontWeight: '800',
+    fill: 0xffffff,
+    align: 'center',
+  }));
+  transitionText.anchor.set(0.5);
+  transitionText.zIndex = 31;
+  const cutsceneGraphics = new PIXI.Graphics();
+  cutsceneGraphics.zIndex = 29;
+  screenLayer.addChild(cutsceneGraphics, transitionGraphics, transitionText);
 
   let gameWidth = mount.clientWidth || window.innerWidth;
   let gameHeight = mount.clientHeight || window.innerHeight;
@@ -481,6 +504,7 @@
   let charXPct = 50;
   let charYPct = 50;
   let facing = 1;
+  let boatCutscene = null;
   let camera = { x: 0, y: 0 };
   let BUSH_DENSITY = 0.05;
   let MAX_UNPICKED_BUSHES = 1;
@@ -819,6 +843,11 @@
     return p * getWorldWidth() / 100;
   }
 
+  function px2pct(px) {
+    const worldW = getWorldWidth() || 1;
+    return px * 100 / worldW;
+  }
+
   function getWiggleOffset(duration = 3500) {
     const start = Number(localStorage.getItem('islandWiggleAt') || 0);
     if (!start) return { x: 0, y: 0 };
@@ -917,8 +946,8 @@
   function drawIslandWaterOutline(g, cellSize) {
     const mainThickness = clamp(cellSize * 0.24, 10, 15);
     const passes = [
-      { offset: mainThickness + 8, thickness: mainThickness + 8, alpha: 0.2 },
-      { offset: mainThickness, thickness: mainThickness, alpha: 0.62 },
+      { offset: mainThickness + 8, thickness: mainThickness + 8, alpha: 1 },
+      { offset: mainThickness, thickness: mainThickness, alpha: 1 },
     ];
     passes.forEach((pass) => {
       g.beginFill(0x061b58, pass.alpha);
@@ -1437,6 +1466,7 @@
   function computeInitialScenarioPositions() {
     const bounds = getIslandBoundsGrid();
     if (!bounds) return [];
+    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
     const centerX = Math.round((bounds.minX + bounds.maxX) / 2);
     const centerY = Math.round((bounds.minY + bounds.maxY) / 2);
     const dirMap = {
@@ -1450,17 +1480,42 @@
       southWest: { x: -1, y: 1 },
     };
     return scenarioObjects.map((def) => {
+      if (def.newIslandOnly && islandRun < 2) return null;
+      if (!def.newIslandOnly && islandRun >= 2) return null;
+      if (def.position === 'center') {
+        return {
+          id: def.id,
+          gridX: centerX,
+          gridY: centerY,
+          triggered: false,
+          transformed: false,
+          repaired: false,
+          opened: true,
+          positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
+        };
+      }
       const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 2;
       const dir = dirMap[def.direction] || dirMap.east;
+      const offset = def.offsetCells || {};
+      const offsetX = Number.isFinite(offset.x) ? offset.x : 0;
+      const offsetY = Number.isFinite(offset.y) ? offset.y : 0;
       return {
         id: def.id,
-        gridX: dir.x === 0 ? centerX : (dir.x > 0 ? bounds.maxX + distance : bounds.minX - distance),
-        gridY: dir.y === 0 ? centerY : (dir.y > 0 ? bounds.maxY + distance : bounds.minY - distance),
+        gridX: (dir.x === 0 ? centerX : (dir.x > 0 ? bounds.maxX + distance : bounds.minX - distance)) + offsetX,
+        gridY: (dir.y === 0 ? centerY : (dir.y > 0 ? bounds.maxY + distance : bounds.minY - distance)) + offsetY,
         triggered: false,
         transformed: false,
+        repaired: false,
         opened: openedIds.has(def.id),
+        positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
       };
-    });
+    }).filter(Boolean);
+  }
+
+  function scenarioAllowedForCurrentIsland(def) {
+    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
+    if (def && def.newIslandOnly) return islandRun >= 2;
+    return islandRun < 2;
   }
 
   function loadScenarioState() {
@@ -1468,21 +1523,34 @@
     if (!Array.isArray(stored)) stored = [];
     const byId = new Map(stored.map((item) => [item.id, item]));
     const initial = computeInitialScenarioPositions();
+    const initialById = new Map(initial.map((item) => [item.id, item]));
     const next = [];
-    scenarioObjects.forEach((def, index) => {
-      const existing = byId.get(def.id) || initial[index];
+    scenarioObjects.forEach((def) => {
+      if (!scenarioAllowedForCurrentIsland(def)) return;
+      const stored = byId.get(def.id);
+      const initialState = initialById.get(def.id);
+      const existing = stored || initialState;
       if (!existing) return;
+      const expectedPositionVersion = Number.isFinite(def.positionVersion) ? def.positionVersion : 0;
+      const storedPositionVersion = Math.floor(Number(existing.positionVersion) || 0);
+      const useInitialPosition = Boolean(stored && initialState && expectedPositionVersion && storedPositionVersion !== expectedPositionVersion);
+      const positionSource = useInitialPosition ? initialState : existing;
       next.push({
         id: def.id,
-        gridX: Number.isFinite(existing.gridX) ? existing.gridX : 0,
-        gridY: Number.isFinite(existing.gridY) ? existing.gridY : 0,
+        gridX: Number.isFinite(positionSource.gridX) ? positionSource.gridX : 0,
+        gridY: Number.isFinite(positionSource.gridY) ? positionSource.gridY : 0,
         triggered: Boolean(existing.triggered),
         transformed: Boolean(existing.transformed),
-        opened: openedIds.has(def.id) || Boolean(existing.opened),
+        repaired: Boolean(existing.repaired),
+        hidden: Boolean(existing.hidden),
+        opened: scenarioRequirementMet(def) && (openedIds.has(def.id) || Boolean(existing.opened)),
+        positionVersion: expectedPositionVersion,
       });
     });
     let changed = false;
     next.forEach((s) => {
+      const def = scenarioById.get(s.id);
+      if (!scenarioRequirementMet(def)) return;
       if (map[s.gridY] && map[s.gridY][s.gridX] && !openedIds.has(s.id)) {
         openedIds.add(s.id);
         s.opened = true;
@@ -1586,6 +1654,18 @@
 
   function scenarioCenterIsOnLand(state) {
     return Boolean(state && map[state.gridY] && map[state.gridY][state.gridX]);
+  }
+
+  function scenarioRequirementMet(def) {
+    if (!def || !def.requiresOpenedId) return true;
+    return openedIds.has(def.requiresOpenedId);
+  }
+
+  function shouldRenderScenarioState(state, def) {
+    if (!state || !def) return false;
+    if (!scenarioRequirementMet(def)) return false;
+    if (state.hidden) return false;
+    return !state.triggered || def.persistentAfterTrigger;
   }
 
   function applyPaddingToMap(mapData, padding) {
@@ -1748,6 +1828,7 @@
 
   function activateScenarioObject(state, def) {
     if (!state || !def || state.triggered || activeDialogue) return false;
+    if (def.repairQuest) return false;
     state.triggered = true;
     state.opened = true;
     openedIds.add(state.id);
@@ -1766,6 +1847,7 @@
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
       if (!def || state.triggered) return;
+      if (!scenarioRequirementMet(def)) return;
       const ahead = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells - 1 : 1;
       if (!scenarioIsOnLand(state, ahead)) return;
       seeds.push({ id: state.id, x: state.gridX, y: state.gridY });
@@ -1823,6 +1905,8 @@
     if (openedNow.size) {
       let anyOpenedAdded = false;
       openedNow.forEach((id) => {
+        const def = scenarioById.get(id);
+        if (!scenarioRequirementMet(def)) return;
         if (!openedIds.has(id)) {
           openedIds.add(id);
           anyOpenedAdded = true;
@@ -1844,7 +1928,7 @@
     const cells = new Set();
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
-      if (!def || state.triggered || !scenarioIsOnLand(state)) return;
+      if (!shouldRenderScenarioState(state, def) || !scenarioIsOnLand(state)) return;
       const radius = Number.isFinite(def.colliderRadius) ? Math.max(1, Math.round(def.colliderRadius)) : 1;
       for (let dy = -radius; dy <= radius; dy += 1) {
         for (let dx = -radius; dx <= radius; dx += 1) cells.add(cellKey(state.gridX + dx, state.gridY + dy));
@@ -1915,9 +1999,8 @@
   function checkScenarioTriggers() {
     if (activeDialogue) return;
     scenarioState.forEach((state) => {
-      if (state.triggered) return;
       const def = scenarioById.get(state.id);
-      if (!def) return;
+      if (!shouldRenderScenarioState(state, def) || state.triggered || def.repairQuest) return;
       const radius = getTriggerRadius(def, state);
       if (!triggerRadiusTouchesLand(state, radius)) return;
       if (!isHeroWithinTrigger(state, def)) return;
@@ -1927,10 +2010,89 @@
   }
 
   function getScenarioTexture(def, state) {
+    if (def && def.primitive && def.primitive.kind) return null;
     const visual = state.transformed && def.transformOnApproach ? def.transformOnApproach : def;
     const fallback = visual.fallbackUrl || def.fallbackUrl || '';
     const asset = visual.assetUrl || def.assetUrl || '';
     return getTexture(asset) || getTexture(fallback);
+  }
+
+  function drawScenarioBoatPrimitive(g, x, y, width, height, repaired, now) {
+    const wobble = Math.sin(now / 520) * height * 0.025;
+    const yy = y + wobble;
+    g.beginFill(repaired ? 0x7f4a24 : 0x6c4a34, 1);
+    g.drawPolygon([
+      x - width * 0.48, yy - height * 0.02,
+      x + width * 0.45, yy - height * 0.12,
+      x + width * 0.32, yy + height * 0.24,
+      x - width * 0.32, yy + height * 0.28,
+    ]);
+    g.endFill();
+    g.beginFill(repaired ? 0xd8b073 : 0x9d7049, 1);
+    g.drawPolygon([
+      x - width * 0.35, yy - height * 0.1,
+      x + width * 0.28, yy - height * 0.16,
+      x + width * 0.18, yy + height * 0.08,
+      x - width * 0.28, yy + height * 0.14,
+    ]);
+    g.endFill();
+    g.beginFill(0x3a5878, 1);
+    drawRoundedRect(g, x - width * 0.08, yy - height * 0.34, width * 0.25, height * 0.18, height * 0.04);
+    g.endFill();
+    g.beginFill(0xbfd8e8, 1);
+    drawRoundedRect(g, x - width * 0.02, yy - height * 0.31, width * 0.09, height * 0.1, height * 0.025);
+    g.endFill();
+    if (!repaired) {
+      g.lineStyle(Math.max(2, width * 0.025), 0x2f2219, 1);
+      g.moveTo(x - width * 0.12, yy - height * 0.18);
+      g.lineTo(x - width * 0.02, yy + height * 0.12);
+      g.moveTo(x + width * 0.22, yy - height * 0.19);
+      g.lineTo(x + width * 0.35, yy + height * 0.04);
+      g.lineStyle(0, 0xffffff, 0);
+      g.beginFill(0x3d2b20, 1);
+      g.drawPolygon([
+        x + width * 0.34, yy - height * 0.09,
+        x + width * 0.5, yy - height * 0.14,
+        x + width * 0.43, yy + height * 0.1,
+      ]);
+      g.endFill();
+    } else {
+      g.beginFill(0xf2f2de, 1);
+      g.drawPolygon([
+        x + width * 0.02, yy - height * 0.5,
+        x + width * 0.02, yy - height * 0.18,
+        x + width * 0.28, yy - height * 0.18,
+      ]);
+      g.endFill();
+    }
+  }
+
+  function drawBlanketSurvivorPrimitive(g, x, y, width, height) {
+    g.beginFill(0x253852, 0.28);
+    g.drawEllipse(x, y + height * 0.26, width * 0.36, height * 0.14);
+    g.endFill();
+    g.beginFill(0x6e9ac8, 1);
+    drawRoundedRect(g, x - width * 0.36, y - height * 0.05, width * 0.72, height * 0.36, height * 0.12);
+    g.endFill();
+    g.beginFill(0xd9b18d, 1);
+    g.drawCircle(x + width * 0.18, y - height * 0.08, height * 0.16);
+    g.endFill();
+    g.beginFill(0x59402f, 1);
+    g.drawEllipse(x + width * 0.18, y - height * 0.17, height * 0.15, height * 0.08);
+    g.endFill();
+  }
+
+  function drawScenarioPrimitive(g, state, def, metrics, now) {
+    const kind = def && def.primitive && def.primitive.kind;
+    if (kind === 'brokenBoat') {
+      drawScenarioBoatPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height, Boolean(state.repaired), now);
+      return true;
+    }
+    if (kind === 'blanketSurvivor') {
+      drawBlanketSurvivorPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height);
+      return true;
+    }
+    return false;
   }
 
   function drawWaterRipples(g, x, y, width, height, now, state) {
@@ -1984,11 +2146,14 @@
   function getScenarioRenderMetrics(state, def, now = performance.now()) {
     const x = (state.gridX + 0.5) * cellPct;
     const y = (state.gridY + 0.5) * cellPct;
-    const baseX = pct2px(x);
-    const baseY = pct2px(y);
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const renderOffset = def && def.renderOffsetPx ? def.renderOffsetPx : {};
+    const offsetX = Number.isFinite(renderOffset.x) ? renderOffset.x * sizeScale : 0;
+    const offsetY = Number.isFinite(renderOffset.y) ? renderOffset.y * sizeScale : 0;
+    const baseX = pct2px(x) + offsetX;
+    const baseY = pct2px(y) + offsetY;
     const floating = !scenarioCenterIsOnLand(state);
     const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
     const width = (Number.isFinite(def && def.widthPx) ? def.widthPx : 60) * sizeScale;
     const height = (Number.isFinite(def && def.heightPx) ? def.heightPx : 60) * sizeScale;
     return { baseX, baseY, floating, floatOffset, width, height };
@@ -2001,9 +2166,8 @@
     const now = performance.now();
     for (let i = scenarioState.length - 1; i >= 0; i -= 1) {
       const state = scenarioState[i];
-      if (!state || state.triggered) continue;
       const def = scenarioById.get(state.id);
-      if (!def) continue;
+      if (!shouldRenderScenarioState(state, def) || state.triggered || def.repairQuest) continue;
       const metrics = getScenarioRenderMetrics(state, def, now);
       if (metrics.floating || !state.opened) continue;
       const cx = metrics.baseX;
@@ -2031,7 +2195,7 @@
     const activeIds = new Set();
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
-      if (state.triggered) return;
+      if (!shouldRenderScenarioState(state, def)) return;
       if (!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
       activeIds.add(state.id);
       const { baseX, baseY, floating, floatOffset, width, height } = getScenarioRenderMetrics(state, def, now);
@@ -2061,15 +2225,165 @@
         sprite.height = height;
       } else {
         if (sprite) sprite.visible = false;
-        beginFill(scenarioGraphics, '#cfd8dc');
-        drawRoundedRect(scenarioGraphics, baseX - width / 2, baseY + floatOffset - height / 2, width, height, Math.min(width, height) * 0.2);
-        scenarioGraphics.endFill();
+        if (!drawScenarioPrimitive(scenarioGraphics, state, def, { baseX, baseY, floating, floatOffset, width, height }, now)) {
+          beginFill(scenarioGraphics, '#cfd8dc');
+          drawRoundedRect(scenarioGraphics, baseX - width / 2, baseY + floatOffset - height / 2, width, height, Math.min(width, height) * 0.2);
+          scenarioGraphics.endFill();
+        }
       }
-      if (!floating && state.opened && !state.triggered) drawScenarioLandGlint(scenarioFxGraphics, baseX, baseY + floatOffset, width, height, now, state);
+      if (!floating && state.opened && !state.triggered && !def.repairQuest) drawScenarioLandGlint(scenarioFxGraphics, baseX, baseY + floatOffset, width, height, now, state);
     });
     scenarioSprites.forEach((sprite, id) => {
       if (!activeIds.has(id)) sprite.visible = false;
     });
+  }
+
+  function createSmallIslandMap() {
+    const center = Math.floor(NEW_ISLAND_MAP_SIZE / 2);
+    const radius = NEW_ISLAND_SIZE / 2;
+    return Array.from({ length: NEW_ISLAND_MAP_SIZE }, (_, y) =>
+      Array.from({ length: NEW_ISLAND_MAP_SIZE }, (_, x) => {
+        const d = Math.hypot(x - center, y - center);
+        return d <= radius ? 1 : 0;
+      })
+    );
+  }
+
+  function resetProgressForNextIsland() {
+    localStorage.setItem(ISLAND_RUN_KEY, '2');
+    localStorage.setItem('map', JSON.stringify(createSmallIslandMap()));
+    localStorage.setItem('baseGridW', String(NEW_ISLAND_MAP_SIZE));
+    localStorage.setItem('islandExpansionLevel', '0');
+    localStorage.setItem('mapShift', JSON.stringify({ x: 0, y: 0 }));
+    localStorage.removeItem(SCENARIO_OPENED_KEY);
+    localStorage.removeItem(SCENARIO_STATE_KEY);
+    localStorage.removeItem(SCENARIO_DROPS_KEY);
+    localStorage.removeItem(SCENARIO_COLLIDER_CELLS_KEY);
+    localStorage.removeItem(BOAT_REPAIRED_KEY);
+    localStorage.removeItem(BOAT_REPAIR_REQUEST_KEY);
+    const user = getUserState();
+    user.money = 0;
+    user.inventory = {};
+    user.unlockedResources = {};
+    user.questLine = { index: 0, updatedAt: Date.now() };
+    user.stats = { moneyEarned: 0, itemsCollected: 0, itemsCollectedById: {} };
+    setUserState(user);
+    bushes.splice(0);
+    busy.clear();
+    resourceColliderCells.clear();
+    resourceSpawnCells.clear();
+    scenarioDrops = [];
+    openedIds = loadOpenedIds();
+    loadMapData({ resetHero: true });
+    scenarioState = loadScenarioState();
+    persistScenarioState();
+    persistScenarioDrops();
+    rebuildScenarioColliderCells();
+    rebuildResourceColliderCells();
+    rebuildResourceSpawnCells();
+    window.dispatchEvent(new CustomEvent('vibe-map-changed'));
+  }
+
+  function getBoatScenarioState() {
+    return scenarioState.find((state) => state.id === 'broken-boat') || null;
+  }
+
+  function startBoatCutscene() {
+    if (boatCutscene) return;
+    const state = getBoatScenarioState();
+    const def = scenarioById.get('broken-boat');
+    if (!state || !def) return;
+    state.repaired = true;
+    state.opened = true;
+    const metrics = getScenarioRenderMetrics(state, def, performance.now());
+    state.hidden = true;
+    localStorage.setItem(BOAT_REPAIRED_KEY, '1');
+    persistScenarioState();
+    boatCutscene = {
+      phase: 'depart',
+      t0: performance.now(),
+      resetDone: false,
+      startX: worldRoot.x + metrics.baseX,
+      startY: worldRoot.y + metrics.baseY + metrics.floatOffset,
+      width: metrics.width,
+      height: metrics.height,
+    };
+    controllerState.joyActive = false;
+    controllerState.vxPct = 0;
+    controllerState.vyPct = 0;
+    saveController();
+  }
+
+  function consumeBoatRepairRequest() {
+    if (boatCutscene) return;
+    const raw = localStorage.getItem(BOAT_REPAIR_REQUEST_KEY);
+    if (!raw) return;
+    localStorage.removeItem(BOAT_REPAIR_REQUEST_KEY);
+    startBoatCutscene();
+  }
+
+  function drawCutsceneBoat(now) {
+    if (!boatCutscene || boatCutscene.phase !== 'depart') return;
+    const t = clamp((now - boatCutscene.t0) / 2800, 0, 1);
+    const x = lerp(boatCutscene.startX, gameWidth + boatCutscene.width * 0.9, easeInCubic(t));
+    const y = boatCutscene.startY + Math.sin(now / 260) * 5;
+    drawScenarioBoatPrimitive(cutsceneGraphics, x, y, boatCutscene.width, boatCutscene.height, true, now);
+    cutsceneGraphics.beginFill(0xd9b18d, 1);
+    cutsceneGraphics.drawCircle(x - boatCutscene.width * 0.03, y - boatCutscene.height * 0.42, Math.max(4, boatCutscene.height * 0.11));
+    cutsceneGraphics.endFill();
+    cutsceneGraphics.beginFill(0xc84235, 1);
+    cutsceneGraphics.drawRect(x - boatCutscene.width * 0.1, y - boatCutscene.height * 0.35, boatCutscene.width * 0.18, boatCutscene.height * 0.18);
+    cutsceneGraphics.endFill();
+  }
+
+  function updateBoatCutscene(now) {
+    if (!boatCutscene) return;
+    const elapsed = now - boatCutscene.t0;
+    if (boatCutscene.phase === 'depart' && elapsed >= 2800) {
+      boatCutscene.phase = 'fadeOut';
+      boatCutscene.t0 = now;
+      return;
+    }
+    if (boatCutscene.phase === 'fadeOut' && elapsed >= 1000) {
+      boatCutscene.phase = 'timeText';
+      boatCutscene.t0 = now;
+      if (!boatCutscene.resetDone) {
+        boatCutscene.resetDone = true;
+        resetProgressForNextIsland();
+      }
+      return;
+    }
+    if (boatCutscene.phase === 'timeText' && elapsed >= 1800) {
+      boatCutscene.phase = 'fadeIn';
+      boatCutscene.t0 = now;
+      return;
+    }
+    if (boatCutscene.phase === 'fadeIn' && elapsed >= 1200) {
+      boatCutscene = null;
+      startDialogue(['кажется, топливо закончилось', 'надо исследовать этот остров']);
+    }
+  }
+
+  function renderTransition(now) {
+    cutsceneGraphics.clear();
+    transitionGraphics.clear();
+    transitionText.text = '';
+    if (!boatCutscene) return;
+    drawCutsceneBoat(now);
+    let alpha = 0;
+    if (boatCutscene.phase === 'fadeOut') alpha = clamp((now - boatCutscene.t0) / 1000, 0, 1);
+    else if (boatCutscene.phase === 'timeText') alpha = 1;
+    else if (boatCutscene.phase === 'fadeIn') alpha = 1 - clamp((now - boatCutscene.t0) / 1200, 0, 1);
+    if (alpha > 0) {
+      transitionGraphics.beginFill(0x000000, alpha);
+      transitionGraphics.drawRect(0, 0, gameWidth, gameHeight);
+      transitionGraphics.endFill();
+    }
+    if (boatCutscene.phase === 'timeText') {
+      transitionText.text = '8 часов спустя';
+      transitionText.x = gameWidth / 2;
+      transitionText.y = gameHeight / 2;
+    }
   }
 
   const bushes = [];
@@ -2169,11 +2483,25 @@
     };
   }
 
-  function mkLeaf(xPct, yPct) {
-    const a = rnd(0, Math.PI * 2);
+  function mkLeaf(xPct, yPct, opts = {}) {
+    const a = Number.isFinite(opts.angle) ? opts.angle : rnd(0, Math.PI * 2);
     const v = vec(a);
-    const spd = rnd(LEAF_SPD_MIN, LEAF_SPD_MAX);
-    return { xPct, yPct, vxPct: v.x * spd, vyPct: v.y * spd, rot: rnd(0, Math.PI * 2), angVel: rnd(-10, 10) * (Math.PI / 180), t0: performance.now() };
+    const spd = rnd(
+      Number.isFinite(opts.spdMin) ? opts.spdMin : LEAF_SPD_MIN,
+      Number.isFinite(opts.spdMax) ? opts.spdMax : LEAF_SPD_MAX
+    );
+    return {
+      xPct,
+      yPct,
+      vxPct: v.x * spd,
+      vyPct: v.y * spd,
+      rot: rnd(0, Math.PI * 2),
+      angVel: rnd(-18, 18) * (Math.PI / 180),
+      t0: Number.isFinite(opts.t0) ? opts.t0 : performance.now(),
+      color: opts.color,
+      sizePct: Number.isFinite(opts.sizePct) ? opts.sizePct : 1,
+      lifeMs: Number.isFinite(opts.lifeMs) ? opts.lifeMs : LEAF_LIFE_MS,
+    };
   }
 
   function mkWoodChip(xPct, yPct, side, now, primitive) {
@@ -2552,6 +2880,58 @@
     b.berries.push(be);
   }
 
+  function getResourceBurstColors(b, visual) {
+    const primitive = (visual && visual.primitive) || (b.berryDef && (b.berryDef.bushPrimitive || b.berryDef.primitive)) || {};
+    const colors = [];
+    const add = (value, fallback) => {
+      if (!value && !fallback) return;
+      const parsed = parseColor(value || fallback, fallback || '#1d8f46');
+      if (!colors.includes(parsed.color)) colors.push(parsed.color);
+    };
+    add(primitive.grass, '#1f8b45');
+    add(primitive.leaf || primitive.foliage, '#2f9b52');
+    add(primitive.accent, null);
+    add(primitive.root, null);
+    add(primitive.cap, null);
+    add(primitive.capShade, null);
+    add(primitive.stem, null);
+    add(primitive.base, null);
+    if (!colors.length) colors.push(0x1d8f46);
+    return colors;
+  }
+
+  function getResourceBurstStart(b, visual, now) {
+    const resolvedVisual = visual || getBushVisualDef(b);
+    const bounds = getResourceAuraBounds(b, resolvedVisual, now);
+    const centered = bounds && (resolvedVisual.type === 'centered' || bounds.primitive.kind === 'tree');
+    const spreadX = bounds.width * (centered ? 0.32 : 0.44);
+    const topY = centered ? bounds.topY + bounds.height * 0.18 : bounds.topY + bounds.height * 0.35;
+    const bottomY = centered ? bounds.baseY - bounds.height * 0.08 : bounds.baseY + bounds.height * 0.06;
+    const x = bounds.x + rnd(-spreadX, spreadX);
+    const y = rnd(Math.min(topY, bottomY), Math.max(topY, bottomY));
+    return { xPct: px2pct(x), yPct: px2pct(y) };
+  }
+
+  function spawnResourceBurst(b, now) {
+    if (!b || b.resourceBurstSpawned) return;
+    b.resourceBurstSpawned = true;
+    const visual = getBushVisualDef(b);
+    const centered = visual.type === 'centered';
+    const colors = getResourceBurstColors(b, visual);
+    const count = centered ? CENTERED_RESOURCE_BURST_COUNT : RESOURCE_BURST_COUNT;
+    for (let i = 0; i < count; i += 1) {
+      const start = getResourceBurstStart(b, visual, now);
+      b.leafs.push(mkLeaf(start.xPct, start.yPct, {
+        t0: now,
+        color: colors[rndi(0, colors.length - 1)],
+        sizePct: centered ? rnd(0.72, 1.55) : rnd(0.66, 1.22),
+        spdMin: centered ? LEAF_SPD_MIN * 1.05 : LEAF_SPD_MIN,
+        spdMax: centered ? LEAF_SPD_MAX * 1.7 : LEAF_SPD_MAX * 1.25,
+        lifeMs: centered ? rnd(760, 980) : rnd(640, 820),
+      }));
+    }
+  }
+
   function spawnRareDrops(b, now, avoidSet, phase) {
     const rules = normalizeRareDropRules(b && b.berryDef);
     if (!rules.length) return;
@@ -2678,14 +3058,29 @@
       const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
       const touch = bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
       if (touch || dist <= pct2px(BURST_R_PCT)) {
-        for (let i = 0; i < LEAF_COUNT; i += 1) b.leafs.push(mkLeaf(b.xPct, b.yPct));
+        const visual = getBushVisualDef(b);
+        const centered = visual.type === 'centered';
+        spawnResourceBurst(b, now);
         const avoidSet = new Set([...getActiveBuildingCells(), ...getScenarioBlockers()]);
         b.berries.forEach((be) => {
           const a = rnd(0, Math.PI * 2);
           const d = rnd(SCATTER_MIN_PCT, SCATTER_MAX_PCT);
           const v = vec(a);
           const to = clampToLandSafe(b.xPct + v.x * d, b.yPct + v.y * d, BERRY_R_PCT, avoidSet);
-          Object.assign(be, { x0: be.xPct, y0: be.yPct, tx: to.xPct, ty: to.yPct, flying: true, tFly0: now, flyDur: BERRY_FLY_MS, onBush: false, scale: 1 });
+          const from = centered ? getResourceBurstStart(b, visual, now) : { xPct: be.xPct, yPct: be.yPct };
+          Object.assign(be, {
+            xPct: from.xPct,
+            yPct: from.yPct,
+            x0: from.xPct,
+            y0: from.yPct,
+            tx: to.xPct,
+            ty: to.yPct,
+            flying: true,
+            tFly0: now,
+            flyDur: centered ? BERRY_FLY_MS * 1.35 : BERRY_FLY_MS,
+            onBush: false,
+            scale: 1,
+          });
         });
         spawnRareDrops(b, now, avoidSet, 'final');
         awardChopExperience(b);
@@ -2701,7 +3096,7 @@
         leaf.xPct += leaf.vxPct * dt;
         leaf.yPct += leaf.vyPct * dt;
         leaf.rot += leaf.angVel;
-        return now - leaf.t0 < LEAF_LIFE_MS;
+        return now - leaf.t0 < (leaf.lifeMs || LEAF_LIFE_MS);
       });
       updateFlyingParticles(b, now);
       const hasWoodChips = Boolean(b.woodChips && b.woodChips.length);
@@ -3168,11 +3563,12 @@
   }
 
   function drawLeaf(g, leaf, now) {
-    const alpha = clamp(1 - (now - leaf.t0) / LEAF_LIFE_MS, 0, 1);
+    const alpha = clamp(1 - (now - leaf.t0) / (leaf.lifeMs || LEAF_LIFE_MS), 0, 1);
     const x = pct2px(leaf.xPct);
     const y = pct2px(leaf.yPct);
-    const w = pct2px(2);
-    const h = pct2px(1);
+    const size = Number.isFinite(leaf.sizePct) ? leaf.sizePct : 1;
+    const w = pct2px(2 * size);
+    const h = pct2px(1 * size);
     const c = Math.cos(leaf.rot);
     const s = Math.sin(leaf.rot);
     const points = [
@@ -3181,7 +3577,7 @@
       [w / 2, 0],
       [0, h / 2],
     ].map(([px, py]) => [x + px * c - py * s, y + px * s + py * c]).flat();
-    resourceGraphics.beginFill(0x1d8f46, alpha);
+    resourceGraphics.beginFill(leaf.color || 0x1d8f46, alpha);
     resourceGraphics.drawPolygon(points);
     resourceGraphics.endFill();
   }
@@ -3530,7 +3926,7 @@
   }
 
   function isUiOpen() {
-    return Boolean(document.querySelector('.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open'));
+    return Boolean(boatCutscene || document.querySelector('.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open'));
   }
 
   function onPointerDown(event) {
@@ -3652,6 +4048,11 @@
   }
 
   function updateHeroLogic(dtMs) {
+    if (boatCutscene) {
+      controllerState.isMoving = false;
+      localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving: false }));
+      return;
+    }
     applyHeroTeleport();
     const frameScale = dtMs / BASE_FRAME_MS;
     const vx = (controllerState.vxPct || 0) * SPEED_SCALE * frameScale;
@@ -3764,6 +4165,15 @@
   }
 
   function renderHero(now, dtMs) {
+    heroContainer.visible = !boatCutscene;
+    if (boatCutscene) {
+      if (dialogueBubble) {
+        heroLayer.removeChild(dialogueBubble);
+        dialogueBubble.destroy({ children: true });
+        dialogueBubble = null;
+      }
+      return;
+    }
     const cell = getWorldCellPx();
     if (!cell) return;
     const baseGridW = getBaseGridW();
@@ -4201,29 +4611,37 @@
   let spawnAccumulator = 0;
   function frame(deltaMS) {
     const now = performance.now();
+    consumeBoatRepairRequest();
+    updateBoatCutscene(now);
     updateHeroLogic(deltaMS);
-    spawnScenarioLand();
-    updateDialogue(now);
-    checkScenarioTriggers();
+    if (!boatCutscene) {
+      spawnScenarioLand();
+      updateDialogue(now);
+      checkScenarioTriggers();
+    }
     syncDialogueText(getActiveDialogueText());
 
-    spawnAccumulator += deltaMS;
-    if (spawnAccumulator >= SPAWN_MS) {
-      spawnAccumulator = 0;
-      const unpicked = bushes.filter((b) => b.stage === 'growing' || b.stage === 'ripe').length;
-      if (land.length && unpicked < MAX_UNPICKED_BUSHES) spawnBush(pickBerryDef());
+    if (!boatCutscene) {
+      spawnAccumulator += deltaMS;
+      if (spawnAccumulator >= SPAWN_MS) {
+        spawnAccumulator = 0;
+        const unpicked = bushes.filter((b) => b.stage === 'growing' || b.stage === 'ripe').length;
+        if (land.length && unpicked < MAX_UNPICKED_BUSHES) spawnBush(pickBerryDef());
+      }
     }
 
-    bushes.forEach((b) => {
-      if (b.stage !== 'dead') updateBush(b);
-    });
-    for (let i = bushes.length - 1; i >= 0; i -= 1) {
-      if (bushes[i].stage !== 'dead') continue;
-      unregisterResourceCollider(bushes[i]);
-      unregisterResourceSpawn(bushes[i]);
-      bushes.splice(i, 1);
+    if (!boatCutscene) {
+      bushes.forEach((b) => {
+        if (b.stage !== 'dead') updateBush(b);
+      });
+      for (let i = bushes.length - 1; i >= 0; i -= 1) {
+        if (bushes[i].stage !== 'dead') continue;
+        unregisterResourceCollider(bushes[i]);
+        unregisterResourceSpawn(bushes[i]);
+        bushes.splice(i, 1);
+      }
+      collectLoop();
     }
-    collectLoop();
 
     const wiggle = getWiggleOffset();
     worldRoot.x = -camera.x + wiggle.x;
@@ -4236,6 +4654,7 @@
     renderResources(now);
     renderHero(now, deltaMS || (now - lastHeroAnimT));
     lastHeroAnimT = now;
+    renderTransition(now);
     renderJoystick();
   }
 
@@ -4245,6 +4664,7 @@
   });
   window.addEventListener('vibe-found-item-complete', (event) => completeScenarioFoundItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', onMapChanged);
+  window.addEventListener('vibe-boat-repair', consumeBoatRepairRequest);
   window.addEventListener('beforeunload', markResourceSeen);
   window.addEventListener('pagehide', markResourceSeen);
   document.addEventListener('visibilitychange', () => {

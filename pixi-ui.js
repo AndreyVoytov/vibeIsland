@@ -6,6 +6,12 @@
   const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
   const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
+  const DEFAULT_ISLAND_METERS = 18;
+  const BOAT_REPAIR_COST = 100000;
+  const LIGHTHOUSE_REQUIRED_METERS = getScenarioRequiredMeters('lighthouse');
+  const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
+  const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
+  const SCENARIO_STATE_KEY = 'scenarioObjectsState';
   const KNOWN_LOCAL_ASSETS = new Set([
     './img/berry/1.png',
     './img/berry/strawberry-item.png',
@@ -111,7 +117,23 @@
       target: 150,
       reward: { type: 'money', amount: 900 },
     },
+    {
+      id: 'repair-boat',
+      type: 'repairBoat',
+      title: 'починить катер',
+      target: BOAT_REPAIR_COST,
+      reward: { type: 'story', amount: 1 },
+    },
   ];
+
+  function getScenarioRequiredMeters(id) {
+    const def = scenarioById.get(id);
+    if (!def) return DEFAULT_ISLAND_METERS;
+    const distance = Math.max(0, Math.floor(Number(def.distanceCells) || 0));
+    const triggerRadius = Math.max(1, Math.floor(Number(def.triggerRadiusCells) || 1));
+    const expansionSteps = Math.max(0, distance - Math.max(0, triggerRadius - 1));
+    return DEFAULT_ISLAND_METERS + expansionSteps * 2;
+  }
 
   const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
@@ -199,6 +221,19 @@
     );
   }
 
+  function buildBoatRepairFallback() {
+    return svgDataUri(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 64'>" +
+      "<ellipse cx='40' cy='50' rx='30' ry='7' fill='rgba(0,0,0,0.18)'/>" +
+      "<path d='M12 35h52l-8 14H23c-6 0-10-5-11-14z' fill='#2f8fca'/>" +
+      "<path d='M21 29h30l7 7H16l5-7z' fill='#f3f0df'/>" +
+      "<rect x='28' y='18' width='20' height='12' rx='3' fill='#d85f38'/>" +
+      "<rect x='33' y='12' width='5' height='20' rx='2' fill='#7a4c35'/>" +
+      "<path d='M55 23l9-6 2 18-10-4z' fill='#7a4c35'/>" +
+      "</svg>"
+    );
+  }
+
   function knownAssetUrl(url) {
     if (!url) return '';
     if (url.startsWith('data:image')) return url;
@@ -255,11 +290,51 @@
 
   function loadScenarioObjectsState() {
     try {
-      const stored = JSON.parse(localStorage.getItem('scenarioObjectsState') || '[]');
+      const stored = JSON.parse(localStorage.getItem(SCENARIO_STATE_KEY) || '[]');
       return Array.isArray(stored) ? stored : [];
     } catch (err) {
       return [];
     }
+  }
+
+  function getIslandSizeMeters() {
+    const bounds = getIslandBounds(loadMap());
+    if (!bounds) return DEFAULT_ISLAND_METERS;
+    return Math.max(bounds.maxX - bounds.minX + 1, bounds.maxY - bounds.minY + 1);
+  }
+
+  function renderIslandSizeMeters() {
+    if (!islandSizeMeters) return;
+    islandSizeMeters.textContent = `${formatCompactNumber(getIslandSizeMeters())} м`;
+  }
+
+  function loadScenarioOpenedIds() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SCENARIO_OPENED_KEY) || '[]');
+      return new Set(Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []);
+    } catch (err) {
+      return new Set();
+    }
+  }
+
+  function isScenarioOpened(id) {
+    if (loadScenarioOpenedIds().has(id)) return true;
+    return loadScenarioObjectsState().some((state) =>
+      state && state.id === id && (state.opened || state.triggered || state.transformed)
+    );
+  }
+
+  function isLighthouseOpened() {
+    return isScenarioOpened('lighthouse');
+  }
+
+  function getRepairBoatTarget() {
+    return isLighthouseOpened() ? BOAT_REPAIR_COST : LIGHTHOUSE_REQUIRED_METERS;
+  }
+
+  function getRepairBoatCurrent(user) {
+    if (!isLighthouseOpened()) return getIslandSizeMeters();
+    return Math.max(0, Math.floor(Number(user && user.money) || 0));
   }
 
   function hasLandNeighbor(map, x, y) {
@@ -411,7 +486,29 @@
     },
   }));
 
-  const resources = [...berryResources, ...buildingResources, ...expansionResources].sort((a, b) => {
+  const boatRepairResource = {
+    id: 'repair-boat-upgrade',
+    title: 'Починить катер',
+    assetUrl: '',
+    unlockCost: BOAT_REPAIR_COST,
+    detail: 'Доступно после маяка',
+    fallbackUrl: buildBoatRepairFallback(),
+    category: 'boatRepair',
+    onUnlock: () => {
+      const user = getUserState();
+      const questState = ensureQuestState(user);
+      const repairQuestIndex = QUESTS.findIndex((quest) => quest.type === 'repairBoat');
+      if (repairQuestIndex >= 0 && questState.index <= repairQuestIndex) {
+        questState.index = Math.min(repairQuestIndex + 1, QUESTS.length);
+        questState.updatedAt = Date.now();
+      }
+      setUserState(user);
+      localStorage.setItem(BOAT_REPAIR_REQUEST_KEY, String(Date.now()));
+      window.dispatchEvent(new CustomEvent('vibe-boat-repair'));
+    },
+  };
+
+  const resources = [...berryResources, ...buildingResources, ...expansionResources, boatRepairResource].sort((a, b) => {
     const diff = a.unlockCost - b.unlockCost;
     if (diff !== 0) return diff;
     return String(a.title).localeCompare(String(b.title));
@@ -424,6 +521,7 @@
   const playerLevel = document.getElementById('playerLevel');
   const playerXpFill = document.getElementById('playerXpFill');
   const playerXpText = document.getElementById('playerXpText');
+  const islandSizeMeters = document.getElementById('islandSizeMeters');
   const shopButton = document.getElementById('shopButton');
   const shopPanel = document.getElementById('shopPanel');
   const closePanel = document.getElementById('closePanel');
@@ -690,12 +788,14 @@
   function attemptUnlock(res) {
     const latest = getUserState();
     if (latest.unlockedResources[res.id]) return false;
+    const isBoatRepair = res.category === 'boatRepair';
+    if (isBoatRepair && !isLighthouseOpened()) return false;
     if (latest.money < res.unlockCost) return false;
     latest.money -= res.unlockCost;
     latest.unlockedResources[res.id] = true;
     setUserState(latest);
     const isExpansion = res.category === 'expansion';
-    if (isExpansion) togglePanel(false);
+    if (isExpansion || isBoatRepair) togglePanel(false);
     maybeTeleportHeroFromBuilding(res);
     if (typeof res.onUnlock === 'function') {
       if (isExpansion) setTimeout(() => res.onUnlock(), EXPANSION_DELAY_MS);
@@ -764,7 +864,7 @@
     card.appendChild(button);
     card.appendChild(check);
     resourceList.appendChild(card);
-    return { card, button, label, check };
+    return { card, button, label, detail: profit, check };
   }
 
   function formatCompactNumber(value) {
@@ -784,11 +884,13 @@
     const stats = ensureUserStats(user);
     if (quest.type === 'moneyEarned') return Math.floor(Number(stats.moneyEarned) || 0);
     if (quest.type === 'itemsCollected') return Math.floor(Number(stats.itemsCollected) || 0);
+    if (quest.type === 'repairBoat') return getRepairBoatCurrent(user);
     return 0;
   }
 
   function getQuestIconUrl(quest) {
     if (quest && quest.type === 'moneyEarned') return uiConfig.uiAssets.coin || {};
+    if (quest && quest.type === 'repairBoat') return uiConfig.uiAssets.coin || {};
     return { url: './img/ui/inventory-bag.png' };
   }
 
@@ -847,7 +949,22 @@
     const quest = QUESTS[index];
     if (!quest) return;
     const current = getQuestCurrent(quest, user);
-    if (current < quest.target) return;
+    const target = quest.type === 'repairBoat' ? getRepairBoatTarget() : Math.max(1, Math.floor(Number(quest.target) || 1));
+    if (current < target) return;
+    if (quest.type === 'repairBoat') {
+      if (!isLighthouseOpened() || user.money < BOAT_REPAIR_COST) return;
+      user.money = Math.max(0, Math.floor(Number(user.money) || 0) - BOAT_REPAIR_COST);
+      user.unlockedResources['repair-boat-upgrade'] = true;
+      questState.index = Math.min(index + 1, QUESTS.length);
+      questState.updatedAt = Date.now();
+      setUserState(user);
+      localStorage.setItem(BOAT_REPAIR_REQUEST_KEY, String(Date.now()));
+      window.dispatchEvent(new CustomEvent('vibe-boat-repair'));
+      renderResources();
+      renderInventory();
+      renderQuestLine();
+      return;
+    }
     applyQuestReward(user, quest.reward);
     questState.index = Math.min(index + 1, QUESTS.length);
     questState.updatedAt = Date.now();
@@ -864,9 +981,11 @@
     const index = questState.index;
     const quest = QUESTS[index];
     const done = !quest;
-    const target = quest ? Math.max(1, Math.floor(Number(quest.target) || 1)) : 1;
+    const repairLocked = Boolean(quest && quest.type === 'repairBoat' && !isLighthouseOpened());
+    const target = quest ? (quest.type === 'repairBoat' ? getRepairBoatTarget() : Math.max(1, Math.floor(Number(quest.target) || 1))) : 1;
     const current = quest ? getQuestCurrent(quest, user) : target;
     const progress = done ? 1 : Math.min(1, current / target);
+    const claimReady = !done && progress >= 1 && !repairLocked;
     const totalProgress = QUESTS.length ? ((Math.min(index, QUESTS.length) + progress) / QUESTS.length) * 100 : 100;
 
     if (questStage) questStage.textContent = `1-${Math.min(index + 1, QUESTS.length)}`;
@@ -875,13 +994,13 @@
       Array.from(questMilestones.children).forEach((dot, dotIndex) => {
         dot.classList.toggle('done', dotIndex < index || done);
         dot.classList.toggle('current', dotIndex === index && !done);
-        dot.classList.toggle('ready', dotIndex === index && !done && progress >= 1);
+        dot.classList.toggle('ready', dotIndex === index && claimReady);
       });
     }
 
     if (!questCard || !questTitle) return;
     questCard.classList.toggle('finished', done);
-    questCard.classList.toggle('complete', !done && progress >= 1);
+    questCard.classList.toggle('complete', claimReady);
     questCard.hidden = done;
 
     if (done) {
@@ -894,18 +1013,25 @@
 
     questCard.hidden = false;
     setUiAssetImage(questIcon, getQuestIconUrl(quest));
-    questTitle.textContent = progress >= 1 ? 'Награда' : quest.title;
+    if (quest.type === 'repairBoat') {
+      questTitle.textContent = repairLocked ? `расширьте остров до ${LIGHTHOUSE_REQUIRED_METERS} м` : 'починить катер';
+    } else {
+      questTitle.textContent = progress >= 1 ? 'Награда' : quest.title;
+    }
     if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
     if (questProgressText) {
       questProgressText.textContent = `${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)}`;
     }
-    if (questReward) questReward.style.display = '';
-    if (questRewardIcon) setUiAssetImage(questRewardIcon, getRewardIconAsset(quest.reward));
-    if (questRewardValue) questRewardValue.textContent = `x${formatCompactNumber(quest.reward && quest.reward.amount)}`;
+    if (questReward) questReward.style.display = quest.type === 'repairBoat' ? 'none' : '';
+    if (quest.type !== 'repairBoat') {
+      if (questRewardIcon) setUiAssetImage(questRewardIcon, getRewardIconAsset(quest.reward));
+      if (questRewardValue) questRewardValue.textContent = `x${formatCompactNumber(quest.reward && quest.reward.amount)}`;
+    }
   }
 
   function renderResources() {
     const user = getUserState();
+    renderIslandSizeMeters();
     moneyValue.textContent = user.money;
     if (gemValue) gemValue.textContent = formatCompactNumber(user.rainbowStones);
     let canUpgrade = false;
@@ -917,7 +1043,8 @@
         resourceCards.delete(res.id);
         return;
       }
-      const canBuy = user.money >= res.unlockCost;
+      const repairLocked = res.category === 'boatRepair' && !isLighthouseOpened();
+      const canBuy = user.money >= res.unlockCost && !repairLocked;
       if (canBuy) canUpgrade = true;
       let entry = resourceCards.get(res.id);
       if (!entry) {
@@ -925,7 +1052,10 @@
         resourceCards.set(res.id, entry);
       }
       entry.card.className = 'resource-card ' + (canBuy ? 'available clickable' : 'locked');
-      entry.label.textContent = res.unlockCost;
+      if (entry.detail && res.category === 'boatRepair') {
+        entry.detail.textContent = repairLocked ? `Расширьте остров до ${LIGHTHOUSE_REQUIRED_METERS} м` : 'Отправиться к новому острову';
+      }
+      entry.label.textContent = formatCompactNumber(res.unlockCost);
       entry.button.className = 'unlock-button' + (canBuy ? '' : ' locked');
       entry.button.disabled = !canBuy;
       entry.button.style.display = 'flex';
@@ -952,6 +1082,55 @@
     }, 0);
   }
 
+  function getInventoryCount(inventory, id) {
+    return Math.max(0, Math.floor(Number(inventory && inventory[id]) || 0));
+  }
+
+  function createInventoryIcon(item, className) {
+    const img = document.createElement('img');
+    img.className = className || '';
+    img.alt = item.titleRu || item.id || '';
+    img.src = knownAssetUrl(item.assetUrl) || item.assetUrl || '';
+    img.onerror = () => { img.style.visibility = 'hidden'; };
+    return img;
+  }
+
+  function appendGearSlot(parent, inventory, slotDef) {
+    const slot = document.createElement('div');
+    slot.className = `gear-slot ${slotDef.className || ''}`;
+    slot.setAttribute('data-ui-control', '');
+    const item = inventoryItems.find((entry) => entry.id === slotDef.itemId);
+    const count = item ? getInventoryCount(inventory, item.id) : 0;
+    if (item && count > 0) {
+      slot.title = item.titleRu || item.id;
+      slot.appendChild(createInventoryIcon(item));
+      const badge = document.createElement('span');
+      badge.className = 'gear-slot-badge';
+      badge.textContent = count > 9 ? '9+' : String(count);
+      slot.appendChild(badge);
+    } else {
+      slot.classList.add('empty');
+    }
+    parent.appendChild(slot);
+  }
+
+  function appendBagSlot(parent, item, count) {
+    const slot = document.createElement('div');
+    slot.className = 'bag-slot';
+    slot.setAttribute('data-ui-control', '');
+    if (item && count > 0) {
+      slot.title = item.titleRu || item.id;
+      slot.appendChild(createInventoryIcon(item));
+      const badge = document.createElement('span');
+      badge.className = 'bag-slot-count';
+      badge.textContent = count > 99 ? '99+' : String(count);
+      slot.appendChild(badge);
+    } else {
+      slot.classList.add('empty');
+    }
+    parent.appendChild(slot);
+  }
+
   function renderInventory() {
     const user = getUserState();
     const inventory = user.inventory || {};
@@ -963,6 +1142,61 @@
     if (!inventoryList) return;
 
     inventoryList.innerHTML = '';
+    const gear = document.createElement('div');
+    gear.className = 'inventory-gear';
+    gear.setAttribute('data-ui-control', '');
+
+    const character = document.createElement('div');
+    character.className = 'inventory-character';
+    const hero = document.createElement('img');
+    hero.alt = 'hero';
+    hero.src = heroPortrait && heroPortrait.src ? heroPortrait.src : './img/ui/hero-portrait.png';
+    character.appendChild(hero);
+    gear.appendChild(character);
+
+    [
+      { itemId: 'axe', className: 'gear-slot-weapon' },
+      { itemId: 'nail-puller', className: 'gear-slot-tool' },
+      { itemId: 'kettle', className: 'gear-slot-utility' },
+      { itemId: '', className: 'gear-slot-bag' },
+      { itemId: '', className: 'gear-slot-water' },
+      { itemId: '', className: 'gear-slot-rare' },
+    ].forEach((slotDef) => appendGearSlot(gear, inventory, slotDef));
+    inventoryList.appendChild(gear);
+
+    const tabs = document.createElement('div');
+    tabs.className = 'inventory-tabs';
+    ['Farming', 'Dungeon'].forEach((label, index) => {
+      const tab = document.createElement('div');
+      tab.className = `inventory-tab${index ? ' inactive' : ''}`;
+      tab.textContent = label;
+      tabs.appendChild(tab);
+    });
+    inventoryList.appendChild(tabs);
+
+    const sort = document.createElement('div');
+    sort.className = 'inventory-sort';
+    ['By Level', 'Collection', 'Merge'].forEach((label, index) => {
+      const button = document.createElement('div');
+      button.className = `inventory-sort-button${index === 0 ? ' active' : ''}`;
+      button.textContent = label;
+      sort.appendChild(button);
+    });
+    inventoryList.appendChild(sort);
+
+    const grid = document.createElement('div');
+    grid.className = 'inventory-bag-grid';
+    const visibleResourceItems = inventoryItems.filter((item) => item.resourceCategory && getInventoryCount(inventory, item.id) > 0);
+    const visibleOtherItems = inventoryItems.filter((item) => !item.resourceCategory && getInventoryCount(inventory, item.id) > 0);
+    const bagItems = [...visibleResourceItems, ...visibleOtherItems];
+    const slotCount = Math.max(25, Math.ceil(Math.max(1, bagItems.length) / 5) * 5);
+    for (let i = 0; i < slotCount; i += 1) {
+      const item = bagItems[i];
+      appendBagSlot(grid, item, item ? getInventoryCount(inventory, item.id) : 0);
+    }
+    inventoryList.appendChild(grid);
+    return;
+
     const visibleItems = inventoryItems.filter((item) => Math.max(0, Math.floor(Number(inventory[item.id]) || 0)) > 0);
     if (!visibleItems.length) {
       const empty = document.createElement('div');
@@ -1157,6 +1391,10 @@
   if (findingOk) findingOk.addEventListener('click', finishFindingItem);
   if (questClaim) questClaim.addEventListener('click', claimQuestReward);
   window.addEventListener('vibe-found-item', (event) => showFindingItem(event.detail || {}));
+  window.addEventListener('vibe-map-changed', () => {
+    renderResources();
+    renderQuestLine();
+  });
   panelOverlay.addEventListener('click', () => {
     togglePanel(false);
     toggleInventory(false);
