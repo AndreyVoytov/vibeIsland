@@ -1539,19 +1539,6 @@
     if (open) renderInventory();
   }
 
-  function focusCheapestLocked() {
-    const user = getUserState();
-    const cheapest = resources.find((res) => !user.unlockedResources[res.id]);
-    if (!cheapest) return;
-    const entry = resourceCards.get(cheapest.id);
-    if (!entry) return;
-    const card = entry.card;
-    const styles = getComputedStyle(resourceList);
-    const gapValue = parseFloat(styles.rowGap || styles.gap || 0);
-    const offset = Math.max(0, card.offsetTop - card.offsetHeight - (Number.isFinite(gapValue) ? gapValue : 0));
-    resourceList.scrollTop = offset;
-  }
-
   function togglePanel(forceOpen) {
     const open = typeof forceOpen === 'boolean' ? forceOpen : !shopPanel.classList.contains('open');
     if (open && inventoryPanel) {
@@ -1563,7 +1550,6 @@
     syncPanelOverlay();
     if (open) {
       renderResources();
-      requestAnimationFrame(focusCheapestLocked);
     }
   }
 

@@ -42,12 +42,14 @@
   const LEAF_LIFE_MS = 700;
   const LEAF_SPD_MIN = 6;
   const LEAF_SPD_MAX = 10;
+  const LEAF_SIZE_SCALE = 1.5;
   const RESOURCE_BURST_COUNT = 34;
   const CENTERED_RESOURCE_BURST_COUNT = 58;
   const WOOD_CHIP_COUNT = 9;
   const WOOD_CHIP_LIFE_MS = 560;
   const WOOD_CHIP_SPD_MIN = 7;
   const WOOD_CHIP_SPD_MAX = 14;
+  const WOOD_CHIP_SIZE_SCALE = 3;
   const TREE_CHOP_SHAKE_MS = 520;
   const TREE_CHOP_SHAKE_ROT = 0.11;
   const TREE_SHADOW_FADE_MS = 300;
@@ -2788,16 +2790,29 @@
       Number.isFinite(opts.spdMin) ? opts.spdMin : LEAF_SPD_MIN,
       Number.isFinite(opts.spdMax) ? opts.spdMax : LEAF_SPD_MAX
     );
+    const t0 = Number.isFinite(opts.t0) ? opts.t0 : performance.now();
+    let vxPct = v.x * spd;
+    let vyPct = v.y * spd;
+    if (opts.arc) {
+      const side = Math.abs(v.x) > 0.12 ? Math.sign(v.x) : (Math.random() < 0.5 ? -1 : 1);
+      const horizontalScale = Number.isFinite(opts.horizontalScale) ? opts.horizontalScale : 1;
+      const upMin = Number.isFinite(opts.upMin) ? opts.upMin : LEAF_SPD_MIN * 0.7;
+      const upMax = Number.isFinite(opts.upMax) ? opts.upMax : LEAF_SPD_MAX * 0.8;
+      vxPct = side * spd * horizontalScale * rnd(0.72, 1.08);
+      vyPct = -rnd(Math.min(upMin, upMax), Math.max(upMin, upMax));
+    }
     return {
       xPct,
       yPct,
-      vxPct: v.x * spd,
-      vyPct: v.y * spd,
+      vxPct,
+      vyPct,
       rot: rnd(0, Math.PI * 2),
       angVel: rnd(-18, 18) * (Math.PI / 180),
-      t0: Number.isFinite(opts.t0) ? opts.t0 : performance.now(),
+      t0,
+      lastT: t0,
       color: opts.color,
       sizePct: Number.isFinite(opts.sizePct) ? opts.sizePct : 1,
+      gravityPct: Number.isFinite(opts.gravityPct) ? opts.gravityPct : 0,
       lifeMs: Number.isFinite(opts.lifeMs) ? opts.lifeMs : LEAF_LIFE_MS,
     };
   }
@@ -3223,9 +3238,14 @@
         t0: now,
         color: colors[rndi(0, colors.length - 1)],
         sizePct: centered ? rnd(0.72, 1.55) : rnd(0.66, 1.22),
-        spdMin: centered ? LEAF_SPD_MIN * 1.05 : LEAF_SPD_MIN,
-        spdMax: centered ? LEAF_SPD_MAX * 1.7 : LEAF_SPD_MAX * 1.25,
-        lifeMs: centered ? rnd(760, 980) : rnd(640, 820),
+        spdMin: centered ? LEAF_SPD_MIN * 0.42 : LEAF_SPD_MIN * 0.34,
+        spdMax: centered ? LEAF_SPD_MAX * 0.62 : LEAF_SPD_MAX * 0.48,
+        horizontalScale: centered ? 0.9 : 0.78,
+        upMin: centered ? 5.5 : 4.2,
+        upMax: centered ? 8.4 : 6.8,
+        gravityPct: centered ? 22 : 20,
+        arc: true,
+        lifeMs: centered ? rnd(840, 1060) : rnd(760, 940),
       }));
     }
   }
@@ -3390,9 +3410,11 @@
     }
     if (b.stage === 'exploded') {
       b.leafs = b.leafs.filter((leaf) => {
-        const dt = 1 / 60;
+        const dt = clamp((now - (leaf.lastT || now)) / 1000, 0, 0.05);
+        leaf.lastT = now;
         leaf.xPct += leaf.vxPct * dt;
         leaf.yPct += leaf.vyPct * dt;
+        leaf.vyPct += (Number.isFinite(leaf.gravityPct) ? leaf.gravityPct : 0) * dt;
         leaf.rot += leaf.angVel;
         return now - leaf.t0 < (leaf.lifeMs || LEAF_LIFE_MS);
       });
@@ -3864,7 +3886,7 @@
     const alpha = clamp(1 - (now - leaf.t0) / (leaf.lifeMs || LEAF_LIFE_MS), 0, 1);
     const x = pct2px(leaf.xPct);
     const y = pct2px(leaf.yPct);
-    const size = Number.isFinite(leaf.sizePct) ? leaf.sizePct : 1;
+    const size = (Number.isFinite(leaf.sizePct) ? leaf.sizePct : 1) * LEAF_SIZE_SCALE;
     const w = pct2px(2 * size);
     const h = pct2px(1 * size);
     const c = Math.cos(leaf.rot);
@@ -3885,8 +3907,8 @@
     if (alpha <= 0) return;
     const x = pct2px(chip.xPct);
     const y = pct2px(chip.yPct);
-    const w = Math.max(2, pct2px(chip.sizePct * 1.35));
-    const h = Math.max(1.2, pct2px(chip.sizePct * 0.46));
+    const w = Math.max(2, pct2px(chip.sizePct * WOOD_CHIP_SIZE_SCALE * 1.35));
+    const h = Math.max(1.2, pct2px(chip.sizePct * WOOD_CHIP_SIZE_SCALE * 0.46));
     const c = Math.cos(chip.rot);
     const s = Math.sin(chip.rot);
     const points = [
