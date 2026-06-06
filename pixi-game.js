@@ -104,8 +104,8 @@
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
   const BOAT_REPAIR_COST = 100000;
   const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
-  const NEW_ISLAND_SIZE = 9;
-  const NEW_ISLAND_MAP_SIZE = 17;
+  const NEW_ISLAND_SIZE = 27;
+  const NEW_ISLAND_MAP_SIZE = 37;
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
   const SCENARIO_GLINT_PERIOD_MS = 3400;
@@ -224,6 +224,9 @@
     './images/scenario/lighthouse-on.png',
     './images/scenario/lighthouse-off.png',
     './images/scenario/lifebuoy.png',
+    './images/scenario/boat-broken.png',
+    './images/scenario/boat-repaired.png',
+    './images/scenario/blanket-survivor.png',
   ];
 
   const SCENARIO_DROP_IMAGE_ASSETS = [
@@ -487,7 +490,11 @@
   transitionText.zIndex = 31;
   const cutsceneGraphics = new PIXI.Graphics();
   cutsceneGraphics.zIndex = 29;
-  screenLayer.addChild(cutsceneGraphics, transitionGraphics, transitionText);
+  const cutsceneBoatSprite = new PIXI.Sprite();
+  cutsceneBoatSprite.anchor.set(0.5);
+  cutsceneBoatSprite.zIndex = 29.1;
+  cutsceneBoatSprite.visible = false;
+  screenLayer.addChild(cutsceneGraphics, cutsceneBoatSprite, transitionGraphics, transitionText);
 
   let gameWidth = mount.clientWidth || window.innerWidth;
   let gameHeight = mount.clientHeight || window.innerHeight;
@@ -864,6 +871,7 @@
 
   const SURFACE_DEFS = {
     grass: { color: '#2fb84b', edge: '#1f8a3a', soil: '#8a5a2b' },
+    sand: { color: '#e8c982', edge: '#cfa766', soil: '#9a7243' },
     dead: { color: '#706a4b', edge: '#514b38', soil: '#5b4430', tileUrl: './img/tiles/dead.png' },
     snow: { color: '#dff4ff', edge: '#9cc8d2', soil: '#756555', tileUrl: './img/tiles/snow.png' },
   };
@@ -880,7 +888,9 @@
 
   function getTileTextureForCell(value) {
     const surface = getSurfaceDef(value);
-    return getTexture(surface.tileUrl || './img/tiles/1.png') || getTexture('./img/tiles/1.png');
+    if (surface.tileUrl) return getTexture(surface.tileUrl);
+    if (getTileSurfaceType(value) === 'grass') return getTexture('./img/tiles/1.png');
+    return null;
   }
 
   function getTileSurfaceColor(value) {
@@ -1075,6 +1085,7 @@
     BUSH_DENSITY = land.length ? TARGET_BUSHES_AT_CURRENT_MAP / land.length : 0.05;
     MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
     islandBounds = getIslandBoundsPct(land, cellPct);
+    ensureNewIslandCampfireCenter();
     buildingLayout = buildingsConfig.getBuildingLayout(map);
     campfireCenter = resolveCampfireCenter();
 
@@ -1463,6 +1474,46 @@
     return getIslandBoundsCells(land);
   }
 
+  function ensureNewIslandCampfireCenter() {
+    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
+    if (islandRun < 2 || !GRID_W || !GRID_H || !map.length) return;
+    const signature = `${GRID_W}x${GRID_H}`;
+    const stored = safeJson('campfireCenter', null);
+    const storedSig = localStorage.getItem('campfireCenterMapSig') || '';
+    if (
+      storedSig === signature
+      && stored
+      && Number.isFinite(stored.x)
+      && Number.isFinite(stored.y)
+      && map[stored.y]?.[stored.x]
+    ) {
+      return;
+    }
+    const bounds = getIslandBoundsGrid();
+    if (!bounds) return;
+    const centerX = Math.round((bounds.minX + bounds.maxX) / 2);
+    const centerY = Math.round((bounds.minY + bounds.maxY) / 2);
+    const target = {
+      x: clamp(centerX + 4, bounds.minX + 5, bounds.maxX - 5),
+      y: centerY,
+    };
+    let best = null;
+    let bestScore = Infinity;
+    for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
+      for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
+        if (!map[y] || !map[y][x] || getTileSurfaceType(map[y][x]) === 'sand') continue;
+        const score = (x - target.x) * (x - target.x) + (y - target.y) * (y - target.y);
+        if (score < bestScore) {
+          bestScore = score;
+          best = { x, y };
+        }
+      }
+    }
+    if (!best) return;
+    localStorage.setItem('campfireCenter', JSON.stringify(best));
+    localStorage.setItem('campfireCenterMapSig', signature);
+  }
+
   function computeInitialScenarioPositions() {
     const bounds = getIslandBoundsGrid();
     if (!bounds) return [];
@@ -1486,6 +1537,19 @@
         return {
           id: def.id,
           gridX: centerX,
+          gridY: centerY,
+          triggered: false,
+          transformed: false,
+          repaired: false,
+          opened: true,
+          positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
+        };
+      }
+      if (def.position === 'westShore') {
+        const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 1;
+        return {
+          id: def.id,
+          gridX: bounds.minX - distance,
           gridY: centerY,
           triggered: false,
           transformed: false,
@@ -1847,6 +1911,7 @@
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
       if (!def || state.triggered) return;
+      if (def.noSpawnLand) return;
       if (!scenarioRequirementMet(def)) return;
       const ahead = Number.isFinite(def.triggerRadiusCells) ? def.triggerRadiusCells - 1 : 1;
       if (!scenarioIsOnLand(state, ahead)) return;
@@ -2011,7 +2076,9 @@
 
   function getScenarioTexture(def, state) {
     if (def && def.primitive && def.primitive.kind) return null;
-    const visual = state.transformed && def.transformOnApproach ? def.transformOnApproach : def;
+    const visual = state.repaired && def.repairedAssetUrl
+      ? { assetUrl: def.repairedAssetUrl, fallbackUrl: def.repairedFallbackUrl || def.repairedAssetUrl }
+      : (state.transformed && def.transformOnApproach ? def.transformOnApproach : def);
     const fallback = visual.fallbackUrl || def.fallbackUrl || '';
     const asset = visual.assetUrl || def.assetUrl || '';
     return getTexture(asset) || getTexture(fallback);
@@ -2152,7 +2219,7 @@
     const offsetY = Number.isFinite(renderOffset.y) ? renderOffset.y * sizeScale : 0;
     const baseX = pct2px(x) + offsetX;
     const baseY = pct2px(y) + offsetY;
-    const floating = !scenarioCenterIsOnLand(state);
+    const floating = Boolean(def && def.forceFloating) || !scenarioCenterIsOnLand(state);
     const floatOffset = floating ? Math.sin(now / 600 + state.gridX) * pct2px(cellPct * 0.15) : 0;
     const width = (Number.isFinite(def && def.widthPx) ? def.widthPx : 60) * sizeScale;
     const height = (Number.isFinite(def && def.heightPx) ? def.heightPx : 60) * sizeScale;
@@ -2240,13 +2307,81 @@
 
   function createSmallIslandMap() {
     const center = Math.floor(NEW_ISLAND_MAP_SIZE / 2);
-    const radius = NEW_ISLAND_SIZE / 2;
+    const radius = (NEW_ISLAND_SIZE - 1) / 2;
+    const beachWidth = 2.1;
     return Array.from({ length: NEW_ISLAND_MAP_SIZE }, (_, y) =>
       Array.from({ length: NEW_ISLAND_MAP_SIZE }, (_, x) => {
-        const d = Math.hypot(x - center, y - center);
-        return d <= radius ? 1 : 0;
+        const dx = x - center;
+        const dy = y - center;
+        const d = Math.hypot(dx, dy);
+        if (d > radius) return 0;
+        if (d >= radius - beachWidth) return { surfaceType: 'sand' };
+        return 1;
       })
     );
+  }
+
+  function placePreseededResource(def, gridX, gridY) {
+    if (!def || !map[gridY] || !map[gridY][gridX] || !cellPct) return false;
+    if (getTileSurfaceType(map[gridY][gridX]) === 'sand') return false;
+    const key = cellKey(gridX, gridY);
+    if (busy.has(key)) return false;
+    const bush = {
+      uid: nextBushUid++,
+      gridX,
+      gridY,
+      ...center(gridX, gridY),
+      stage: 'ripe',
+      t0: performance.now() - BUSH_GROW_MS,
+      scale: 1,
+      berries: [],
+      leafs: [],
+      berryDef: def,
+      extractStage: isExtractable(def) ? 0 : undefined,
+      harvestStart: 0,
+      preseeded: true,
+    };
+    bushes.push(bush);
+    busy.add(key);
+    registerResourceCollider(bush);
+    registerResourceSpawn(bush);
+    return true;
+  }
+
+  function seedNewIslandPines() {
+    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
+    if (islandRun < 2 || !campfireCenter) return;
+    if (bushes.some((b) => b && b.preseeded && b.berryDef && b.berryDef.id === 'pine')) return;
+    const pine = resourceById.get('pine');
+    if (!pine) return;
+    const cx = Math.round(campfireCenter.x);
+    const cy = Math.round(campfireCenter.y);
+    [
+      { x: -2, y: -6 }, { x: 1, y: -6 }, { x: 4, y: -5 },
+      { x: 6, y: -2 }, { x: 6, y: 2 }, { x: 4, y: 5 },
+      { x: 1, y: 6 }, { x: -2, y: 6 },
+    ].forEach((offset) => {
+      placePreseededResource(pine, cx + offset.x, cy + offset.y);
+    });
+  }
+
+  function getNewIslandArrivalCell() {
+    const bounds = getIslandBoundsGrid();
+    if (!bounds) return null;
+    const y = Math.round((bounds.minY + bounds.maxY) / 2);
+    for (let x = bounds.minX + 4; x <= bounds.maxX; x += 1) {
+      if (map[y] && map[y][x] && getTileSurfaceType(map[y][x]) !== 'sand') return { gx: x, gy: y };
+    }
+    return { gx: bounds.minX + 2, gy: y };
+  }
+
+  function placeHeroAtNewIslandArrival() {
+    const cell = getNewIslandArrivalCell();
+    if (!cell) return;
+    charXPct = ((cell.gx + 0.5) / GRID_W) * 100;
+    charYPct = ((cell.gy + 0.5) / GRID_W) * 100;
+    facing = -1;
+    localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving: false }));
   }
 
   function resetProgressForNextIsland() {
@@ -2255,6 +2390,8 @@
     localStorage.setItem('baseGridW', String(NEW_ISLAND_MAP_SIZE));
     localStorage.setItem('islandExpansionLevel', '0');
     localStorage.setItem('mapShift', JSON.stringify({ x: 0, y: 0 }));
+    localStorage.removeItem('campfireCenter');
+    localStorage.removeItem('campfireCenterMapSig');
     localStorage.removeItem(SCENARIO_OPENED_KEY);
     localStorage.removeItem(SCENARIO_STATE_KEY);
     localStorage.removeItem(SCENARIO_DROPS_KEY);
@@ -2279,8 +2416,11 @@
     persistScenarioState();
     persistScenarioDrops();
     rebuildScenarioColliderCells();
+    placeHeroAtNewIslandArrival();
+    seedNewIslandPines();
     rebuildResourceColliderCells();
     rebuildResourceSpawnCells();
+    updateCameraToHero();
     window.dispatchEvent(new CustomEvent('vibe-map-changed'));
   }
 
@@ -2295,7 +2435,14 @@
     if (!state || !def) return;
     state.repaired = true;
     state.opened = true;
-    const metrics = getScenarioRenderMetrics(state, def, performance.now());
+    updateCameraToHero();
+    const now = performance.now();
+    const metrics = getScenarioRenderMetrics(state, def, now);
+    const lighthouseState = scenarioState.find((item) => item.id === 'lighthouse');
+    const lighthouseDef = scenarioById.get('lighthouse');
+    const lighthouseMetrics = lighthouseState && lighthouseDef ? getScenarioRenderMetrics(lighthouseState, lighthouseDef, now) : null;
+    const startX = lighthouseMetrics ? (-camera.x + lighthouseMetrics.baseX) : (-camera.x + metrics.baseX);
+    const startY = lighthouseMetrics ? (-camera.y + lighthouseMetrics.baseY - lighthouseMetrics.height * 0.72) : (-camera.y + metrics.baseY + metrics.floatOffset);
     state.hidden = true;
     localStorage.setItem(BOAT_REPAIRED_KEY, '1');
     persistScenarioState();
@@ -2303,11 +2450,12 @@
       phase: 'depart',
       t0: performance.now(),
       resetDone: false,
-      startX: worldRoot.x + metrics.baseX,
-      startY: worldRoot.y + metrics.baseY + metrics.floatOffset,
+      startX,
+      startY,
       width: metrics.width,
       height: metrics.height,
     };
+    facing = 1;
     controllerState.joyActive = false;
     controllerState.vxPct = 0;
     controllerState.vyPct = 0;
@@ -2327,12 +2475,24 @@
     const t = clamp((now - boatCutscene.t0) / 2800, 0, 1);
     const x = lerp(boatCutscene.startX, gameWidth + boatCutscene.width * 0.9, easeInCubic(t));
     const y = boatCutscene.startY + Math.sin(now / 260) * 5;
-    drawScenarioBoatPrimitive(cutsceneGraphics, x, y, boatCutscene.width, boatCutscene.height, true, now);
+    const texture = getTexture('./images/scenario/boat-repaired.png');
+    if (texture) {
+      cutsceneBoatSprite.visible = true;
+      cutsceneBoatSprite.texture = texture;
+      cutsceneBoatSprite.x = x;
+      cutsceneBoatSprite.y = y;
+      cutsceneBoatSprite.width = boatCutscene.width;
+      cutsceneBoatSprite.height = boatCutscene.height;
+      cutsceneBoatSprite.rotation = Math.sin(now / 260) * 0.025;
+    } else {
+      cutsceneBoatSprite.visible = false;
+      drawScenarioBoatPrimitive(cutsceneGraphics, x, y, boatCutscene.width, boatCutscene.height, true, now);
+    }
     cutsceneGraphics.beginFill(0xd9b18d, 1);
-    cutsceneGraphics.drawCircle(x - boatCutscene.width * 0.03, y - boatCutscene.height * 0.42, Math.max(4, boatCutscene.height * 0.11));
+    cutsceneGraphics.drawCircle(x - boatCutscene.width * 0.03, y - boatCutscene.height * 0.34, Math.max(4, boatCutscene.height * 0.11));
     cutsceneGraphics.endFill();
     cutsceneGraphics.beginFill(0xc84235, 1);
-    cutsceneGraphics.drawRect(x - boatCutscene.width * 0.1, y - boatCutscene.height * 0.35, boatCutscene.width * 0.18, boatCutscene.height * 0.18);
+    cutsceneGraphics.drawRect(x - boatCutscene.width * 0.1, y - boatCutscene.height * 0.27, boatCutscene.width * 0.18, boatCutscene.height * 0.18);
     cutsceneGraphics.endFill();
   }
 
@@ -2368,6 +2528,7 @@
     cutsceneGraphics.clear();
     transitionGraphics.clear();
     transitionText.text = '';
+    cutsceneBoatSprite.visible = false;
     if (!boatCutscene) return;
     drawCutsceneBoat(now);
     let alpha = 0;
@@ -4047,10 +4208,20 @@
     localStorage.removeItem('heroTeleport');
   }
 
+  function updateCameraToHero() {
+    const cell = getWorldCellPx();
+    const worldW = cell && GRID_W ? cell * GRID_W : gameWidth;
+    const heroX = (charXPct * worldW) / 100;
+    const heroY = (charYPct * worldW) / 100;
+    camera = { x: heroX - gameWidth / 2, y: heroY - gameHeight / 2 };
+    localStorage.setItem('camera', JSON.stringify(camera));
+  }
+
   function updateHeroLogic(dtMs) {
     if (boatCutscene) {
       controllerState.isMoving = false;
       localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving: false }));
+      updateCameraToHero();
       return;
     }
     applyHeroTeleport();
@@ -4060,7 +4231,6 @@
     const isMoving = Math.abs(vx) + Math.abs(vy) > 0.001;
     controllerState.isMoving = isMoving;
     const cell = getWorldCellPx();
-    const worldW = cell && GRID_W ? cell * GRID_W : gameWidth;
     const blockers = getBuildingBlockers();
     const resourceBlockers = resourceColliderCells;
     const scenarioBlockers = getScenarioBlockers();
@@ -4115,10 +4285,7 @@
       if (safeCell) snapHeroToCell(safeCell);
     }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
-    const heroX = (charXPct * worldW) / 100;
-    const heroY = (charYPct * worldW) / 100;
-    camera = { x: heroX - gameWidth / 2, y: heroY - gameHeight / 2 };
-    localStorage.setItem('camera', JSON.stringify(camera));
+    updateCameraToHero();
   }
 
   const heroParts = {};
@@ -4603,6 +4770,9 @@
     initClouds();
     resizeClouds();
     rebuildScenarioColliderCells();
+    seedNewIslandPines();
+    rebuildResourceColliderCells();
+    rebuildResourceSpawnCells();
     syncDialogueText(null);
     fillOfflineResources();
     spawnSharks();

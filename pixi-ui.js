@@ -42,6 +42,7 @@
     './img/ui/shine.png',
     './img/ui/rainbow-stone.png',
     './img/ui/hero-portrait.png',
+    './images/scenario/boat-repaired.png',
     './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
     './img/scenario-drop/nail-puller.png',
     './img/scenario-drop/kettle.png',
@@ -489,7 +490,7 @@
   const boatRepairResource = {
     id: 'repair-boat-upgrade',
     title: 'Починить катер',
-    assetUrl: '',
+    assetUrl: './images/scenario/boat-repaired.png',
     unlockCost: BOAT_REPAIR_COST,
     detail: 'Доступно после маяка',
     fallbackUrl: buildBoatRepairFallback(),
