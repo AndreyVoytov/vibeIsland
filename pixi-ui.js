@@ -9,6 +9,9 @@
   const DEFAULT_ISLAND_METERS = 18;
   const BOAT_REPAIR_COST = 100000;
   const LIGHTHOUSE_REQUIRED_METERS = getScenarioRequiredMeters('lighthouse');
+  const CROPS_PER_TWO_EXPANSIONS = 5;
+  const METERS_PER_TWO_EXPANSIONS = 4;
+  const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
   const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
   const SCENARIO_STATE_KEY = 'scenarioObjectsState';
@@ -338,6 +341,39 @@
     return Math.max(0, Math.floor(Number(user && user.money) || 0));
   }
 
+  function isCropResource(def) {
+    return Boolean(def && def.id && def.resourceType !== 'extractable' && !def.surfaceTypes);
+  }
+
+  function getCropRequiredMeters(cropIndex) {
+    const group = Math.max(0, Math.floor(cropIndex / CROPS_PER_TWO_EXPANSIONS));
+    return DEFAULT_ISLAND_METERS + group * METERS_PER_TWO_EXPANSIONS;
+  }
+
+  function getTentUpgradeLevel(id) {
+    const index = TENT_UPGRADE_IDS.indexOf(id);
+    return index >= 0 ? index + 1 : 0;
+  }
+
+  function toRoman(value) {
+    return ['I', 'II', 'III', 'IV', 'V'][Math.max(0, Math.floor(Number(value) || 1) - 1)] || String(value);
+  }
+
+  function getTentProfitBonusPercent(user) {
+    const unlocked = user && user.unlockedResources ? user.unlockedResources : {};
+    let level = 0;
+    TENT_UPGRADE_IDS.forEach((id, index) => {
+      if (unlocked[id]) level = Math.max(level, index + 1);
+    });
+    return level * 100;
+  }
+
+  function applyProfitBonus(value, user) {
+    const base = Math.max(0, Number(value) || 0);
+    const bonus = getTentProfitBonusPercent(user);
+    return Math.floor(base * (1 + bonus / 100));
+  }
+
   function hasLandNeighbor(map, x, y) {
     for (let dy = -1; dy <= 1; dy += 1) {
       for (let dx = -1; dx <= 1; dx += 1) {
@@ -441,8 +477,10 @@
     return { map: expanded, shift };
   }
 
+  let cropResourceIndex = 0;
   const berryResources = (berryConfig.berries || []).map((def, index) => {
     const profit = typeof def.profit === 'number' ? def.profit : index + 1;
+    const cropIndex = isCropResource(def) ? cropResourceIndex++ : -1;
     return {
       id: def.id,
       title: def.titleRu || def.id,
@@ -451,20 +489,26 @@
       profit,
       unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
       detail: `Прибыль: +${profit}`,
+      requiredMeters: cropIndex >= 0 ? getCropRequiredMeters(cropIndex) : DEFAULT_ISLAND_METERS,
+      category: 'resource',
     };
   });
 
   const buildingDefinitions = buildingConfig.buildings || [];
   const buildingById = new Map(buildingDefinitions.map((item) => [item.id, item]));
-  const buildingResources = buildingDefinitions.map((def) => ({
-    id: def.id,
-    title: def.titleRu || def.id,
-    assetUrl: knownAssetUrl(def.assetUrl),
-    unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
-    detail: def.detail || 'Постройка',
-    fallbackUrl: buildBuildingFallback(def),
-    category: 'building',
-  }));
+  const buildingResources = buildingDefinitions.map((def) => {
+    const tentLevel = getTentUpgradeLevel(def.id);
+    return {
+      id: def.id,
+      title: tentLevel ? `Палатка ${toRoman(tentLevel)}` : (def.titleRu || def.id),
+      assetUrl: knownAssetUrl(def.assetUrl),
+      unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
+      detail: tentLevel ? `Общая прибыль +${tentLevel * 100}%` : (def.detail || 'Постройка'),
+      fallbackUrl: buildBuildingFallback(def),
+      category: 'building',
+      tentUpgrade: tentLevel > 0,
+    };
+  });
 
   const expansionResources = (enlargeConfig.expansions || []).map((def) => ({
     id: def.id,
@@ -492,7 +536,7 @@
     title: 'Починить катер',
     assetUrl: './images/scenario/boat-repaired.png',
     unlockCost: BOAT_REPAIR_COST,
-    detail: 'Доступно после маяка',
+    detail: 'И уплыть с острова',
     fallbackUrl: buildBoatRepairFallback(),
     category: 'boatRepair',
     onUnlock: () => {
@@ -509,7 +553,8 @@
     },
   };
 
-  const resources = [...berryResources, ...buildingResources, ...expansionResources, boatRepairResource].sort((a, b) => {
+  const tentUpgradeResources = buildingResources.filter((res) => res.tentUpgrade);
+  const resources = [...berryResources, ...tentUpgradeResources, ...expansionResources, boatRepairResource].sort((a, b) => {
     const diff = a.unlockCost - b.unlockCost;
     if (diff !== 0) return diff;
     return String(a.title).localeCompare(String(b.title));
@@ -678,12 +723,13 @@
     }
   }
 
-  function getMostExpensiveResourceProfit() {
+  function getMostExpensiveResourceProfit(user = getUserState()) {
     let chosen = null;
     berryResources.forEach((res) => {
+      if (!user.unlockedResources[res.id]) return;
       if (!chosen || res.unlockCost > chosen.unlockCost) chosen = res;
     });
-    return chosen ? chosen.profit : 0;
+    return chosen ? applyProfitBonus(chosen.profit, user) : 0;
   }
 
   const WORLD_ZOOM = 1.15;
@@ -724,7 +770,8 @@
     const lastActiveAt = Number(localStorage.getItem('lastActiveAt') || 0);
     if (!Number.isFinite(lastActiveAt) || lastActiveAt <= 0) return { income: 0, secondsAway: 0 };
     const cappedSeconds = Math.min(Math.max(0, (Date.now() - lastActiveAt) / 1000), 3600 * 3);
-    const baseProfit = getMostExpensiveResourceProfit();
+    const user = getUserState();
+    const baseProfit = getMostExpensiveResourceProfit(user);
     if (baseProfit <= 0 || cappedSeconds <= 0) return { income: 0, secondsAway: cappedSeconds };
     return { income: Math.floor((baseProfit * 5 * cappedSeconds) / 15), secondsAway: cappedSeconds };
   }
@@ -786,15 +833,32 @@
     }));
   }
 
+  function getResourceExpansionRequirement(res, islandMeters = getIslandSizeMeters()) {
+    if (!res) return 0;
+    if (res.category === 'boatRepair' && !isLighthouseOpened()) return LIGHTHOUSE_REQUIRED_METERS;
+    const requiredMeters = Math.max(DEFAULT_ISLAND_METERS, Math.floor(Number(res.requiredMeters) || 0));
+    if (requiredMeters > islandMeters) return requiredMeters;
+    return 0;
+  }
+
+  function getResourceLockInfo(res, user, islandMeters = getIslandSizeMeters()) {
+    const expansionRequiredMeters = getResourceExpansionRequirement(res, islandMeters);
+    const storyLocked = res && res.category === 'boatRepair' && !isLighthouseOpened();
+    const expansionLocked = expansionRequiredMeters > islandMeters || storyLocked;
+    const canBuy = !expansionLocked && Math.max(0, Math.floor(Number(user.money) || 0)) >= res.unlockCost;
+    return { expansionLocked, expansionRequiredMeters, canBuy };
+  }
+
   function attemptUnlock(res) {
     const latest = getUserState();
     if (latest.unlockedResources[res.id]) return false;
-    const isBoatRepair = res.category === 'boatRepair';
-    if (isBoatRepair && !isLighthouseOpened()) return false;
+    const lockInfo = getResourceLockInfo(res, latest);
+    if (lockInfo.expansionLocked) return false;
     if (latest.money < res.unlockCost) return false;
     latest.money -= res.unlockCost;
     latest.unlockedResources[res.id] = true;
     setUserState(latest);
+    const isBoatRepair = res.category === 'boatRepair';
     const isExpansion = res.category === 'expansion';
     if (isExpansion || isBoatRepair) togglePanel(false);
     maybeTeleportHeroFromBuilding(res);
@@ -807,6 +871,12 @@
   }
 
   function createResourceCard(res) {
+    const lockDivider = document.createElement('div');
+    lockDivider.className = 'resource-lock-divider';
+    lockDivider.setAttribute('data-ui-control', '');
+    const lockLabel = document.createElement('span');
+    lockDivider.appendChild(lockLabel);
+
     const card = document.createElement('div');
     card.setAttribute('data-ui-control', '');
     card.addEventListener('click', (event) => {
@@ -865,7 +935,7 @@
     card.appendChild(button);
     card.appendChild(check);
     resourceList.appendChild(card);
-    return { card, button, label, detail: profit, check };
+    return { card, button, label, detail: profit, check, lockDivider, lockLabel };
   }
 
   function formatCompactNumber(value) {
@@ -1035,32 +1105,65 @@
     renderIslandSizeMeters();
     moneyValue.textContent = user.money;
     if (gemValue) gemValue.textContent = formatCompactNumber(user.rainbowStones);
+    const islandMeters = getIslandSizeMeters();
     let canUpgrade = false;
+    const pendingResources = resources
+      .filter((res) => !user.unlockedResources[res.id])
+      .map((res) => ({ res, lockInfo: getResourceLockInfo(res, user, islandMeters) }))
+      .sort((a, b) => {
+        const aGroup = a.lockInfo.expansionLocked ? 1 : 0;
+        const bGroup = b.lockInfo.expansionLocked ? 1 : 0;
+        if (aGroup !== bGroup) return aGroup - bGroup;
+        if (a.lockInfo.expansionLocked && b.lockInfo.expansionLocked) {
+          const reqDiff = a.lockInfo.expansionRequiredMeters - b.lockInfo.expansionRequiredMeters;
+          if (reqDiff !== 0) return reqDiff;
+        }
+        const costDiff = a.res.unlockCost - b.res.unlockCost;
+        if (costDiff !== 0) return costDiff;
+        return String(a.res.title).localeCompare(String(b.res.title));
+      });
+
     resources.forEach((res) => {
       const unlocked = !!user.unlockedResources[res.id];
       if (unlocked) {
         const existing = resourceCards.get(res.id);
+        if (existing && existing.lockDivider && existing.lockDivider.parentNode) existing.lockDivider.parentNode.removeChild(existing.lockDivider);
         if (existing && existing.card && existing.card.parentNode) existing.card.parentNode.removeChild(existing.card);
         resourceCards.delete(res.id);
-        return;
       }
-      const repairLocked = res.category === 'boatRepair' && !isLighthouseOpened();
-      const canBuy = user.money >= res.unlockCost && !repairLocked;
-      if (canBuy) canUpgrade = true;
+    });
+
+    let lastExpansionRequirement = 0;
+    pendingResources.forEach(({ res, lockInfo }) => {
+      if (lockInfo.canBuy) canUpgrade = true;
       let entry = resourceCards.get(res.id);
       if (!entry) {
         entry = createResourceCard(res);
         resourceCards.set(res.id, entry);
       }
-      entry.card.className = 'resource-card ' + (canBuy ? 'available clickable' : 'locked');
+      const className = lockInfo.canBuy
+        ? 'resource-card available clickable'
+        : (lockInfo.expansionLocked ? 'resource-card expansion-locked' : 'resource-card locked');
+      entry.card.className = className;
       if (entry.detail && res.category === 'boatRepair') {
-        entry.detail.textContent = repairLocked ? `Расширьте остров до ${LIGHTHOUSE_REQUIRED_METERS} м` : 'Отправиться к новому острову';
+        entry.detail.textContent = lockInfo.expansionLocked ? 'И уплыть с острова' : 'Отправиться к новому острову';
       }
       entry.label.textContent = formatCompactNumber(res.unlockCost);
-      entry.button.className = 'unlock-button' + (canBuy ? '' : ' locked');
-      entry.button.disabled = !canBuy;
+      entry.button.className = 'unlock-button' + (lockInfo.canBuy ? '' : (lockInfo.expansionLocked ? ' expansion-locked' : ' locked'));
+      entry.button.disabled = !lockInfo.canBuy;
       entry.button.style.display = 'flex';
       entry.check.style.display = 'none';
+      const showDivider = lockInfo.expansionLocked && lockInfo.expansionRequiredMeters !== lastExpansionRequirement;
+      if (entry.lockDivider) {
+        if (showDivider) {
+          entry.lockLabel.textContent = `Расширьте остров до ${lockInfo.expansionRequiredMeters} м`;
+          resourceList.appendChild(entry.lockDivider);
+          lastExpansionRequirement = lockInfo.expansionRequiredMeters;
+        } else if (entry.lockDivider.parentNode) {
+          entry.lockDivider.parentNode.removeChild(entry.lockDivider);
+        }
+      }
+      resourceList.appendChild(entry.card);
     });
     upgradeMarker.classList.toggle('hidden', !canUpgrade);
   }

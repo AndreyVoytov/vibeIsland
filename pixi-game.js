@@ -104,6 +104,7 @@
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
   const BOAT_REPAIR_COST = 100000;
   const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
+  const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
   const NEW_ISLAND_SIZE = 27;
   const NEW_ISLAND_MAP_SIZE = 37;
   const WATER_RIPPLE_PERIOD_MS = 1900;
@@ -1292,9 +1293,24 @@
     return found && typeof found.profit === 'number' ? found.profit : 1;
   }
 
+  function getTentProfitBonusPercent(user) {
+    const unlocked = user && user.unlockedResources ? user.unlockedResources : {};
+    let level = 0;
+    TENT_UPGRADE_IDS.forEach((id, index) => {
+      if (unlocked[id]) level = Math.max(level, index + 1);
+    });
+    return level * 100;
+  }
+
+  function applyProfitBonus(value, user = getUserState()) {
+    const base = Math.max(0, Number(value) || 0);
+    const bonus = getTentProfitBonusPercent(user);
+    return Math.floor(base * (1 + bonus / 100));
+  }
+
   function getCollectProfit(def) {
-    if (def && Number.isFinite(def.profit)) return def.profit;
-    return getResourceProfitById(def && def.id);
+    const baseProfit = def && Number.isFinite(def.profit) ? def.profit : getResourceProfitById(def && def.id);
+    return applyProfitBonus(baseProfit);
   }
 
   function isMaterialDropDef(def) {

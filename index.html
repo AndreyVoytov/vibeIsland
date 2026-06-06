@@ -1004,6 +1004,50 @@
     .resource-card.unlocked{background:#f0c35b;box-shadow:inset 0 2px 0 rgba(255,255,255,0.58), 0 5px 0 #b8831f;}
     .resource-card.available,
     .resource-card.locked{background:#d8d8d8;}
+    .resource-card.expansion-locked{
+      background:#e2ddd6;
+      box-shadow:inset 0 2px 0 rgba(255,255,255,0.62), 0 5px 0 rgba(165,155,145,0.55);
+      opacity:0.58;
+    }
+    .resource-card.expansion-locked .resource-icon,
+    .resource-card.expansion-locked .resource-info{
+      opacity:0.66;
+    }
+    .resource-lock-divider{
+      position:relative;
+      height:18px;
+      flex:0 0 18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin:0 18px -2px;
+      pointer-events:none;
+    }
+    .resource-lock-divider::before{
+      content:"";
+      position:absolute;
+      left:0;
+      right:0;
+      top:50%;
+      height:4px;
+      border-radius:999px;
+      background:#c4d1c7;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);
+      transform:translateY(-50%);
+    }
+    .resource-lock-divider span{
+      position:relative;
+      z-index:1;
+      padding:1px 5px 2px;
+      border-radius:5px;
+      background:#d7f0bf;
+      color:#47a650;
+      font-size:13px;
+      font-weight:900;
+      line-height:1;
+      box-shadow:inset 0 -1px 0 rgba(84,148,66,0.2);
+      white-space:nowrap;
+    }
     .resource-icon{
       width:48px;
       height:48px;
@@ -1134,6 +1178,14 @@
       cursor:not-allowed;
     }
     .unlock-button.locked span{color:#e51b1b;}
+    .unlock-button.expansion-locked{
+      background:#d4cbc0;
+      color:#f06767;
+      box-shadow:0 6px 0 rgba(151,139,128,0.52), inset 0 2px 0 rgba(255,255,255,0.45);
+      cursor:not-allowed;
+    }
+    .unlock-button.expansion-locked span{color:#f06767;}
+    .unlock-button.expansion-locked img{opacity:0.58;}
     .unlock-button img{width:24px;height:24px;flex-shrink:0;}
     .unlock-button span{line-height:1;}
     .check-icon{width:28px;height:28px;}
@@ -1258,7 +1310,7 @@
   <script src="./scenario-objects-config.js?v=20260606-boat-arrival"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js"></script>
-  <script src="./pixi-game.js?v=20260606-boat-arrival"></script>
-  <script src="./pixi-ui.js?v=20260606-boat-arrival"></script>
+  <script src="./pixi-game.js?v=20260606-upgrade-locks"></script>
+  <script src="./pixi-ui.js?v=20260606-upgrade-locks"></script>
 </body>
 </html>
