@@ -43,6 +43,7 @@
   const LEAF_SPD_MIN = 6;
   const LEAF_SPD_MAX = 10;
   const LEAF_SIZE_SCALE = 1.5;
+  const DROP_RESOURCE_DISPLAY_SCALE = 1.2;
   const RESOURCE_BURST_COUNT = 34;
   const CENTERED_RESOURCE_BURST_COUNT = 58;
   const WOOD_CHIP_COUNT = 9;
@@ -135,6 +136,7 @@
   const CLOUD_COUNT = 6;
   const CLOUD_WRAP_PAD = 180;
   const CLOUD_FRONT_CHANCE = 0.07;
+  const CLOUD_HEIGHT_MULTIPLIER = 2.5;
   const CLOUD_SHADOW_ALPHA = 0.11;
   const CLOUD_FOREGROUND_SHADOW_ALPHA = 0.12;
   const SUNSET_HORIZON_ASSET = './img/sea/sunset-horizon.png';
@@ -374,17 +376,6 @@
     if (tl) g.quadraticCurveTo(x, y, x + tl, y);
     else g.lineTo(x, y);
     g.closePath();
-  }
-
-  function scaleCornerRadii(radii, scale) {
-    if (typeof radii === 'number') return radii * scale;
-    const r = radii || {};
-    return {
-      tl: (Number(r.tl) || 0) * scale,
-      tr: (Number(r.tr) || 0) * scale,
-      br: (Number(r.br) || 0) * scale,
-      bl: (Number(r.bl) || 0) * scale,
-    };
   }
 
   function safeJson(key, fallback) {
@@ -803,9 +794,11 @@
     cloud.alpha = foreground ? rnd(0.84, 0.96) : rnd(0.68, 0.84);
     const safeTopY = (horizonSprite ? horizonSprite.y + horizonSprite.height * 0.2 : bounds.top - cell * 7);
     const safeBottomY = bounds.top - cell * 1.35;
-    cloud.baseY = foreground
+    const naturalBaseY = foreground
       ? rnd(bounds.top + cell * 1.8, Math.max(bounds.top + cell * 2.2, bounds.bottom - cell * 2.4))
       : rnd(safeTopY, Math.max(safeTopY + 1, safeBottomY));
+    cloud.groundY = naturalBaseY + cloud.visualHeight * 0.64;
+    cloud.baseY = cloud.groundY - cloud.visualHeight * 0.64 * CLOUD_HEIGHT_MULTIPLIER;
     cloud.y = cloud.baseY;
     cloud.speed = rnd(0.008, 0.019) * (foreground ? 0.86 : 1);
     cloud.phase = rnd(0, Math.PI * 2);
@@ -840,7 +833,7 @@
       beginFill(target, `rgba(18,36,62,${alpha})`, '#12243e');
       target.drawEllipse(
         cloud.x,
-        cloud.y + cloud.visualHeight * 0.64,
+        cloud.groundY,
         cloud.visualWidth * 0.45,
         Math.max(8, cloud.visualHeight * 0.18)
       );
@@ -963,12 +956,6 @@
     beginFill(g, surface, '#a9c745');
     drawCornerRoundedRect(g, sx, sy, ww, hh, radii);
     g.endFill();
-    beginFill(g, 'rgba(255,255,255,0.04)', '#ffffff');
-    drawCornerRoundedRect(g, sx + ww * 0.04, sy + hh * 0.04, ww * 0.92, hh * 0.33, scaleCornerRadii(radii, 0.65));
-    g.endFill();
-    beginFill(g, 'rgba(0,0,0,0.035)', '#000000');
-    g.drawRect(sx + ww * 0.03, sy + hh * 0.72, ww * 0.94, hh * 0.16);
-    g.endFill();
   }
 
   function drawIslandTileFrontSide(g, cellValue, sx, sy, cellSize) {
@@ -1082,12 +1069,6 @@
         }
         if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y - 1)) {
           g.drawCircle(sx + cellSize, sy, thickness);
-        }
-        if (!hasIslandCell(x - 1, y) && !hasIslandCell(x, y + 1)) {
-          g.drawCircle(sx, sy + cellSize, bottomThickness);
-        }
-        if (!hasIslandCell(x + 1, y) && !hasIslandCell(x, y + 1)) {
-          g.drawCircle(sx + cellSize, sy + cellSize, bottomThickness);
         }
       }
     }
@@ -1249,7 +1230,7 @@
     islandLayer.addChild(g);
     drawIslandWaterOutline(g, cell);
 
-    const radius = cell * 0.22;
+    const radius = cell * 0.38;
     const overlap = cell * 0.12;
     beginFill(g, 'rgba(0,0,0,0.16)', '#000000');
     for (let y = 0; y < GRID_H; y += 1) {
@@ -2307,12 +2288,15 @@
     for (let i = 0; i < WATER_RIPPLE_COUNT; i += 1) {
       const t = (baseT + i / WATER_RIPPLE_COUNT) % 1;
       const fade = 1 - t;
-      const alpha = 0.13 * fade * fade;
+      const alpha = 0.34 * fade * fade;
       if (alpha <= 0.01) continue;
       const wobble = Math.sin(now / 520 + i * 1.7 + seed * Math.PI * 2) * 0.025;
       const rx = width * (0.42 + t * 0.36 + wobble);
       const ry = height * (0.17 + t * 0.16 - wobble * 0.45);
-      g.lineStyle(Math.max(1, getWorldCellPx() * 0.018), 0xffffff, alpha);
+      const lineWidth = Math.max(1.4, getWorldCellPx() * 0.026);
+      g.lineStyle(lineWidth, 0x007fbd, alpha);
+      g.drawEllipse(x, y, rx, ry);
+      g.lineStyle(Math.max(1, lineWidth * 0.48), 0xe5faff, alpha * 0.72);
       g.drawEllipse(x, y, rx, ry);
     }
     g.lineStyle(0, 0xffffff, 0);
@@ -3199,7 +3183,8 @@
     const add = (value, fallback) => {
       if (!value && !fallback) return;
       const parsed = parseColor(value || fallback, fallback || '#1d8f46');
-      if (!colors.includes(parsed.color)) colors.push(parsed.color);
+      const saladColor = parseColor(mixColor(toHexColor(parsed.color), '#a8d94f', 0.48), '#a8d94f').color;
+      if (!colors.includes(saladColor)) colors.push(saladColor);
     };
     add(primitive.grass, '#1f8b45');
     add(primitive.leaf || primitive.foliage, '#2f9b52');
@@ -3209,7 +3194,7 @@
     add(primitive.capShade, null);
     add(primitive.stem, null);
     add(primitive.base, null);
-    if (!colors.length) colors.push(0x1d8f46);
+    if (!colors.length) colors.push(0xa8d94f);
     return colors;
   }
 
@@ -3240,7 +3225,7 @@
         sizePct: centered ? rnd(0.72, 1.55) : rnd(0.66, 1.22),
         spdMin: centered ? LEAF_SPD_MIN * 0.42 : LEAF_SPD_MIN * 0.34,
         spdMax: centered ? LEAF_SPD_MAX * 0.62 : LEAF_SPD_MAX * 0.48,
-        horizontalScale: centered ? 0.9 : 0.78,
+        horizontalScale: centered ? 1.28 : 1.12,
         upMin: centered ? 5.5 : 4.2,
         upMax: centered ? 8.4 : 6.8,
         gravityPct: centered ? 22 : 20,
@@ -3821,8 +3806,9 @@
     const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
     const s = be.onBush ? be.scale : 1;
     const centeredScale = def.bushType === 'centered' ? 0.6 : 1;
-    const width = (Number.isFinite(def.widthPx) ? def.widthPx : 24) * sizeScale * s * centeredScale;
-    const height = (Number.isFinite(def.heightPx) ? def.heightPx : 24) * sizeScale * s * centeredScale;
+    const dropScale = be.onBush ? 1 : DROP_RESOURCE_DISPLAY_SCALE;
+    const width = (Number.isFinite(def.widthPx) ? def.widthPx : 24) * sizeScale * s * centeredScale * dropScale;
+    const height = (Number.isFinite(def.heightPx) ? def.heightPx : 24) * sizeScale * s * centeredScale * dropScale;
     sprite.visible = true;
     sprite.x = pct2px(be.xPct);
     sprite.y = pct2px(be.yPct);
@@ -3841,7 +3827,8 @@
     const s = be.onBush ? be.scale : 1;
     const def = be.def || { primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.6)' } };
     const monolithScale = def.bushType === 'centered' ? 1 / 2.5 : 1;
-    const r = pct2px(BERRY_R_PCT) * s * monolithScale;
+    const dropScale = be.onBush ? 1 : DROP_RESOURCE_DISPLAY_SCALE;
+    const r = pct2px(BERRY_R_PCT) * s * monolithScale * dropScale;
     const x = pct2px(be.xPct);
     const y = pct2px(be.yPct);
     const primitive = def.primitive || {};

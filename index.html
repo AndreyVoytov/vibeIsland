@@ -688,6 +688,7 @@
     }
     .resource-list{
       overflow-y:auto;
+      overflow-anchor:none;
       padding:0 10px 13px;
       display:flex;
       flex-direction:column;
@@ -991,7 +992,7 @@
       display:flex;
       align-items:center;
       gap:9px;
-      min-height:67px;
+      min-height:78px;
       padding:7px 8px 9px 11px;
       border-radius:9px;
       background:#d8d8d8;
@@ -1078,8 +1079,10 @@
       font-weight:700;
       line-height:1.1;
       overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
+      text-overflow:clip;
+      white-space:normal;
+      min-height:30.8px;
+      max-height:30.8px;
     }
     .unlock-button{
       border:none;
@@ -1309,7 +1312,7 @@
   <script src="./scenario-objects-config.js?v=20260606-boat-arrival"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260606-island-upgrades"></script>
-  <script src="./pixi-game.js?v=20260606-particles-panel"></script>
-  <script src="./pixi-ui.js?v=20260606-particles-panel"></script>
+  <script src="./pixi-game.js?v=20260606-visual-tuning"></script>
+  <script src="./pixi-ui.js?v=20260606-visual-tuning"></script>
 </body>
 </html>
