@@ -458,9 +458,11 @@
     return Math.min(200, getResourceUpgradeLevel(user, resourceId) * 10);
   }
 
-  function getResourceUpgradeMultiplier(user, resourceId) {
-    const regularMultiplier = 1 + getResourceUpgradeBonusPercent(user, resourceId) / 100;
-    return regularMultiplier * (2 ** getResourceUpgradeStars(user, resourceId));
+  function getResourceUpgradeMultiplierAtLevel(level) {
+    const safeLevel = Math.min(RESOURCE_UPGRADE_MAX_LEVEL, Math.max(0, Math.floor(Number(level) || 0)));
+    const regularMultiplier = 1 + Math.min(200, safeLevel * 10) / 100;
+    const stars = Math.min(RESOURCE_UPGRADE_MAX_STARS, Math.floor(safeLevel / RESOURCE_UPGRADE_LEVELS_PER_STAR));
+    return regularMultiplier * (2 ** stars);
   }
 
   function getResourceUpgradeCost(resource, user) {
@@ -473,7 +475,14 @@
   function applyProfitBonus(value, user, resourceId) {
     const base = Math.max(0, Number(value) || 0);
     const bonus = getTentProfitBonusPercent(user) + getSpecialProfitBonusPercent(user, resourceId);
-    return Math.ceil(base * getResourceUpgradeMultiplier(user, resourceId) * (1 + bonus / 100));
+    const globalMultiplier = 1 + bonus / 100;
+    const level = getResourceUpgradeLevel(user, resourceId);
+    let result = Math.ceil(base * globalMultiplier);
+    for (let nextLevel = 1; nextLevel <= level; nextLevel += 1) {
+      const scaled = Math.ceil(base * getResourceUpgradeMultiplierAtLevel(nextLevel) * globalMultiplier);
+      result = Math.max(result + 1, scaled);
+    }
+    return result;
   }
 
   function hasLandNeighbor(map, x, y) {
@@ -720,6 +729,7 @@
   const questTrackFill = document.getElementById('questTrackFill');
   const questMilestones = document.getElementById('questMilestones');
   const questCard = document.getElementById('questCard');
+  const questPointer = document.getElementById('questPointer');
   const questIcon = document.getElementById('questIcon');
   const questTitle = document.getElementById('questTitle');
   const questProgressFill = document.getElementById('questProgressFill');
@@ -1099,7 +1109,7 @@
     stars.className = 'farm-resource-stars';
     for (let index = 0; index < RESOURCE_UPGRADE_MAX_STARS; index += 1) {
       const star = document.createElement('span');
-      star.textContent = '★';
+      star.textContent = '\u2605';
       stars.appendChild(star);
     }
     const progress = document.createElement('span');
@@ -1284,6 +1294,20 @@
     });
   }
 
+  function positionQuestPointer(index) {
+    if (!questPointer || !questCard || !questMilestones) return;
+    const dot = questMilestones.children[index];
+    questPointer.hidden = !dot;
+    if (!dot) return;
+    requestAnimationFrame(() => {
+      if (!questCard.classList.contains('open')) return;
+      const cardRect = questCard.getBoundingClientRect();
+      const dotRect = dot.getBoundingClientRect();
+      const x = Math.min(cardRect.width - 20, Math.max(20, dotRect.left + dotRect.width / 2 - cardRect.left));
+      questCard.style.setProperty('--quest-pointer-x', `${x}px`);
+    });
+  }
+
   function applyQuestReward(user, reward) {
     const amount = Math.max(0, Math.floor(Number(reward && reward.amount) || 0));
     if (!amount) return;
@@ -1350,6 +1374,7 @@
         dot.classList.toggle('ready', dotIndex === index && claimReady);
       });
     }
+    positionQuestPointer(done ? -1 : index);
 
     if (!questCard || !questTitle) return;
     if (questToggle) {
@@ -1371,13 +1396,15 @@
     questCard.hidden = false;
     setUiAssetImage(questIcon, getQuestIconUrl(quest));
     if (quest.type === 'repairBoat') {
-      questTitle.textContent = repairLocked ? `расширьте остров до ${LIGHTHOUSE_REQUIRED_METERS} м` : 'починить катер';
+      questTitle.textContent = repairLocked ? `расширьте остров до ⌀ ${LIGHTHOUSE_REQUIRED_METERS} м` : 'починить катер';
     } else {
       questTitle.textContent = progress >= 1 ? 'Награда' : quest.title;
     }
     if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
     if (questProgressText) {
-      questProgressText.textContent = `${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)}`;
+      questProgressText.textContent = repairLocked
+        ? `⌀ ${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)} м`
+        : `${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)}`;
     }
     if (questReward) questReward.style.display = quest.type === 'repairBoat' ? 'none' : '';
     if (quest.type !== 'repairBoat') {
@@ -1444,7 +1471,7 @@
       const showDivider = lockInfo.expansionLocked && lockInfo.expansionRequiredMeters !== lastExpansionRequirement;
       if (entry.lockDivider) {
         if (showDivider) {
-          entry.lockLabel.textContent = `Расширьте остров до ${lockInfo.expansionRequiredMeters} м`;
+          entry.lockLabel.textContent = `Расширьте остров до ⌀ ${lockInfo.expansionRequiredMeters} м`;
           resourceList.appendChild(entry.lockDivider);
           lastExpansionRequirement = lockInfo.expansionRequiredMeters;
         } else if (entry.lockDivider.parentNode) {
@@ -1808,6 +1835,7 @@
     questCard.classList.toggle('open', open);
     questToggle.classList.toggle('visible', !open);
     questToggle.setAttribute('aria-expanded', String(open));
+    if (open) requestAnimationFrame(renderQuestLine);
   };
   if (questCard) {
     questCard.addEventListener('click', (event) => {
@@ -1861,6 +1889,7 @@
     renderInventory();
     renderQuestLine();
   });
+  window.addEventListener('resize', renderQuestLine);
   window.addEventListener('pagehide', setLastActiveAt);
   window.addEventListener('beforeunload', setLastActiveAt);
   document.addEventListener('visibilitychange', () => {

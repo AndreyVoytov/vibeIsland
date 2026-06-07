@@ -324,6 +324,78 @@
   DROP_OUTLINE_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   HERO_SPRITES.forEach((name) => KNOWN_ASSETS.add(`./img/hero/${name}.png`));
 
+  const loadingScreen = document.getElementById('loadingScreen');
+  const loadingProgress = document.getElementById('loadingProgress');
+  const loadingText = document.getElementById('loadingText');
+  const LOADING_IMAGE_PATTERN = /\.(?:png|jpe?g|webp|svg)(?:\?.*)?$/i;
+
+  function collectLoadingAssetUrls(value, urls, seen = new Set()) {
+    if (typeof value === 'string') {
+      if (value.startsWith('./') && LOADING_IMAGE_PATTERN.test(value)) urls.add(value);
+      return;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.forEach((item) => collectLoadingAssetUrls(item, urls, seen));
+      return;
+    }
+    Object.values(value).forEach((item) => collectLoadingAssetUrls(item, urls, seen));
+  }
+
+  function getLoadingAssetUrls() {
+    const urls = new Set(KNOWN_ASSETS);
+    [
+      berriesConfig,
+      buildingsConfig,
+      scenarioConfig,
+      window.EnlargeConfig || {},
+      window.UIConfig || {},
+    ].forEach((config) => collectLoadingAssetUrls(config, urls));
+    [
+      './img/ui/inventory-bag.png',
+      './img/ui/quest-journal.png',
+      './img/ui/shine.png',
+    ].forEach((url) => urls.add(url));
+    return Array.from(urls);
+  }
+
+  function updateLoadingProgress(loaded, total) {
+    const percent = total ? Math.round((loaded / total) * 100) : 100;
+    if (loadingProgress) loadingProgress.style.width = `${percent}%`;
+    if (loadingText) loadingText.textContent = `Загрузка ресурсов ${percent}%`;
+  }
+
+  function preloadImage(url) {
+    return new Promise((resolve) => {
+      const image = new Image();
+      const complete = () => resolve();
+      image.onload = complete;
+      image.onerror = complete;
+      image.src = url;
+      if (image.complete) complete();
+    });
+  }
+
+  async function preloadGameAssets() {
+    const urls = getLoadingAssetUrls();
+    let loaded = 0;
+    updateLoadingProgress(loaded, urls.length);
+    await Promise.all(urls.map(async (url) => {
+      await preloadImage(url);
+      loaded += 1;
+      updateLoadingProgress(loaded, urls.length);
+    }));
+  }
+
+  function hideLoadingScreen() {
+    if (!loadingScreen) return;
+    loadingScreen.classList.add('done');
+    window.setTimeout(() => {
+      loadingScreen.hidden = true;
+    }, 380);
+  }
+
   const rnd = (a, b) => a + Math.random() * (b - a);
   const rndi = (a, b) => Math.floor(rnd(a, b + 1));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -473,6 +545,7 @@
   const cloudShadowGraphics = new PIXI.Graphics();
   cloudShadowGraphics.zIndex = 1.8;
   const sharkSpriteLayer = new PIXI.Container();
+  sharkSpriteLayer.sortableChildren = true;
   sharkSpriteLayer.zIndex = 1.5;
   const islandLayer = new PIXI.Container();
   islandLayer.zIndex = 2;
@@ -1479,17 +1552,24 @@
     return Math.min(RESOURCE_UPGRADE_MAX_LEVEL, Math.max(0, Math.floor(Number(upgrades[resourceId]) || 0)));
   }
 
-  function getResourceUpgradeMultiplier(user, resourceId) {
-    const level = getResourceUpgradeLevel(user, resourceId);
-    const stars = Math.min(RESOURCE_UPGRADE_MAX_STARS, Math.floor(level / RESOURCE_UPGRADE_LEVELS_PER_STAR));
-    const regularMultiplier = 1 + Math.min(200, level * 10) / 100;
+  function getResourceUpgradeMultiplierAtLevel(level) {
+    const safeLevel = Math.min(RESOURCE_UPGRADE_MAX_LEVEL, Math.max(0, Math.floor(Number(level) || 0)));
+    const stars = Math.min(RESOURCE_UPGRADE_MAX_STARS, Math.floor(safeLevel / RESOURCE_UPGRADE_LEVELS_PER_STAR));
+    const regularMultiplier = 1 + Math.min(200, safeLevel * 10) / 100;
     return regularMultiplier * (2 ** stars);
   }
 
   function applyProfitBonus(value, user = getUserState(), resourceId = '') {
     const base = Math.max(0, Number(value) || 0);
     const bonus = getTentProfitBonusPercent(user) + getSpecialProfitBonusPercent(user, resourceId);
-    return Math.ceil(base * getResourceUpgradeMultiplier(user, resourceId) * (1 + bonus / 100));
+    const globalMultiplier = 1 + bonus / 100;
+    const level = getResourceUpgradeLevel(user, resourceId);
+    let result = Math.ceil(base * globalMultiplier);
+    for (let nextLevel = 1; nextLevel <= level; nextLevel += 1) {
+      const scaled = Math.ceil(base * getResourceUpgradeMultiplierAtLevel(nextLevel) * globalMultiplier);
+      result = Math.max(result + 1, scaled);
+    }
+    return result;
   }
 
   function getCollectProfit(def) {
@@ -2371,8 +2451,9 @@
     const baseT = (now / WATER_RIPPLE_PERIOD_MS + seed) % 1;
     for (let i = 0; i < WATER_RIPPLE_COUNT; i += 1) {
       const t = (baseT + i / WATER_RIPPLE_COUNT) % 1;
-      const fade = 1 - t;
-      const alpha = 0.68 * fade * fade;
+      const appear = clamp(t / 0.18, 0, 1);
+      const fade = clamp((1 - t) / 0.58, 0, 1);
+      const alpha = 0.62 * easeOutQuad(appear) * easeOutQuad(fade);
       if (alpha <= 0.01) continue;
       const wobble = Math.sin(now / 520 + i * 1.7 + seed * Math.PI * 2) * 0.025;
       const rx = width * (0.42 + t * 0.36 + wobble);
@@ -4525,7 +4606,7 @@
     return true;
   }
 
-  function getHeroShadowEllipse(xPct, yPct, direction = facing) {
+  function getHeroShadowEllipse(xPct, yPct) {
     const cell = getWorldCellPx();
     const fixedCell = getFixedWorldCellPx();
     const baseGridW = getBaseGridW();
@@ -4538,9 +4619,9 @@
     const localCenterX = HERO_OFFSETS.shadow.x * charR + ((bounds.left + bounds.right) / 2 - HERO_SPRITE_WIDTH / 2);
     const localCenterY = HERO_OFFSETS.shadow.y * charR + ((bounds.top + bounds.bottom) / 2 - HERO_SPRITE_HEIGHT / 2);
     return {
-      x: pct2px(xPct) + direction * scale * localCenterX,
+      x: pct2px(xPct),
       y: pct2px(yPct) - footOffset + cell / 2 - 8 + scale * localCenterY,
-      rx: scale * (bounds.right - bounds.left) / 2,
+      rx: scale * ((bounds.right - bounds.left) / 2 + Math.abs(localCenterX)),
       ry: scale * (bounds.bottom - bounds.top) / 2,
     };
   }
@@ -4553,9 +4634,9 @@
     return dx * dx + dy * dy < 1 - 1e-6;
   }
 
-  function isHeroShadowOnIsland(xPct, yPct, direction = facing) {
+  function isHeroShadowOnIsland(xPct, yPct) {
     const cell = getWorldCellPx();
-    const ellipse = getHeroShadowEllipse(xPct, yPct, direction);
+    const ellipse = getHeroShadowEllipse(xPct, yPct);
     if (!cell || !ellipse || ellipse.rx <= 0 || ellipse.ry <= 0) return true;
     const minGX = Math.floor((ellipse.x - ellipse.rx) / cell);
     const maxGX = Math.floor((ellipse.x + ellipse.rx) / cell);
@@ -4570,14 +4651,14 @@
     return true;
   }
 
-  function canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers, direction = facing) {
+  function canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers) {
     const gx = Math.floor(xPct / cellPct);
     const gy = Math.floor(yPct / cellPct);
     return isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)
-      && isHeroShadowOnIsland(xPct, yPct, direction);
+      && isHeroShadowOnIsland(xPct, yPct);
   }
 
-  function findNearestHeroSafeCell(gx, gy, blockers, resourceBlockers, scenarioBlockers, direction = facing, maxR = 8) {
+  function findNearestHeroSafeCell(gx, gy, blockers, resourceBlockers, scenarioBlockers, maxR = 8) {
     for (let r = 0; r <= maxR; r += 1) {
       for (let dy = -r; dy <= r; dy += 1) {
         for (let dx = -r; dx <= r; dx += 1) {
@@ -4586,7 +4667,7 @@
           const ny = gy + dy;
           const xPct = (nx + 0.5) * cellPct;
           const yPct = (ny + 0.5) * cellPct;
-          if (canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers, direction)) return { gx: nx, gy: ny };
+          if (canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers)) return { gx: nx, gy: ny };
         }
       }
     }
@@ -4644,10 +4725,9 @@
     let blockedY = false;
     let movedX = false;
     let movedY = false;
-    const nextFacing = vx ? (vx > 0 ? 1 : -1) : facing;
     if (vx) {
       const nx = charXPct + vx;
-      if (canPlaceHeroAt(nx, charYPct, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
+      if (canPlaceHeroAt(nx, charYPct, blockers, resourceBlockers, scenarioBlockers)) {
         charXPct = nx;
         movedX = true;
       } else {
@@ -4656,7 +4736,7 @@
     }
     if (vy) {
       const ny = charYPct + vy;
-      if (canPlaceHeroAt(charXPct, ny, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
+      if (canPlaceHeroAt(charXPct, ny, blockers, resourceBlockers, scenarioBlockers)) {
         charYPct = ny;
         movedY = true;
       } else {
@@ -4665,22 +4745,22 @@
     }
     if (blockedX && !movedY && Math.abs(vy) > 0.001) {
       const slideY = charYPct + vy;
-      if (canPlaceHeroAt(charXPct, slideY, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
+      if (canPlaceHeroAt(charXPct, slideY, blockers, resourceBlockers, scenarioBlockers)) {
         charYPct = slideY;
         movedY = true;
       }
     }
     if (blockedY && !movedX && Math.abs(vx) > 0.001) {
       const slideX = charXPct + vx;
-      if (canPlaceHeroAt(slideX, charYPct, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
+      if (canPlaceHeroAt(slideX, charYPct, blockers, resourceBlockers, scenarioBlockers)) {
         charXPct = slideX;
         movedX = true;
       }
     }
     if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
     const heroCell = getHeroGridPosition();
-    if (heroCell && !canPlaceHeroAt(charXPct, charYPct, blockers, resourceBlockers, scenarioBlockers, facing)) {
-      const safeCell = findNearestHeroSafeCell(heroCell.gridX, heroCell.gridY, blockers, resourceBlockers, scenarioBlockers, facing);
+    if (heroCell && !canPlaceHeroAt(charXPct, charYPct, blockers, resourceBlockers, scenarioBlockers)) {
+      const safeCell = findNearestHeroSafeCell(heroCell.gridX, heroCell.gridY, blockers, resourceBlockers, scenarioBlockers);
       if (safeCell) snapHeroToCell(safeCell);
     }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
@@ -5132,6 +5212,7 @@
         sprite.visible = true;
         sprite.x = x;
         sprite.y = y + 3;
+        sprite.zIndex = y;
         sprite.scale.set((42 * sizeScale / Math.max(1, finTexture.width)) * flip, 30 * sizeScale / Math.max(1, finTexture.height));
         activeSharks.add(index);
       } else {
@@ -5270,8 +5351,18 @@
     if (document.visibilityState === 'hidden') markResourceSeen();
   });
 
-  init();
-  app.ticker.add((delta) => {
-    frame(app.ticker.deltaMS || delta * 16.6667);
+  async function startGame() {
+    await preloadGameAssets();
+    init();
+    app.ticker.add((delta) => {
+      frame(app.ticker.deltaMS || delta * 16.6667);
+    });
+    requestAnimationFrame(hideLoadingScreen);
+  }
+
+  startGame().catch((err) => {
+    const message = err && err.message ? err.message : String(err);
+    showError(message);
+    if (loadingText) loadingText.textContent = 'Ошибка загрузки';
   });
 })();

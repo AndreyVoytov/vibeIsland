@@ -40,6 +40,63 @@
       overflow:hidden;
       background:#00b0fc;
     }
+    .loading-screen{
+      position:absolute;
+      inset:0;
+      z-index:100;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:
+        radial-gradient(circle at 50% 44%, rgba(255,255,255,0.2) 0 19%, transparent 20%),
+        linear-gradient(180deg,#e5918b 0%,#e7aa83 24%,#18b4ee 54%,#00a8ee 100%);
+      opacity:1;
+      transition:opacity 0.35s ease;
+      pointer-events:auto;
+    }
+    .loading-screen.done{
+      opacity:0;
+      pointer-events:none;
+    }
+    .loading-screen[hidden]{display:none;}
+    .loading-panel{
+      width:min(280px, calc(100% - 48px));
+      padding:20px 20px 17px;
+      border:2px solid #0c4d7e;
+      border-radius:16px;
+      background:linear-gradient(180deg,#f7e8cf,#e6c79a);
+      box-shadow:0 6px 0 #0c4d7e,0 14px 30px rgba(0,0,0,0.32);
+      color:#3f2a19;
+      text-align:center;
+      box-sizing:border-box;
+    }
+    .loading-title{
+      margin-bottom:13px;
+      font-size:22px;
+      line-height:1;
+      font-weight:900;
+    }
+    .loading-track{
+      height:13px;
+      border:2px solid #294660;
+      border-radius:999px;
+      background:#56718a;
+      box-shadow:inset 0 2px 2px rgba(0,0,0,0.24);
+      overflow:hidden;
+    }
+    .loading-progress{
+      width:0%;
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg,#39d25f,#f3ca35);
+      transition:width 0.12s ease;
+    }
+    .loading-text{
+      margin-top:8px;
+      color:#65472e;
+      font-size:12px;
+      font-weight:800;
+    }
     #pixiMount{
       position:absolute;
       inset:0;
@@ -297,6 +354,26 @@
       box-sizing:border-box;
       transition:background 0.2s ease, transform 0.2s ease;
     }
+    .quest-pointer{
+      position:absolute;
+      top:-30px;
+      left:var(--quest-pointer-x, 50%);
+      width:20px;
+      height:28px;
+      background:#9e7140;
+      clip-path:polygon(50% 0, 100% 100%, 0 100%);
+      transform:translateX(-50%);
+      pointer-events:none;
+    }
+    .quest-pointer::after{
+      content:"";
+      position:absolute;
+      inset:4px 4px 0;
+      background:#f7e8cf;
+      clip-path:polygon(50% 0, 100% 100%, 0 100%);
+    }
+    .quest-card.complete .quest-pointer{background:#219a26;}
+    .quest-card.complete .quest-pointer::after{background:#49ef24;}
     .quest-card.complete{cursor:pointer;}
     .quest-card.complete{
       background:#49ef24;
@@ -446,31 +523,35 @@
     .quest-card:not(.open){display:none;}
     .quest-collapse{
       position:absolute;
-      top:-10px;
-      left:50%;
-      width:46px;
-      height:13px;
+      top:50%;
+      right:-8px;
+      width:28px;
+      height:28px;
       padding:0;
       border:2px solid #9e7140;
-      border-bottom:0;
-      border-radius:9px 9px 0 0;
+      border-radius:8px;
       background:#f7e8cf;
-      transform:translateX(-50%);
+      box-shadow:0 3px 0 #9e7140,0 5px 8px rgba(0,0,0,0.24);
+      transform:translateY(-50%);
       cursor:pointer;
     }
+    .quest-collapse::before,
     .quest-collapse::after{
       content:"";
       position:absolute;
       left:50%;
-      top:3px;
-      width:9px;
-      height:9px;
-      border-left:3px solid #9e7140;
-      border-top:3px solid #9e7140;
-      transform:translateX(-50%) rotate(45deg);
+      top:50%;
+      width:13px;
+      height:3px;
+      border-radius:999px;
+      background:#9e7140;
+      transform:translate(-50%,-50%) rotate(45deg);
     }
+    .quest-collapse::after{transform:translate(-50%,-50%) rotate(-45deg);}
     .quest-card.complete .quest-collapse{background:#49ef24;border-color:#219a26;}
-    .quest-card.complete .quest-collapse::after{border-color:#197d22;}
+    .quest-card.complete .quest-collapse{box-shadow:0 3px 0 #219a26,0 5px 8px rgba(0,0,0,0.24);}
+    .quest-card.complete .quest-collapse::before,
+    .quest-card.complete .quest-collapse::after{background:#197d22;}
     .shop-button{
       position:absolute;
       bottom:16px;
@@ -542,7 +623,7 @@
       overflow:hidden;
       padding:0 0 5px;
       box-sizing:border-box;
-      pointer-events:auto;
+      pointer-events:none;
       z-index:6;
     }
     .farm-resource-card{
@@ -550,16 +631,17 @@
       min-width:0;
       width:100%;
       height:52px;
-      padding:2px 1px 3px;
+      padding:2px 1px 6px;
       border:2px solid #0c4d7e;
       border-radius:9px;
       background:linear-gradient(180deg,#2aaee2,#1577b5);
       box-shadow:0 3px 0 #0c4d7e,0 5px 8px rgba(0,0,0,0.22);
       color:#fff;
       display:grid;
-      grid-template-rows:25px 9px 7px 3px;
+      grid-template-rows:25px 9px 9px;
       place-items:center;
       cursor:pointer;
+      pointer-events:auto;
       box-sizing:border-box;
       transition:filter 0.16s ease, opacity 0.16s ease, background 0.16s ease;
     }
@@ -615,28 +697,36 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      color:#b7c5ca;
-      font-size:clamp(4px, 1.25vw, 6px);
+      color:#ffd642;
+      font-size:clamp(6px, 1.8vw, 8px);
       line-height:1;
-      letter-spacing:-1px;
+      letter-spacing:-0.5px;
       overflow:hidden;
       white-space:nowrap;
+      text-shadow:0 1px 1px rgba(91,57,0,0.72);
     }
-    .farm-resource-stars .filled{color:#62e16d;}
+    .farm-resource-stars span:not(.filled){display:none;}
+    .farm-resource-stars .filled{color:#ffd642;}
     .farm-resource-progress{
-      width:calc(100% - 6px);
-      height:3px;
-      border-radius:999px;
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      width:100%;
+      height:4px;
+      border-radius:0 0 7px 7px;
       background:rgba(12,54,78,0.55);
       overflow:hidden;
+      display:block;
     }
     .farm-resource-progress-fill{
       width:0%;
       height:100%;
-      border-radius:999px;
+      border-radius:0 0 7px 7px;
       background:#67e5ff;
+      display:block;
     }
-    .farm-resource-card.cannot-upgrade .farm-resource-stars .filled{color:#a9cbae;}
+    .farm-resource-card.cannot-upgrade .farm-resource-stars .filled{color:#e0be4d;}
     .farm-resource-card.cannot-upgrade .farm-resource-progress-fill{background:#b8c8cc;}
     .upgrade-marker{
       position:absolute;
@@ -1566,6 +1656,15 @@
 </head>
 <body>
   <div id="gameShell">
+    <div id="loadingScreen" class="loading-screen" aria-live="polite">
+      <div class="loading-panel">
+        <div class="loading-title">Vibe Island</div>
+        <div class="loading-track">
+          <div id="loadingProgress" class="loading-progress"></div>
+        </div>
+        <div id="loadingText" class="loading-text">Загрузка ресурсов 0%</div>
+      </div>
+    </div>
     <div id="pixiMount"></div>
     <div id="uiRoot">
       <div class="profile-panel" data-ui-control>
@@ -1597,6 +1696,7 @@
         <img src="./img/ui/quest-journal.png" alt="" />
       </button>
       <div id="questCard" class="quest-card open" data-ui-control>
+        <div id="questPointer" class="quest-pointer"></div>
         <button id="questCollapse" class="quest-collapse" type="button" aria-label="Свернуть задание" data-ui-control></button>
         <div class="quest-icon">
           <img id="questIcon" alt="quest" />
@@ -1694,7 +1794,7 @@
   <script src="./scenario-objects-config.js?v=20260607-island-polish"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260607-horizon-color"></script>
-  <script src="./pixi-ui.js?v=20260607-quest-resource-details"></script>
+  <script src="./pixi-game.js?v=20260607-loader-sorting"></script>
+  <script src="./pixi-ui.js?v=20260607-resource-quest-polish"></script>
 </body>
 </html>
