@@ -366,7 +366,7 @@
 
   function renderIslandSizeMeters() {
     if (!islandSizeMeters) return;
-    islandSizeMeters.textContent = `${formatCompactNumber(getIslandSizeMeters())} м`;
+    islandSizeMeters.textContent = `⌀ ${formatCompactNumber(getIslandSizeMeters())} м`;
   }
 
   function loadScenarioOpenedIds() {
@@ -682,7 +682,7 @@
   const questClaim = document.getElementById('questClaim');
   const questToggle = document.getElementById('questToggle');
   const resourceCards = new Map();
-  const EXPANSION_DELAY_MS = 1500;
+  const EXPANSION_DELAY_MS = 900;
   const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
 
   function setImageWithFallback(img, key) {

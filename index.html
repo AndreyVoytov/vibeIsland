@@ -103,23 +103,13 @@
       z-index:7;
     }
     .island-size-pill{
-      position:absolute;
-      top:14px;
-      left:174px;
-      min-width:66px;
-      height:28px;
-      padding:0 10px;
-      border-radius:999px;
-      background:rgba(0,0,0,0.56);
       color:#fff;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:13px;
-      font-weight:800;
-      box-shadow:0 4px 10px rgba(0,0,0,0.28);
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+      white-space:nowrap;
+      text-shadow:0 2px 3px rgba(0,0,0,0.72);
       pointer-events:none;
-      z-index:7;
     }
     .profile-avatar{
       width:44px;
@@ -187,12 +177,20 @@
       top:14px;
       left:178px;
       right:188px;
-      height:34px;
+      height:48px;
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       gap:8px;
       pointer-events:auto;
       z-index:6;
+    }
+    .quest-stage-column{
+      min-width:54px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:5px;
+      flex-shrink:0;
     }
     .quest-level-pill{
       min-width:54px;
@@ -207,10 +205,10 @@
       font-size:14px;
       font-weight:800;
       box-shadow:0 3px 8px rgba(0,0,0,0.22);
-      flex-shrink:0;
     }
     .quest-track{
       position:relative;
+      margin-top:10px;
       height:12px;
       flex:1;
       min-width:72px;
@@ -254,7 +252,7 @@
     .quest-milestone.current{
       width:24px;
       height:24px;
-      box-shadow:0 0 0 3px rgba(255,255,255,0.45), 0 2px 5px rgba(0,0,0,0.28);
+      box-shadow:0 0 0 3px rgba(24,112,171,0.42), 0 2px 5px rgba(0,0,0,0.28);
     }
     .quest-milestone::after{
       content:"";
@@ -403,35 +401,34 @@
     .quest-toggle{
       position:absolute;
       top:56px;
-      left:50%;
-      transform:translateX(-50%);
-      min-width:146px;
-      height:38px;
-      padding:0 14px;
-      border:3px solid #fff;
-      border-radius:10px;
+      right:0;
+      width:42px;
+      height:42px;
+      padding:0;
+      border:2px solid #0d5688;
+      border-right:0;
+      border-radius:12px 0 0 12px;
       background:linear-gradient(180deg,#24afe5,#177ebc);
       color:#fff;
       box-shadow:0 4px 0 #0d5688, 0 7px 12px rgba(0,0,0,0.28);
-      font-size:13px;
+      font-size:24px;
+      line-height:1;
       font-weight:900;
-      letter-spacing:0.02em;
       cursor:pointer;
       pointer-events:auto;
       z-index:7;
     }
     .quest-toggle::after{
       content:"";
-      display:inline-block;
-      width:7px;
-      height:7px;
-      margin-left:9px;
-      border-right:3px solid #fff;
-      border-bottom:3px solid #fff;
-      transform:translateY(-2px) rotate(45deg);
-      transition:transform 0.18s ease;
+      position:absolute;
+      left:8px;
+      right:8px;
+      bottom:6px;
+      height:3px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.58);
     }
-    .quest-toggle.open::after{transform:translateY(2px) rotate(225deg);}
+    .quest-toggle.open{background:linear-gradient(180deg,#1686bf,#0e639b);}
     .quest-card:not(.open){display:none;}
     .shop-button{
       position:absolute;
@@ -558,7 +555,7 @@
       max-height:min(78vh, 610px);
       background:#fff1df;
       border-radius:14px;
-      border:3px solid #fff7e9;
+      border:3px solid #c5965f;
       box-shadow:0 12px 0 rgba(86,46,0,0.24), 0 18px 36px rgba(35,16,0,0.45);
       color:#4b4b4b;
       display:flex;
@@ -580,7 +577,7 @@
       max-height:min(84vh, 620px);
       background:#ffffff;
       border-radius:18px;
-      border:4px solid #ffffff;
+      border:3px solid #168fc7;
       box-shadow:0 9px 0 rgba(24,86,125,0.48), 0 18px 32px rgba(0,0,0,0.42);
       display:flex;
       flex-direction:column;
@@ -1151,10 +1148,6 @@
         gap:6px;
         padding:4px 7px 4px 4px;
       }
-      .island-size-pill{
-        top:10px;
-        left:142px;
-      }
       .profile-avatar{
         width:40px;
         height:40px;
@@ -1247,26 +1240,26 @@
       bottom:0;
       height:78px;
       background:linear-gradient(180deg,rgba(25,117,171,0.88),rgba(13,72,124,0.96));
-      border-top:3px solid rgba(255,255,255,0.85);
+      border-top:3px solid rgba(7,52,91,0.72);
       box-shadow:0 -5px 0 rgba(7,52,91,0.5),0 -10px 24px rgba(0,0,0,0.18);
       pointer-events:none;
       z-index:4;
     }
     .profile-panel{
-      border:3px solid #fff;
+      border:2px solid #0c3c70;
       border-radius:11px;
       background:linear-gradient(180deg,#267fc1,#174f8e);
       box-shadow:0 4px 0 #0c3c70,0 7px 12px rgba(0,0,0,0.3);
     }
-    .profile-avatar{border-radius:8px;box-shadow:inset 0 0 0 2px #fff,0 2px 0 rgba(0,0,0,0.28);}
-    .money-pill,.gem-pill,.island-size-pill{
-      border:2px solid #fff;
+    .profile-avatar{border-radius:8px;box-shadow:inset 0 0 0 2px rgba(12,60,112,0.45),0 2px 0 rgba(0,0,0,0.28);}
+    .money-pill,.gem-pill{
+      border:2px solid #142b4c;
       border-radius:10px;
       background:linear-gradient(180deg,#385f88,#213d65);
       box-shadow:0 3px 0 #142b4c,0 5px 10px rgba(0,0,0,0.3);
     }
     .quest-level-pill{
-      border:3px solid #fff;
+      border:2px solid #0d5788;
       border-radius:9px;
       background:linear-gradient(180deg,#2aafe3,#177db9);
       color:#fff;
@@ -1274,14 +1267,14 @@
     }
     .quest-track{
       height:16px;
-      border:3px solid #fff;
+      border:2px solid #294660;
       background:#56718a;
       box-shadow:0 4px 0 #294660;
     }
     .quest-track-fill{background:linear-gradient(90deg,#39d25f,#f3ca35);}
-    .quest-milestone{border:3px solid #fff;box-shadow:0 3px 0 #5c4315;}
+    .quest-milestone{border:2px solid #8d651d;box-shadow:0 3px 0 #5c4315;}
     .quest-card{
-      border:3px solid #fff;
+      border:2px solid #9e7140;
       border-radius:10px;
       background:#f7e8cf;
       box-shadow:0 5px 0 #9e7140,0 9px 16px rgba(0,0,0,0.3);
@@ -1291,7 +1284,7 @@
       width:56px;
       height:56px;
       transform:none;
-      border:3px solid #fff;
+      border:2px solid #0c4d7e;
       border-radius:10px;
       background:linear-gradient(180deg,#25aae0,#1476b3);
       box-shadow:0 4px 0 #0c4d7e,0 7px 12px rgba(0,0,0,0.32);
@@ -1321,15 +1314,17 @@
           <div id="playerXpText" class="xp-text">0/100</div>
         </div>
       </div>
-      <div id="islandSizeMeters" class="island-size-pill" data-ui-control>18 м</div>
       <div class="quest-strip" data-ui-control>
-        <div id="questStage" class="quest-level-pill">1-1</div>
+        <div class="quest-stage-column">
+          <div id="questStage" class="quest-level-pill">1-1</div>
+          <div id="islandSizeMeters" class="island-size-pill">⌀ 18 м</div>
+        </div>
         <div class="quest-track">
           <div id="questTrackFill" class="quest-track-fill"></div>
           <div id="questMilestones" class="quest-milestones"></div>
         </div>
       </div>
-      <button id="questToggle" class="quest-toggle" type="button" aria-expanded="false" data-ui-control>Текущее задание</button>
+      <button id="questToggle" class="quest-toggle" type="button" aria-label="Текущее задание" title="Текущее задание" aria-expanded="false" data-ui-control>!</button>
       <div id="questCard" class="quest-card" data-ui-control>
         <div class="quest-icon">
           <img id="questIcon" alt="quest" />
@@ -1408,7 +1403,7 @@
   <script src="./scenario-objects-config.js?v=20260607-island-polish"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260607-island-polish"></script>
-  <script src="./pixi-ui.js?v=20260607-island-polish"></script>
+  <script src="./pixi-game.js?v=20260607-ui-cutscene"></script>
+  <script src="./pixi-ui.js?v=20260607-ui-cutscene"></script>
 </body>
 </html>

@@ -536,11 +536,15 @@
   transitionText.zIndex = 31;
   const cutsceneGraphics = new PIXI.Graphics();
   cutsceneGraphics.zIndex = 29;
+  const cutsceneHeroContainer = new PIXI.Container();
+  cutsceneHeroContainer.zIndex = 29.05;
+  cutsceneHeroContainer.visible = false;
+  const cutsceneHeroParts = [];
   const cutsceneBoatSprite = new PIXI.Sprite();
   cutsceneBoatSprite.anchor.set(0.5);
   cutsceneBoatSprite.zIndex = 29.1;
   cutsceneBoatSprite.visible = false;
-  screenLayer.addChild(cutsceneGraphics, cutsceneBoatSprite, transitionGraphics, transitionText);
+  screenLayer.addChild(cutsceneGraphics, cutsceneHeroContainer, cutsceneBoatSprite, transitionGraphics, transitionText);
 
   let gameWidth = mount.clientWidth || window.innerWidth;
   let gameHeight = mount.clientHeight || window.innerHeight;
@@ -1152,7 +1156,7 @@
     const newCells = land
       .filter((cell) => !visible.has(cellKey(cell.x, cell.y)))
       .sort((a, b) => (b.y - a.y) || (Math.abs(a.x - GRID_W / 2) - Math.abs(b.x - GRID_W / 2)));
-    const revealProgress = clamp((progress - 0.08) / 0.82, 0, 1);
+    const revealProgress = clamp(progress / 0.9, 0, 1);
     const visibleCount = Math.floor(newCells.length * easeOutQuad(revealProgress));
     newCells.slice(0, visibleCount).forEach((cell) => visible.add(cellKey(cell.x, cell.y)));
     return visible;
@@ -2360,8 +2364,8 @@
       const wobble = Math.sin(now / 520 + i * 1.7 + seed * Math.PI * 2) * 0.025;
       const rx = width * (0.42 + t * 0.36 + wobble);
       const ry = height * (0.17 + t * 0.16 - wobble * 0.45);
-      const lineWidth = Math.max(1.4, getWorldCellPx() * 0.026);
-      g.lineStyle(lineWidth, 0xffffff, alpha * 0.82);
+      const lineWidth = Math.max(1.2, getWorldCellPx() * 0.022);
+      g.lineStyle(lineWidth, 0x68d4f2, alpha * 0.48);
       g.drawEllipse(x, y, rx, ry);
     }
     g.lineStyle(0, 0xffffff, 0);
@@ -2458,14 +2462,9 @@
 
       if (floating) drawWaterRipples(scenarioGraphics, baseX, waterY, width, height, now, state);
 
-      beginFill(scenarioGraphics, floating ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.3)');
+      beginFill(scenarioGraphics, floating ? 'rgba(0,104,166,0.2)' : 'rgba(0,0,0,0.3)');
       scenarioGraphics.drawEllipse(baseX, waterY, width * 0.35, height * 0.16);
       scenarioGraphics.endFill();
-      if (floating) {
-        scenarioGraphics.lineStyle(Math.max(1.5, getWorldCellPx() * 0.028), 0xffffff, 0.72);
-        scenarioGraphics.drawEllipse(baseX, waterY, width * 0.4, height * 0.19);
-        scenarioGraphics.lineStyle(0, 0xffffff, 0);
-      }
 
       let sprite = scenarioSprites.get(state.id);
       const texture = getScenarioTexture(def, state);
@@ -2580,7 +2579,7 @@
   function resetProgressForNextIsland() {
     localStorage.setItem(ISLAND_RUN_KEY, '2');
     localStorage.setItem('map', JSON.stringify(createSmallIslandMap()));
-    localStorage.setItem('baseGridW', String(NEW_ISLAND_MAP_SIZE));
+    localStorage.setItem('baseGridW', String(DEFAULT_MAP_WIDTH));
     localStorage.setItem('islandExpansionLevel', '0');
     localStorage.setItem('mapShift', JSON.stringify({ x: 0, y: 0 }));
     localStorage.removeItem('islandExpansionAt');
@@ -2665,30 +2664,50 @@
     startBoatCutscene();
   }
 
+  function ensureCutsceneHeroParts() {
+    if (cutsceneHeroParts.length) return;
+    [
+      { name: 'body', flipped: false },
+      { name: 'head', flipped: true },
+      { name: 'eyes', flipped: true },
+      { name: 'cap', flipped: true },
+    ].forEach(({ name, flipped }) => {
+      const sprite = new PIXI.Sprite(getTexture(`./img/hero/${name}.png`) || PIXI.Texture.WHITE);
+      sprite.anchor.set(0.5);
+      if (flipped) sprite.scale.x = -1;
+      cutsceneHeroParts.push(sprite);
+      cutsceneHeroContainer.addChild(sprite);
+    });
+  }
+
   function drawCutsceneBoat(now) {
     if (!boatCutscene || boatCutscene.phase !== 'depart') return;
     const t = clamp((now - boatCutscene.t0) / 2800, 0, 1);
     const x = lerp(boatCutscene.startX, gameWidth + boatCutscene.width * 0.9, easeInCubic(t));
     const y = boatCutscene.startY + Math.sin(now / 260) * 5;
+    const rotation = Math.sin(now / 260) * 0.025;
+    ensureCutsceneHeroParts();
+    const heroScale = (boatCutscene.height * 1.05) / 250;
+    cutsceneHeroContainer.visible = true;
+    cutsceneHeroContainer.x = x + boatCutscene.width * 0.18;
+    cutsceneHeroContainer.y = y - boatCutscene.height * 0.12;
+    cutsceneHeroContainer.rotation = rotation;
+    cutsceneHeroContainer.scale.set(heroScale);
     const texture = getTexture('./images/scenario/boat-repaired.png');
     if (texture) {
       cutsceneBoatSprite.visible = true;
       cutsceneBoatSprite.texture = texture;
       cutsceneBoatSprite.x = x;
       cutsceneBoatSprite.y = y;
-      cutsceneBoatSprite.width = boatCutscene.width;
-      cutsceneBoatSprite.height = boatCutscene.height;
-      cutsceneBoatSprite.rotation = Math.sin(now / 260) * 0.025;
+      cutsceneBoatSprite.scale.set(
+        -boatCutscene.width / Math.max(1, texture.width),
+        boatCutscene.height / Math.max(1, texture.height)
+      );
+      cutsceneBoatSprite.rotation = rotation;
     } else {
       cutsceneBoatSprite.visible = false;
       drawScenarioBoatPrimitive(cutsceneGraphics, x, y, boatCutscene.width, boatCutscene.height, true, now);
     }
-    cutsceneGraphics.beginFill(0xd9b18d, 1);
-    cutsceneGraphics.drawCircle(x - boatCutscene.width * 0.03, y - boatCutscene.height * 0.34, Math.max(4, boatCutscene.height * 0.11));
-    cutsceneGraphics.endFill();
-    cutsceneGraphics.beginFill(0xc84235, 1);
-    cutsceneGraphics.drawRect(x - boatCutscene.width * 0.1, y - boatCutscene.height * 0.27, boatCutscene.width * 0.18, boatCutscene.height * 0.18);
-    cutsceneGraphics.endFill();
   }
 
   function updateBoatCutscene(now) {
@@ -2723,6 +2742,7 @@
     cutsceneGraphics.clear();
     transitionGraphics.clear();
     transitionText.text = '';
+    cutsceneHeroContainer.visible = false;
     cutsceneBoatSprite.visible = false;
     if (!boatCutscene) return;
     drawCutsceneBoat(now);
@@ -2866,7 +2886,10 @@
       vxPct,
       vyPct,
       rot: rnd(0, Math.PI * 2),
-      angVel: rnd(-18, 18) * (Math.PI / 180),
+      angVel: rnd(
+        -(Number.isFinite(opts.angVelMaxDeg) ? opts.angVelMaxDeg : 18),
+        Number.isFinite(opts.angVelMaxDeg) ? opts.angVelMaxDeg : 18
+      ) * (Math.PI / 180),
       t0,
       lastT: t0,
       color: opts.color,
@@ -3297,15 +3320,16 @@
       b.leafs.push(mkLeaf(start.xPct, start.yPct, {
         t0: now,
         color: colors[rndi(0, colors.length - 1)],
-        sizePct: centered ? rnd(0.72, 1.55) : rnd(0.66, 1.22),
+        sizePct: centered ? rnd(0.72, 1.55) : rnd(0.66, 1.22) / 1.5,
         spdMin: centered ? LEAF_SPD_MIN * 0.42 : LEAF_SPD_MIN * 0.34,
         spdMax: centered ? LEAF_SPD_MAX * 0.62 : LEAF_SPD_MAX * 0.48,
-        horizontalScale: centered ? 1.28 : 1.12,
+        horizontalScale: centered ? 1.28 : 1.34,
+        angVelMaxDeg: centered ? 18 : 6,
         upMin: centered ? 5.5 : 4.2,
         upMax: centered ? 8.4 : 6.8,
         gravityPct: centered ? 22 : 20,
         arc: true,
-        lifeMs: centered ? rnd(840, 1060) : rnd(760, 940),
+        lifeMs: centered ? rnd(840, 1060) : rnd(760 / 1.4, 940 / 1.4),
       }));
     }
   }
@@ -4969,9 +4993,9 @@
       if (Math.abs(vxPct) > 0.002) s.flip = vxPct > 0 ? -1 : 1;
       const x = pct2px(s.xPct);
       const y = pct2px(s.yPct);
-      sharkGraphics.lineStyle(2, 0xffffff, 0.62);
+      sharkGraphics.beginFill(0x087fb9, 0.24);
       sharkGraphics.drawEllipse(x, y + 4, 16, 6);
-      sharkGraphics.lineStyle(0, 0xffffff, 0);
+      sharkGraphics.endFill();
       const flip = s.flip || 1;
       if (finTexture) {
         let sprite = sharkSprites[index];
