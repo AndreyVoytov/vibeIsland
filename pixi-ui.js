@@ -1104,11 +1104,9 @@
 
   function renderFarmResourceStrip(user = getUserState()) {
     if (!farmResourceStrip) return;
-    const unlockedIds = new Set(
-      berryResources
-        .filter((resource) => user.unlockedResources[resource.id])
-        .map((resource) => resource.id)
-    );
+    const unlockedResources = berryResources.filter((resource) => user.unlockedResources[resource.id]);
+    const unlockedIds = new Set(unlockedResources.map((resource) => resource.id));
+    farmResourceStrip.style.setProperty('--farm-resource-columns', String(Math.max(8, unlockedResources.length)));
     farmResourceCards.forEach((entry, id) => {
       if (unlockedIds.has(id)) return;
       entry.card.remove();
@@ -1122,6 +1120,10 @@
         farmResourceCards.set(resource.id, entry);
       }
       entry.price.textContent = formatCompactNumber(applyProfitBonus(resource.profit, user, resource.id));
+      const level = getResourceUpgradeLevel(user, resource.id);
+      const canUpgrade = level < RESOURCE_UPGRADE_MAX_LEVEL && user.money >= getResourceUpgradeCost(resource, user);
+      entry.card.classList.toggle('can-upgrade', canUpgrade);
+      entry.card.classList.toggle('cannot-upgrade', !canUpgrade);
       entry.card.classList.toggle(
         'active',
         Boolean(resourceUpgradePanel && resourceUpgradePanel.classList.contains('open') && activeResourceUpgradeId === resource.id)
