@@ -277,7 +277,7 @@
     }
     .quest-card{
       position:absolute;
-      top:102px;
+      top:64px;
       left:50%;
       transform:translateX(-50%);
       width:min(330px, calc(100% - 132px));
@@ -297,6 +297,7 @@
       box-sizing:border-box;
       transition:background 0.2s ease, transform 0.2s ease;
     }
+    .quest-card.complete{cursor:pointer;}
     .quest-card.complete{
       background:#49ef24;
       border-color:#219a26;
@@ -411,25 +412,65 @@
       background:linear-gradient(180deg,#24afe5,#177ebc);
       color:#fff;
       box-shadow:0 4px 0 #0d5688, 0 7px 12px rgba(0,0,0,0.28);
-      font-size:24px;
-      line-height:1;
-      font-weight:900;
+      display:none;
       cursor:pointer;
       pointer-events:auto;
       z-index:7;
     }
-    .quest-toggle::after{
+    .quest-toggle.visible{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .quest-toggle img{
+      width:34px;
+      height:34px;
+      object-fit:contain;
+      filter:drop-shadow(0 2px 2px rgba(0,0,0,0.32));
+    }
+    .quest-toggle.reward-ready::before{
       content:"";
       position:absolute;
-      left:8px;
-      right:8px;
-      bottom:6px;
-      height:3px;
-      border-radius:999px;
-      background:rgba(255,255,255,0.58);
+      top:-5px;
+      left:-5px;
+      width:13px;
+      height:13px;
+      border-radius:50%;
+      background:#31e950;
+      box-shadow:0 0 0 2px #11702c,0 2px 5px rgba(0,0,0,0.38);
+    }
+    .quest-toggle::after{
+      display:none;
     }
     .quest-toggle.open{background:linear-gradient(180deg,#1686bf,#0e639b);}
     .quest-card:not(.open){display:none;}
+    .quest-collapse{
+      position:absolute;
+      top:-10px;
+      left:50%;
+      width:46px;
+      height:13px;
+      padding:0;
+      border:2px solid #9e7140;
+      border-bottom:0;
+      border-radius:9px 9px 0 0;
+      background:#f7e8cf;
+      transform:translateX(-50%);
+      cursor:pointer;
+    }
+    .quest-collapse::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:3px;
+      width:9px;
+      height:9px;
+      border-left:3px solid #9e7140;
+      border-top:3px solid #9e7140;
+      transform:translateX(-50%) rotate(45deg);
+    }
+    .quest-card.complete .quest-collapse{background:#49ef24;border-color:#219a26;}
+    .quest-card.complete .quest-collapse::after{border-color:#197d22;}
     .shop-button{
       position:absolute;
       bottom:16px;
@@ -516,7 +557,7 @@
       box-shadow:0 3px 0 #0c4d7e,0 5px 8px rgba(0,0,0,0.22);
       color:#fff;
       display:grid;
-      grid-template-rows:32px 12px;
+      grid-template-rows:25px 9px 7px 3px;
       place-items:center;
       cursor:pointer;
       box-sizing:border-box;
@@ -542,8 +583,8 @@
       box-shadow:0 0 0 2px #0f7130,0 1px 4px rgba(0,0,0,0.42);
     }
     .farm-resource-card img{
-      width:clamp(23px, 7vw, 30px);
-      height:clamp(23px, 7vw, 30px);
+      width:clamp(21px, 6vw, 27px);
+      height:clamp(21px, 6vw, 27px);
       object-fit:contain;
       filter:drop-shadow(0 2px 2px rgba(0,0,0,0.32));
     }
@@ -569,6 +610,34 @@
       box-shadow:inset 0 0 0 1px #bd7e0e;
       flex-shrink:0;
     }
+    .farm-resource-stars{
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#b7c5ca;
+      font-size:clamp(4px, 1.25vw, 6px);
+      line-height:1;
+      letter-spacing:-1px;
+      overflow:hidden;
+      white-space:nowrap;
+    }
+    .farm-resource-stars .filled{color:#62e16d;}
+    .farm-resource-progress{
+      width:calc(100% - 6px);
+      height:3px;
+      border-radius:999px;
+      background:rgba(12,54,78,0.55);
+      overflow:hidden;
+    }
+    .farm-resource-progress-fill{
+      width:0%;
+      height:100%;
+      border-radius:999px;
+      background:#67e5ff;
+    }
+    .farm-resource-card.cannot-upgrade .farm-resource-stars .filled{color:#a9cbae;}
+    .farm-resource-card.cannot-upgrade .farm-resource-progress-fill{background:#b8c8cc;}
     .upgrade-marker{
       position:absolute;
       top:-6px;
@@ -755,7 +824,6 @@
       height:100%;
       border-radius:999px;
       background:#39b9e8;
-      transition:width 0.22s ease;
     }
     .resource-upgrade-stats{
       margin:7px 3px 10px;
@@ -1372,7 +1440,7 @@
         right:10px;
       }
       .quest-card{
-        top:148px;
+        top:116px;
         width:calc(100% - 20px);
       }
       .quest-toggle{top:106px;}
@@ -1525,8 +1593,11 @@
           <div id="questMilestones" class="quest-milestones"></div>
         </div>
       </div>
-      <button id="questToggle" class="quest-toggle" type="button" aria-label="Текущее задание" title="Текущее задание" aria-expanded="false" data-ui-control>!</button>
-      <div id="questCard" class="quest-card" data-ui-control>
+      <button id="questToggle" class="quest-toggle" type="button" aria-label="Текущее задание" title="Текущее задание" aria-expanded="true" data-ui-control>
+        <img src="./img/ui/quest-journal.png" alt="" />
+      </button>
+      <div id="questCard" class="quest-card open" data-ui-control>
+        <button id="questCollapse" class="quest-collapse" type="button" aria-label="Свернуть задание" data-ui-control></button>
         <div class="quest-icon">
           <img id="questIcon" alt="quest" />
         </div>
@@ -1623,7 +1694,7 @@
   <script src="./scenario-objects-config.js?v=20260607-island-polish"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260607-lighthouse-rays"></script>
-  <script src="./pixi-ui.js?v=20260607-resource-grid"></script>
+  <script src="./pixi-game.js?v=20260607-horizon-color"></script>
+  <script src="./pixi-ui.js?v=20260607-quest-resource-details"></script>
 </body>
 </html>

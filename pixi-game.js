@@ -78,6 +78,9 @@
   const HERO_PIVOT = { left: 1.7, right: 1.7, up: 4, down: -0.5 };
   const HERO_CHAR_R_PCT = 6;
   const HERO_SCALE = 1.6;
+  const HERO_SPRITE_WIDTH = 200;
+  const HERO_SPRITE_HEIGHT = 250;
+  const HERO_SHADOW_ALPHA_BOUNDS = { left: 45.5, right: 144.5, top: 219.5, bottom: 237.5 };
   const HERO_SPRITES = ['shadow', 'arm1', 'arm2', 'axe', 'backpack', 'body', 'cap', 'eyes', 'head', 'leg1', 'leg2', 'pants'];
   const HERO_OFFSETS = {
     backpack: { x: -0.35, y: 0.2 },
@@ -127,6 +130,7 @@
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
   const LIGHTHOUSE_BEAM_FADE_IN_MS = 1800;
+  const LIGHTHOUSE_BEAM_SCREEN_WIDTHS = 3;
   const SCENARIO_GLINT_PERIOD_MS = 3400;
   const SCENARIO_GLINT_ACTIVE_MS = 950;
   const SCENARIO_GLINT_HIT_PAD = 0.28;
@@ -168,6 +172,7 @@
   const SHARK_ANG_SPEED_MAX = 0.0016;
   const SHARK_SCENARIO_SAFE_CELLS = 2;
   const SHARK_ANCHOR_PULL = 0.002;
+  const SHARK_FIN_TOP_CLEARANCE_PX = 24;
   const SHARK_ANCHOR_POINTS = [
     { xPct: 10, yPct: 10 },
     { xPct: 90, yPct: 10 },
@@ -667,13 +672,22 @@
     horizonTopFillGraphics.clear();
     const topFillY = Math.min(y - 1, -gameHeight * 2 - HORIZON_TOP_OVERSCAN_PX);
     const topFillHeight = Math.max(0, y - topFillY + 1);
-    const topSteps = 10;
+    beginFill(horizonTopFillGraphics, '#9a66a1');
+    horizonTopFillGraphics.drawRect(bx, topFillY, Math.max(0, x - bx + 1), topFillHeight);
+    horizonTopFillGraphics.endFill();
+    const topSteps = 36;
     for (let i = 0; i < topSteps; i += 1) {
       const t = i / Math.max(1, topSteps - 1);
-      beginFill(horizonTopFillGraphics, mixColor('#8d6fd8', '#ac67a2', t), '#ac67a2');
-      horizonTopFillGraphics.drawRect(bx, topFillY + topFillHeight * (i / topSteps), bw, Math.ceil(topFillHeight / topSteps) + 1);
+      const color = t <= 0.5
+        ? mixColor('#9a66a1', '#ac67a2', t * 2)
+        : mixColor('#ac67a2', '#9665a2', (t - 0.5) * 2);
+      beginFill(horizonTopFillGraphics, color, '#a267a2');
+      horizonTopFillGraphics.drawRect(x + width * (i / topSteps), topFillY, Math.ceil(width / topSteps) + 1, topFillHeight);
       horizonTopFillGraphics.endFill();
     }
+    beginFill(horizonTopFillGraphics, '#9665a2');
+    horizonTopFillGraphics.drawRect(x + width - 1, topFillY, Math.max(0, bx + bw - x - width + 1), topFillHeight);
+    horizonTopFillGraphics.endFill();
     if (hasEdges) {
       horizonLeftEdgeSprite.x = bx;
       horizonLeftEdgeSprite.y = y;
@@ -2388,7 +2402,7 @@
     const pulse = 0.96 + Math.sin(now / 760) * 0.04;
     const lampX = baseX;
     const lampY = baseY + floatOffset - height * 0.29;
-    const beamLength = width * 4.2;
+    const beamLength = gameWidth * LIGHTHOUSE_BEAM_SCREEN_WIDTHS;
     const outerHalfHeight = height * 0.52;
     const innerHalfHeight = height * 0.24;
     const sourceHalfHeight = Math.max(2, height * 0.035);
@@ -4511,15 +4525,68 @@
     return true;
   }
 
-  function findNearestFreeCell(gx, gy, blockers, resourceBlockers, scenarioBlockers, maxR = 6) {
-    if (isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)) return { gx, gy };
-    for (let r = 1; r <= maxR; r += 1) {
+  function getHeroShadowEllipse(xPct, yPct, direction = facing) {
+    const cell = getWorldCellPx();
+    const fixedCell = getFixedWorldCellPx();
+    const baseGridW = getBaseGridW();
+    if (!cell || !fixedCell || !baseGridW) return null;
+    const heroCellScale = HERO_CHAR_R_PCT * baseGridW / 100;
+    const charR = fixedCell * heroCellScale;
+    const scale = ((charR * 2) / HERO_SPRITE_HEIGHT) * HERO_SCALE;
+    const footOffset = (38 / BASE_CELL_PX) * fixedCell;
+    const bounds = HERO_SHADOW_ALPHA_BOUNDS;
+    const localCenterX = HERO_OFFSETS.shadow.x * charR + ((bounds.left + bounds.right) / 2 - HERO_SPRITE_WIDTH / 2);
+    const localCenterY = HERO_OFFSETS.shadow.y * charR + ((bounds.top + bounds.bottom) / 2 - HERO_SPRITE_HEIGHT / 2);
+    return {
+      x: pct2px(xPct) + direction * scale * localCenterX,
+      y: pct2px(yPct) - footOffset + cell / 2 - 8 + scale * localCenterY,
+      rx: scale * (bounds.right - bounds.left) / 2,
+      ry: scale * (bounds.bottom - bounds.top) / 2,
+    };
+  }
+
+  function ellipseIntersectsCell(ellipse, gx, gy, cell) {
+    const nearestX = clamp(ellipse.x, gx * cell, (gx + 1) * cell);
+    const nearestY = clamp(ellipse.y, gy * cell, (gy + 1) * cell);
+    const dx = (nearestX - ellipse.x) / ellipse.rx;
+    const dy = (nearestY - ellipse.y) / ellipse.ry;
+    return dx * dx + dy * dy < 1 - 1e-6;
+  }
+
+  function isHeroShadowOnIsland(xPct, yPct, direction = facing) {
+    const cell = getWorldCellPx();
+    const ellipse = getHeroShadowEllipse(xPct, yPct, direction);
+    if (!cell || !ellipse || ellipse.rx <= 0 || ellipse.ry <= 0) return true;
+    const minGX = Math.floor((ellipse.x - ellipse.rx) / cell);
+    const maxGX = Math.floor((ellipse.x + ellipse.rx) / cell);
+    const minGY = Math.floor((ellipse.y - ellipse.ry) / cell);
+    const maxGY = Math.floor((ellipse.y + ellipse.ry) / cell);
+    for (let gy = minGY; gy <= maxGY; gy += 1) {
+      for (let gx = minGX; gx <= maxGX; gx += 1) {
+        if (isLandCell(gx, gy)) continue;
+        if (ellipseIntersectsCell(ellipse, gx, gy, cell)) return false;
+      }
+    }
+    return true;
+  }
+
+  function canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers, direction = facing) {
+    const gx = Math.floor(xPct / cellPct);
+    const gy = Math.floor(yPct / cellPct);
+    return isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)
+      && isHeroShadowOnIsland(xPct, yPct, direction);
+  }
+
+  function findNearestHeroSafeCell(gx, gy, blockers, resourceBlockers, scenarioBlockers, direction = facing, maxR = 8) {
+    for (let r = 0; r <= maxR; r += 1) {
       for (let dy = -r; dy <= r; dy += 1) {
         for (let dx = -r; dx <= r; dx += 1) {
-          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          if (r && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
           const nx = gx + dx;
           const ny = gy + dy;
-          if (isCellFree(nx, ny, blockers, resourceBlockers, scenarioBlockers)) return { gx: nx, gy: ny };
+          const xPct = (nx + 0.5) * cellPct;
+          const yPct = (ny + 0.5) * cellPct;
+          if (canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers, direction)) return { gx: nx, gy: ny };
         }
       }
     }
@@ -4570,7 +4637,6 @@
     const vy = (controllerState.vyPct || 0) * SPEED_SCALE * frameScale;
     const isMoving = Math.abs(vx) + Math.abs(vy) > 0.001;
     controllerState.isMoving = isMoving;
-    const cell = getWorldCellPx();
     const blockers = getBuildingBlockers();
     const resourceBlockers = resourceColliderCells;
     const scenarioBlockers = getScenarioBlockers();
@@ -4578,11 +4644,10 @@
     let blockedY = false;
     let movedX = false;
     let movedY = false;
+    const nextFacing = vx ? (vx > 0 ? 1 : -1) : facing;
     if (vx) {
       const nx = charXPct + vx;
-      const gx = Math.floor(pct2px(nx) / cell);
-      const gy = Math.floor(pct2px(charYPct) / cell);
-      if (isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)) {
+      if (canPlaceHeroAt(nx, charYPct, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
         charXPct = nx;
         movedX = true;
       } else {
@@ -4591,9 +4656,7 @@
     }
     if (vy) {
       const ny = charYPct + vy;
-      const gx = Math.floor(pct2px(charXPct) / cell);
-      const gy = Math.floor(pct2px(ny) / cell);
-      if (isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)) {
+      if (canPlaceHeroAt(charXPct, ny, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
         charYPct = ny;
         movedY = true;
       } else {
@@ -4602,26 +4665,22 @@
     }
     if (blockedX && !movedY && Math.abs(vy) > 0.001) {
       const slideY = charYPct + vy;
-      const gx = Math.floor(pct2px(charXPct) / cell);
-      const gy = Math.floor(pct2px(slideY) / cell);
-      if (isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)) {
+      if (canPlaceHeroAt(charXPct, slideY, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
         charYPct = slideY;
         movedY = true;
       }
     }
     if (blockedY && !movedX && Math.abs(vx) > 0.001) {
       const slideX = charXPct + vx;
-      const gx = Math.floor(pct2px(slideX) / cell);
-      const gy = Math.floor(pct2px(charYPct) / cell);
-      if (isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers)) {
+      if (canPlaceHeroAt(slideX, charYPct, blockers, resourceBlockers, scenarioBlockers, nextFacing)) {
         charXPct = slideX;
         movedX = true;
       }
     }
     if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
     const heroCell = getHeroGridPosition();
-    if (heroCell && !isCellFree(heroCell.gridX, heroCell.gridY, blockers, resourceBlockers, scenarioBlockers)) {
-      const safeCell = findNearestFreeCell(heroCell.gridX, heroCell.gridY, blockers, resourceBlockers, scenarioBlockers);
+    if (heroCell && !canPlaceHeroAt(charXPct, charYPct, blockers, resourceBlockers, scenarioBlockers, facing)) {
+      const safeCell = findNearestHeroSafeCell(heroCell.gridX, heroCell.gridY, blockers, resourceBlockers, scenarioBlockers, facing);
       if (safeCell) snapHeroToCell(safeCell);
     }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
@@ -4975,7 +5034,10 @@
 
   function getSharkMinYPct() {
     if (!horizonSprite || !horizonSprite.visible) return Math.max(5, H_PCT * 0.22);
-    return clamp(px2pct(horizonSprite.y + horizonSprite.height * 0.5), 5, Math.max(5, H_PCT - SHARK_WANDER_R));
+    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const finClearance = SHARK_FIN_TOP_CLEARANCE_PX * sizeScale;
+    const horizonWaterY = horizonSprite.y + horizonSprite.height * HORIZON_LINE_Y_RATIO;
+    return clamp(px2pct(horizonWaterY + finClearance), 5, Math.max(5, H_PCT - SHARK_WANDER_R));
   }
 
   function spawnSharks() {
@@ -5049,6 +5111,7 @@
           s.yPct += vy * (minD - d);
         }
       }
+      s.yPct = Math.max(getSharkMinYPct(), Math.min(H_PCT, s.yPct));
       const vxPct = s.xPct - prevXPct;
       if (Math.abs(vxPct) > 0.002) s.flip = vxPct > 0 ? -1 : 1;
       const x = pct2px(s.xPct);

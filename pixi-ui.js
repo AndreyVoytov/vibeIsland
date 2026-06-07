@@ -729,6 +729,7 @@
   const questRewardValue = document.getElementById('questRewardValue');
   const questClaim = document.getElementById('questClaim');
   const questToggle = document.getElementById('questToggle');
+  const questCollapse = document.getElementById('questCollapse');
   const resourceCards = new Map();
   const farmResourceCards = new Map();
   let activeResourceUpgradeId = null;
@@ -1094,12 +1095,26 @@
     const icon = document.createElement('img');
     const price = document.createElement('span');
     price.className = 'farm-resource-price';
+    const stars = document.createElement('span');
+    stars.className = 'farm-resource-stars';
+    for (let index = 0; index < RESOURCE_UPGRADE_MAX_STARS; index += 1) {
+      const star = document.createElement('span');
+      star.textContent = '★';
+      stars.appendChild(star);
+    }
+    const progress = document.createElement('span');
+    progress.className = 'farm-resource-progress';
+    const progressFill = document.createElement('span');
+    progressFill.className = 'farm-resource-progress-fill';
+    progress.appendChild(progressFill);
     setResourceImage(icon, resource);
     card.appendChild(icon);
     card.appendChild(price);
+    card.appendChild(stars);
+    card.appendChild(progress);
     card.addEventListener('click', () => toggleResourceUpgrade(true, resource.id));
     farmResourceStrip.appendChild(card);
-    return { card, price };
+    return { card, price, stars, progressFill };
   }
 
   function renderFarmResourceStrip(user = getUserState()) {
@@ -1121,6 +1136,11 @@
       }
       entry.price.textContent = formatCompactNumber(applyProfitBonus(resource.profit, user, resource.id));
       const level = getResourceUpgradeLevel(user, resource.id);
+      const stars = getResourceUpgradeStars(user, resource.id);
+      Array.from(entry.stars.children).forEach((star, index) => star.classList.toggle('filled', index < stars));
+      entry.progressFill.style.width = level >= RESOURCE_UPGRADE_MAX_LEVEL
+        ? '100%'
+        : `${((level % RESOURCE_UPGRADE_LEVELS_PER_STAR) / RESOURCE_UPGRADE_LEVELS_PER_STAR) * 100}%`;
       const canUpgrade = level < RESOURCE_UPGRADE_MAX_LEVEL && user.money >= getResourceUpgradeCost(resource, user);
       entry.card.classList.toggle('can-upgrade', canUpgrade);
       entry.card.classList.toggle('cannot-upgrade', !canUpgrade);
@@ -1332,6 +1352,10 @@
     }
 
     if (!questCard || !questTitle) return;
+    if (questToggle) {
+      questToggle.hidden = done;
+      questToggle.classList.toggle('reward-ready', claimReady);
+    }
     questCard.classList.toggle('finished', done);
     questCard.classList.toggle('complete', claimReady);
     questCard.hidden = done;
@@ -1773,13 +1797,32 @@
   if (closeResourceUpgrade) closeResourceUpgrade.addEventListener('click', () => toggleResourceUpgrade(false));
   if (resourceUpgradeButton) resourceUpgradeButton.addEventListener('click', buyResourceUpgrade);
   if (findingOk) findingOk.addEventListener('click', finishFindingItem);
-  if (questClaim) questClaim.addEventListener('click', claimQuestReward);
-  if (questToggle && questCard) {
-    questToggle.addEventListener('click', () => {
-      const open = questCard.classList.toggle('open');
-      questToggle.classList.toggle('open', open);
-      questToggle.setAttribute('aria-expanded', String(open));
+  if (questClaim) {
+    questClaim.addEventListener('click', (event) => {
+      event.stopPropagation();
+      claimQuestReward();
     });
+  }
+  const setQuestCardOpen = (open) => {
+    if (!questCard || !questToggle) return;
+    questCard.classList.toggle('open', open);
+    questToggle.classList.toggle('visible', !open);
+    questToggle.setAttribute('aria-expanded', String(open));
+  };
+  if (questCard) {
+    questCard.addEventListener('click', (event) => {
+      if (event.target.closest('#questCollapse')) return;
+      if (questCard.classList.contains('complete')) claimQuestReward();
+    });
+  }
+  if (questCollapse) {
+    questCollapse.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setQuestCardOpen(false);
+    });
+  }
+  if (questToggle && questCard) {
+    questToggle.addEventListener('click', () => setQuestCardOpen(true));
   }
   window.addEventListener('vibe-found-item', (event) => showFindingItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', () => {
