@@ -480,7 +480,8 @@
     let result = Math.ceil(base * globalMultiplier);
     for (let nextLevel = 1; nextLevel <= level; nextLevel += 1) {
       const scaled = Math.ceil(base * getResourceUpgradeMultiplierAtLevel(nextLevel) * globalMultiplier);
-      result = Math.max(result + 1, scaled);
+      const starEarned = nextLevel % RESOURCE_UPGRADE_LEVELS_PER_STAR === 0;
+      result = Math.max(result + 1, scaled, starEarned ? result * 2 : 0);
     }
     return result;
   }

@@ -169,12 +169,14 @@
       renderOffsetPx: { y: -12 },
       widthPx: 92,
       heightPx: 56,
+      fixedDisplayScale: true,
       colliderRadius: 1,
       triggerRadiusCells: 3,
       persistentAfterTrigger: true,
       assetUrl: './images/scenario/blanket-survivor.png',
+      dialogSpeaker: 'self',
       dialog: [
-        'ух ты, новые лица',
+        'ого, новые люди',
       ],
     },
     {

@@ -445,6 +445,7 @@
       min-width:58px;
       font-size:13px;
       font-weight:900;
+      margin-right:18px;
     }
     .quest-reward img{
       width:20px;
@@ -466,6 +467,7 @@
       font-weight:900;
       box-shadow:0 3px 8px rgba(0,0,0,0.28);
       cursor:pointer;
+      margin-right:18px;
     }
     .quest-card.complete .quest-reward{display:none;}
     .quest-card.complete .quest-claim{display:flex;}
@@ -528,10 +530,10 @@
       width:28px;
       height:28px;
       padding:0;
-      border:2px solid #9e7140;
+      border:2px solid #9f4438;
       border-radius:8px;
-      background:#f7e8cf;
-      box-shadow:0 3px 0 #9e7140,0 5px 8px rgba(0,0,0,0.24);
+      background:#eb7968;
+      box-shadow:0 3px 0 #9f4438,0 5px 8px rgba(0,0,0,0.24);
       transform:translateY(-50%);
       cursor:pointer;
     }
@@ -544,14 +546,14 @@
       width:13px;
       height:3px;
       border-radius:999px;
-      background:#9e7140;
+      background:#fff4e9;
       transform:translate(-50%,-50%) rotate(45deg);
     }
     .quest-collapse::after{transform:translate(-50%,-50%) rotate(-45deg);}
-    .quest-card.complete .quest-collapse{background:#49ef24;border-color:#219a26;}
-    .quest-card.complete .quest-collapse{box-shadow:0 3px 0 #219a26,0 5px 8px rgba(0,0,0,0.24);}
+    .quest-card.complete .quest-collapse{background:#eb7968;border-color:#9f4438;}
+    .quest-card.complete .quest-collapse{box-shadow:0 3px 0 #9f4438,0 5px 8px rgba(0,0,0,0.24);}
     .quest-card.complete .quest-collapse::before,
-    .quest-card.complete .quest-collapse::after{background:#197d22;}
+    .quest-card.complete .quest-collapse::after{background:#fff4e9;}
     .shop-button{
       position:absolute;
       bottom:16px;
@@ -651,7 +653,7 @@
       background:linear-gradient(180deg,#7f9eac,#607d8b);
       box-shadow:0 3px 0 #435966,0 5px 8px rgba(0,0,0,0.18);
       filter:grayscale(0.38);
-      opacity:0.78;
+      opacity:1;
     }
     .farm-resource-card.can-upgrade::after{
       content:"";
@@ -855,20 +857,32 @@
     }
     .resource-upgrade-close{
       position:absolute;
-      top:8px;
-      right:8px;
-      width:30px;
-      height:30px;
+      top:9px;
+      right:9px;
+      width:42px;
+      height:48px;
       border:0;
-      border-radius:50%;
-      background:#ff5427;
-      box-shadow:0 3px 0 #b82c14;
+      border-radius:13px;
+      background:#ff1f1f;
+      box-shadow:0 5px 0 #bd1717, inset 0 2px 0 rgba(255,255,255,0.35);
       color:#fff;
-      font-size:18px;
+      font-size:0;
       font-weight:900;
-      line-height:28px;
       cursor:pointer;
     }
+    .resource-upgrade-close::before,
+    .resource-upgrade-close::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:25px;
+      height:7px;
+      border-radius:999px;
+      background:#fff;
+      transform:translate(-50%, -50%) rotate(45deg);
+    }
+    .resource-upgrade-close::after{transform:translate(-50%, -50%) rotate(-45deg);}
     .resource-upgrade-icon{
       width:58px;
       height:58px;
@@ -1791,10 +1805,10 @@
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
   <script src="./berries-config.js?v=20260605-strawberry-outline4"></script>
   <script src="./buildings-config.js"></script>
-  <script src="./scenario-objects-config.js?v=20260607-island-polish"></script>
+  <script src="./scenario-objects-config.js?v=20260608-survivor-dialogue"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260607-loader-sorting"></script>
-  <script src="./pixi-ui.js?v=20260607-resource-quest-polish"></script>
+  <script src="./pixi-game.js?v=20260608-turn-position-fix"></script>
+  <script src="./pixi-ui.js?v=20260608-star-pricing"></script>
 </body>
 </html>

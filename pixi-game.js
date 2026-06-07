@@ -111,6 +111,7 @@
   const SCENARIO_COLLIDER_UPDATED_KEY = 'scenarioColliderUpdatedAt';
   const DIALOGUE_TEXT_KEY = 'scenarioDialogueText';
   const DIALOGUE_TEXT_AT_KEY = 'scenarioDialogueTextAt';
+  const DIALOGUE_SPEAKER_KEY = 'scenarioDialogueSpeaker';
   const DIALOGUE_TEXT_TTL_MS = 15000;
   const ISLAND_RUN_KEY = 'islandRun';
   const BOAT_REPAIRED_KEY = 'boatRepaired';
@@ -160,7 +161,6 @@
   const HORIZON_MIN_HEIGHT = 120;
   const HORIZON_TOP_OVERSCAN_PX = 2;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
-  const SECOND_ISLAND_CAMPFIRE_SCALE = 0.82;
   const SECOND_ISLAND_CAMPFIRE_RAISE_CELLS = 0.32;
   const RESOURCE_AURA_PERIOD_MS = 1900;
   const RESOURCE_AURA_PARTICLES = 4;
@@ -170,7 +170,7 @@
   const SHARK_SAFE_FACTOR = 1.5;
   const SHARK_ANG_SPEED_MIN = 0.0006;
   const SHARK_ANG_SPEED_MAX = 0.0016;
-  const SHARK_SCENARIO_SAFE_CELLS = 2;
+  const SHARK_SCENARIO_SAFE_CELLS = 3.2;
   const SHARK_ANCHOR_PULL = 0.002;
   const SHARK_FIN_TOP_CLEARANCE_PX = 24;
   const SHARK_ANCHOR_POINTS = [
@@ -377,6 +377,25 @@
     });
   }
 
+  function preloadPixiTexture(url) {
+    const texture = getTexture(url);
+    const baseTexture = texture && texture.baseTexture;
+    if (!baseTexture || baseTexture.valid) return Promise.resolve();
+    return new Promise((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        baseTexture.off('loaded', finish);
+        baseTexture.off('error', finish);
+        resolve();
+      };
+      baseTexture.once('loaded', finish);
+      baseTexture.once('error', finish);
+      window.setTimeout(finish, 5000);
+    });
+  }
+
   async function preloadGameAssets() {
     const urls = getLoadingAssetUrls();
     let loaded = 0;
@@ -386,6 +405,7 @@
       loaded += 1;
       updateLoadingProgress(loaded, urls.length);
     }));
+    await Promise.all(urls.filter((url) => KNOWN_ASSETS.has(url)).map(preloadPixiTexture));
   }
 
   function hideLoadingScreen() {
@@ -1567,7 +1587,8 @@
     let result = Math.ceil(base * globalMultiplier);
     for (let nextLevel = 1; nextLevel <= level; nextLevel += 1) {
       const scaled = Math.ceil(base * getResourceUpgradeMultiplierAtLevel(nextLevel) * globalMultiplier);
-      result = Math.max(result + 1, scaled);
+      const starEarned = nextLevel % RESOURCE_UPGRADE_LEVELS_PER_STAR === 0;
+      result = Math.max(result + 1, scaled, starEarned ? result * 2 : 0);
     }
     return result;
   }
@@ -1739,6 +1760,7 @@
   let scenarioDrops = [];
   let activeDialogue = null;
   let lastDialogueText = '';
+  let lastDialogueSpeakerId = '';
   const scenarioSprites = new Map();
 
   function loadOpenedIds() {
@@ -2185,7 +2207,7 @@
     persistOpenedIds();
     persistScenarioState();
     rebuildScenarioColliderCells();
-    startDialogue(def.dialog || []);
+    startDialogue(def.dialog || [], def.dialogSpeaker === 'self' ? state.id : '');
     return true;
   }
 
@@ -2298,9 +2320,9 @@
     }
   }
 
-  function startDialogue(lines) {
+  function startDialogue(lines, speakerId = '') {
     if (!Array.isArray(lines) || !lines.length) return;
-    activeDialogue = { lines, index: 0, phase: 'show', phaseStart: performance.now() };
+    activeDialogue = { lines, index: 0, phase: 'show', phaseStart: performance.now(), speakerId };
   }
 
   function updateDialogue(now) {
@@ -2326,11 +2348,20 @@
     return activeDialogue.lines[activeDialogue.index];
   }
 
-  function syncDialogueText(text) {
+  function getActiveDialogueSpeakerId() {
+    if (!activeDialogue || activeDialogue.phase !== 'show') return '';
+    return activeDialogue.speakerId || '';
+  }
+
+  function syncDialogueText(text, speakerId = '') {
     const next = text || '';
-    if (next === lastDialogueText) return;
+    const nextSpeakerId = next ? speakerId : '';
+    if (next === lastDialogueText && nextSpeakerId === lastDialogueSpeakerId) return;
     lastDialogueText = next;
+    lastDialogueSpeakerId = nextSpeakerId;
     localStorage.setItem(DIALOGUE_TEXT_KEY, next);
+    if (nextSpeakerId) localStorage.setItem(DIALOGUE_SPEAKER_KEY, nextSpeakerId);
+    else localStorage.removeItem(DIALOGUE_SPEAKER_KEY);
     if (next) localStorage.setItem(DIALOGUE_TEXT_AT_KEY, String(Date.now()));
     else localStorage.removeItem(DIALOGUE_TEXT_AT_KEY);
   }
@@ -2342,6 +2373,7 @@
     if (!Number.isFinite(at) || !at || Date.now() - at > DIALOGUE_TEXT_TTL_MS) {
       localStorage.removeItem(DIALOGUE_TEXT_KEY);
       localStorage.removeItem(DIALOGUE_TEXT_AT_KEY);
+      localStorage.removeItem(DIALOGUE_SPEAKER_KEY);
     }
   }
 
@@ -2557,7 +2589,9 @@
   function getScenarioRenderMetrics(state, def, now = performance.now()) {
     const x = (state.gridX + 0.5) * cellPct;
     const y = (state.gridY + 0.5) * cellPct;
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const sizeScale = def && def.fixedDisplayScale
+      ? getAssetSizeScale()
+      : (getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1);
     const renderOffset = def && def.renderOffsetPx ? def.renderOffsetPx : {};
     const offsetX = Number.isFinite(renderOffset.x) ? renderOffset.x * sizeScale : 0;
     const offsetY = Number.isFinite(renderOffset.y) ? renderOffset.y * sizeScale : 0;
@@ -3925,7 +3959,12 @@
   function getBushSpriteTexture(b, visual) {
     if (Array.isArray(visual.assetUrls) && visual.assetUrls.length) {
       const stageUrl = visual.assetUrls[getExtractStageIndex(b)] || visual.assetUrls[visual.assetUrls.length - 1];
-      return getTexture(stageUrl) || getTexture(visual.assetUrl);
+      const stageTexture = getTexture(stageUrl);
+      if (stageTexture && stageTexture.baseTexture && stageTexture.baseTexture.valid) return stageTexture;
+      const currentSprite = b && b.uid ? resourceSprites.get(b.uid) : null;
+      const currentTexture = currentSprite && currentSprite.texture;
+      if (currentTexture && currentTexture.baseTexture && currentTexture.baseTexture.valid) return currentTexture;
+      return stageTexture || getTexture(visual.assetUrl);
     }
     return getTexture(visual.assetUrl);
   }
@@ -4387,7 +4426,9 @@
     } else if (sprite.texture !== texture) {
       sprite.texture = texture;
     }
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const sizeScale = isCampfireBuilding(def)
+      ? getAssetSizeScale()
+      : (getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1);
     let width = (Number.isFinite(def.widthPx) ? def.widthPx : size) * sizeScale;
     let height = (Number.isFinite(def.heightPx) ? def.heightPx : size) * sizeScale;
     if (isCampfireBuilding(def) && texture.width && texture.height) {
@@ -4419,7 +4460,7 @@
   }
 
   function getCampfireDisplayScale() {
-    return CAMPFIRE_DISPLAY_SCALE * (isSecondIsland() ? SECOND_ISLAND_CAMPFIRE_SCALE : 1);
+    return CAMPFIRE_DISPLAY_SCALE;
   }
 
   function drawCampfireGlow(centerX, centerY, size, now, def) {
@@ -4484,7 +4525,8 @@
       const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
       const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
       const renderCenterY = centerY - (isCampfireBuilding(def) && isSecondIsland() ? getFixedWorldCellPx() * SECOND_ISLAND_CAMPFIRE_RAISE_CELLS : 0);
-      const visualSize = isCampfireBuilding(def) ? size * getCampfireDisplayScale() : size;
+      const fixedRatio = getWorldCellPx() > 0 ? getFixedWorldCellPx() / getWorldCellPx() : 1;
+      const visualSize = isCampfireBuilding(def) ? size * fixedRatio * getCampfireDisplayScale() : size;
       if (isCampfireBuilding(def)) drawCampfireGlow(centerX, renderCenterY, visualSize, now, def);
       if (!renderBuildingSprite(def, centerX, renderCenterY, size, activeBuildingIds)) {
         drawBuildingPrimitive(buildingsGraphics, def, centerX, renderCenterY, visualSize);
@@ -4606,6 +4648,11 @@
     return true;
   }
 
+  function getHeroShadowLocalCenterX(charR) {
+    const bounds = HERO_SHADOW_ALPHA_BOUNDS;
+    return HERO_OFFSETS.shadow.x * charR + ((bounds.left + bounds.right) / 2 - HERO_SPRITE_WIDTH / 2);
+  }
+
   function getHeroShadowEllipse(xPct, yPct) {
     const cell = getWorldCellPx();
     const fixedCell = getFixedWorldCellPx();
@@ -4616,7 +4663,7 @@
     const scale = ((charR * 2) / HERO_SPRITE_HEIGHT) * HERO_SCALE;
     const footOffset = (38 / BASE_CELL_PX) * fixedCell;
     const bounds = HERO_SHADOW_ALPHA_BOUNDS;
-    const localCenterX = HERO_OFFSETS.shadow.x * charR + ((bounds.left + bounds.right) / 2 - HERO_SPRITE_WIDTH / 2);
+    const localCenterX = getHeroShadowLocalCenterX(charR);
     const localCenterY = HERO_OFFSETS.shadow.y * charR + ((bounds.top + bounds.bottom) / 2 - HERO_SPRITE_HEIGHT / 2);
     return {
       x: pct2px(xPct),
@@ -4658,28 +4705,6 @@
       && isHeroShadowOnIsland(xPct, yPct);
   }
 
-  function findNearestHeroSafeCell(gx, gy, blockers, resourceBlockers, scenarioBlockers, maxR = 8) {
-    for (let r = 0; r <= maxR; r += 1) {
-      for (let dy = -r; dy <= r; dy += 1) {
-        for (let dx = -r; dx <= r; dx += 1) {
-          if (r && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-          const nx = gx + dx;
-          const ny = gy + dy;
-          const xPct = (nx + 0.5) * cellPct;
-          const yPct = (ny + 0.5) * cellPct;
-          if (canPlaceHeroAt(xPct, yPct, blockers, resourceBlockers, scenarioBlockers)) return { gx: nx, gy: ny };
-        }
-      }
-    }
-    return null;
-  }
-
-  function snapHeroToCell(cell) {
-    if (!cell) return;
-    charXPct = ((cell.gx + 0.5) / GRID_W) * 100;
-    charYPct = ((cell.gy + 0.5) / GRID_W) * 100;
-  }
-
   function applyHeroTeleport() {
     const raw = localStorage.getItem('heroTeleport');
     if (!raw) return;
@@ -4714,8 +4739,9 @@
     }
     applyHeroTeleport();
     const frameScale = dtMs / BASE_FRAME_MS;
-    const vx = (controllerState.vxPct || 0) * SPEED_SCALE * frameScale;
-    const vy = (controllerState.vyPct || 0) * SPEED_SCALE * frameScale;
+    const mapSpeedScale = GRID_W > 0 ? getBaseGridW() / GRID_W : 1;
+    const vx = (controllerState.vxPct || 0) * SPEED_SCALE * mapSpeedScale * frameScale;
+    const vy = (controllerState.vyPct || 0) * SPEED_SCALE * mapSpeedScale * frameScale;
     const isMoving = Math.abs(vx) + Math.abs(vy) > 0.001;
     controllerState.isMoving = isMoving;
     const blockers = getBuildingBlockers();
@@ -4758,11 +4784,6 @@
       }
     }
     if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
-    const heroCell = getHeroGridPosition();
-    if (heroCell && !canPlaceHeroAt(charXPct, charYPct, blockers, resourceBlockers, scenarioBlockers)) {
-      const safeCell = findNearestHeroSafeCell(heroCell.gridX, heroCell.gridY, blockers, resourceBlockers, scenarioBlockers);
-      if (safeCell) snapHeroToCell(safeCell);
-    }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
     updateCameraToHero();
   }
@@ -4866,7 +4887,7 @@
     const legSwing = isMoving ? Math.sin(heroPhase) * charR * 0.3 : 0;
     const armSwing = isMoving ? Math.sin(heroPhase) * charR * 0.25 : 0;
     const bounce = (isMoving ? 0.1 : 0.04) * charR * Math.abs(Math.sin(heroPhase));
-    heroContainer.x = pct2px(charXPct);
+    heroContainer.x = pct2px(charXPct) - facing * S * getHeroShadowLocalCenterX(charR);
     heroContainer.y = pct2px(charYPct) - footOffset + cell / 2 - 8;
     heroContainer.zIndex = pct2px(charYPct) + cell * 0.45;
     heroContainer.scale.set(facing * S, S);
@@ -4931,8 +4952,17 @@
     label.x = 0;
     label.y = -bubbleHeight / 2;
     container.addChild(g, label);
-    container.x = pct2px(charXPct);
-    container.y = pct2px(charYPct) - cell * 3.2;
+    const speakerId = localStorage.getItem(DIALOGUE_SPEAKER_KEY) || '';
+    const speakerState = speakerId ? scenarioState.find((state) => state.id === speakerId) : null;
+    const speakerDef = speakerState ? scenarioById.get(speakerId) : null;
+    if (speakerState && speakerDef) {
+      const metrics = getScenarioRenderMetrics(speakerState, speakerDef);
+      container.x = metrics.baseX;
+      container.y = metrics.baseY + metrics.floatOffset - metrics.height * 0.72;
+    } else {
+      container.x = pct2px(charXPct);
+      container.y = pct2px(charYPct) - cell * 3.2;
+    }
     dialogueBubble = container;
     heroLayer.addChild(dialogueBubble);
   }
@@ -4985,6 +5015,26 @@
       if (Math.hypot(xPct - cx, yPct - cy) < safeDist) return true;
     }
     return false;
+  }
+
+  function pushPointAwayFromScenarios(point, scenarioCells, safeDist) {
+    scenarioCells.forEach((scenario, index) => {
+      const cx = (scenario.x + 0.5) * cellPct;
+      const cy = (scenario.y + 0.5) * cellPct;
+      let dx = point.xPct - cx;
+      let dy = point.yPct - cy;
+      let distance = Math.hypot(dx, dy);
+      if (distance >= safeDist) return;
+      if (distance < 1e-5) {
+        const angle = index * 2.399 + 0.7;
+        dx = Math.cos(angle);
+        dy = Math.sin(angle);
+        distance = 1;
+      }
+      const push = safeDist - distance;
+      point.xPct += (dx / distance) * push;
+      point.yPct += (dy / distance) * push;
+    });
   }
 
   function randomWaterBurstDelay() {
@@ -5191,6 +5241,8 @@
           s.yPct += vy * (minD - d);
         }
       }
+      pushPointAwayFromScenarios(s, scenarioCells, safeDist);
+      s.xPct = Math.max(0, Math.min(100, s.xPct));
       s.yPct = Math.max(getSharkMinYPct(), Math.min(H_PCT, s.yPct));
       const vxPct = s.xPct - prevXPct;
       if (Math.abs(vxPct) > 0.002) s.flip = vxPct > 0 ? -1 : 1;
@@ -5299,7 +5351,7 @@
       updateDialogue(now);
       checkScenarioTriggers();
     }
-    syncDialogueText(getActiveDialogueText());
+    syncDialogueText(getActiveDialogueText(), getActiveDialogueSpeakerId());
 
     if (!boatCutscene) {
       spawnAccumulator += deltaMS;
