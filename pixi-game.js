@@ -29,6 +29,9 @@
   const BASE_CELL_PX = 28;
   const EXPANSION_ANIMATION_MS = 1900;
   const LEAF_PARTICLE_ASSET = './img/fx/lime-leaf-particle.png';
+  const RESOURCE_UPGRADE_LEVELS_PER_STAR = 4;
+  const RESOURCE_UPGRADE_MAX_STARS = 5;
+  const RESOURCE_UPGRADE_MAX_LEVEL = RESOURCE_UPGRADE_LEVELS_PER_STAR * RESOURCE_UPGRADE_MAX_STARS;
 
   const SPAWN_MS = 1000;
   const BURST_R_PCT = 12;
@@ -123,6 +126,7 @@
   const NEW_ISLAND_MAP_SIZE = 37;
   const WATER_RIPPLE_PERIOD_MS = 1900;
   const WATER_RIPPLE_COUNT = 3;
+  const LIGHTHOUSE_BEAM_FADE_IN_MS = 1800;
   const SCENARIO_GLINT_PERIOD_MS = 3400;
   const SCENARIO_GLINT_ACTIVE_MS = 950;
   const SCENARIO_GLINT_HIT_PAD = 0.28;
@@ -1016,19 +1020,17 @@
     const sy = (y + 1) * cellSize - cellSize * 0.015;
     const width = (endX - startX + 1) * cellSize;
     const lip = cellSize * 0.07;
-    const face = cellSize * 0.25;
+    const soil = cellSize * 0.15;
+    const paleBase = cellSize * 0.055;
     const radius = cellSize * 0.16;
     beginFill(g, getTileEdgeColor(cellValue) || '#7fa52f');
     drawCornerRoundedRect(g, sx, sy, width, lip, { bl: radius * 0.35, br: radius * 0.35 });
     g.endFill();
-    beginFill(g, getTileSurfaceColor(cellValue) || '#a9c745');
-    g.drawRect(sx, sy + lip, width, cellSize * 0.055);
-    g.endFill();
     beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
-    drawCornerRoundedRect(g, sx, sy + lip + cellSize * 0.055, width, face, { bl: radius, br: radius });
+    g.drawRect(sx, sy + lip, width, soil);
     g.endFill();
-    beginFill(g, 'rgba(255,255,255,0.07)', '#ffffff');
-    g.drawRect(sx + width * 0.04, sy + lip + cellSize * 0.08, width * 0.92, cellSize * 0.035);
+    beginFill(g, '#f3f0df');
+    drawCornerRoundedRect(g, sx, sy + lip + soil, width, paleBase, { bl: radius, br: radius });
     g.endFill();
   }
 
@@ -1060,18 +1062,6 @@
         x = endX + 1;
       }
     }
-  }
-
-  function drawIslandTileRightSide(g, cellValue, sx, sy, cellSize) {
-    beginFill(g, getTileEdgeColor(cellValue) || '#7fa52f');
-    g.drawRect(sx + cellSize, sy, cellSize * 0.035, cellSize);
-    g.endFill();
-    beginFill(g, getTileSurfaceColor(cellValue) || '#a9c745');
-    g.drawRect(sx + cellSize + cellSize * 0.035, sy, cellSize * 0.03, cellSize);
-    g.endFill();
-    beginFill(g, getTileSoilColor(cellValue) || '#8a5a2b');
-    g.drawRect(sx + cellSize + cellSize * 0.065, sy, cellSize * 0.12, cellSize);
-    g.endFill();
   }
 
   function hasIslandCell(x, y) {
@@ -1333,16 +1323,6 @@
       }
     }
 
-    for (let y = 0; y < GRID_H; y += 1) {
-      for (let x = 0; x < GRID_W; x += 1) {
-        if (!hasIslandCell(x, y)) continue;
-        const sx = x * cell;
-        const sy = y * cell;
-        if (!hasIslandCell(x + 1, y)) {
-          drawIslandTileRightSide(g, map[y][x], sx, sy, cell);
-        }
-      }
-    }
     drawIslandFrontSides(g, cell);
     islandRenderVisibility = null;
   }
@@ -1353,6 +1333,7 @@
     if (typeof user.rainbowStones !== 'number' || Number.isNaN(user.rainbowStones)) user.rainbowStones = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
     if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
+    if (!user.resourceUpgrades || typeof user.resourceUpgrades !== 'object' || Array.isArray(user.resourceUpgrades)) user.resourceUpgrades = {};
     ensureUserStats(user);
     ensurePlayerProgress(user);
     if (BERRIES_LIST[0]) user.unlockedResources[BERRIES_LIST[0].id] = true;
@@ -1477,10 +1458,24 @@
     }, 0);
   }
 
+  function getResourceUpgradeLevel(user, resourceId) {
+    const upgrades = user && user.resourceUpgrades && typeof user.resourceUpgrades === 'object'
+      ? user.resourceUpgrades
+      : {};
+    return Math.min(RESOURCE_UPGRADE_MAX_LEVEL, Math.max(0, Math.floor(Number(upgrades[resourceId]) || 0)));
+  }
+
+  function getResourceUpgradeMultiplier(user, resourceId) {
+    const level = getResourceUpgradeLevel(user, resourceId);
+    const stars = Math.min(RESOURCE_UPGRADE_MAX_STARS, Math.floor(level / RESOURCE_UPGRADE_LEVELS_PER_STAR));
+    const regularMultiplier = 1 + Math.min(200, level * 10) / 100;
+    return regularMultiplier * (2 ** stars);
+  }
+
   function applyProfitBonus(value, user = getUserState(), resourceId = '') {
     const base = Math.max(0, Number(value) || 0);
     const bonus = getTentProfitBonusPercent(user) + getSpecialProfitBonusPercent(user, resourceId);
-    return Math.floor(base * (1 + bonus / 100));
+    return Math.ceil(base * getResourceUpgradeMultiplier(user, resourceId) * (1 + bonus / 100));
   }
 
   function getCollectProfit(def) {
@@ -1796,6 +1791,7 @@
         gridY: Number.isFinite(positionSource.gridY) ? positionSource.gridY : 0,
         triggered: Boolean(existing.triggered),
         transformed: Boolean(existing.transformed),
+        transformedAt: Math.max(0, Math.floor(Number(existing.transformedAt) || 0)),
         repaired: Boolean(existing.repaired),
         hidden: Boolean(existing.hidden),
         opened: scenarioRequirementMet(def) && (openedIds.has(def.id) || Boolean(existing.opened)),
@@ -2087,7 +2083,10 @@
     state.triggered = true;
     state.opened = true;
     openedIds.add(state.id);
-    if (def.transformOnApproach) state.transformed = true;
+    if (def.transformOnApproach) {
+      state.transformed = true;
+      state.transformedAt = Date.now();
+    }
     spawnScenarioDrops(state, def);
     persistOpenedIds();
     persistScenarioState();
@@ -2359,16 +2358,74 @@
     for (let i = 0; i < WATER_RIPPLE_COUNT; i += 1) {
       const t = (baseT + i / WATER_RIPPLE_COUNT) % 1;
       const fade = 1 - t;
-      const alpha = 0.34 * fade * fade;
+      const alpha = 0.68 * fade * fade;
       if (alpha <= 0.01) continue;
       const wobble = Math.sin(now / 520 + i * 1.7 + seed * Math.PI * 2) * 0.025;
       const rx = width * (0.42 + t * 0.36 + wobble);
       const ry = height * (0.17 + t * 0.16 - wobble * 0.45);
-      const lineWidth = Math.max(1.2, getWorldCellPx() * 0.022);
-      g.lineStyle(lineWidth, 0x68d4f2, alpha * 0.48);
+      const lineWidth = Math.max(1.5, getWorldCellPx() * 0.028);
+      g.lineStyle(lineWidth, 0xffffff, alpha);
       g.drawEllipse(x, y, rx, ry);
     }
     g.lineStyle(0, 0xffffff, 0);
+  }
+
+  function getLighthouseBeamAlpha(state) {
+    if (!state || !state.transformed) return 0;
+    if (!state.transformedAt) return 1;
+    const elapsed = Math.max(0, Date.now() - state.transformedAt);
+    if (elapsed < 180) return easeOutQuad(elapsed / 180);
+    if (elapsed < 340) return 1 - ((elapsed - 180) / 160);
+    if (elapsed < 560) return easeOutQuad((elapsed - 340) / 220);
+    if (elapsed < 740) return 1 - ((elapsed - 560) / 180);
+    return easeOutQuad(clamp((elapsed - 740) / LIGHTHOUSE_BEAM_FADE_IN_MS, 0, 1));
+  }
+
+  function drawLighthouseBeams(g, state, metrics, now) {
+    const alpha = getLighthouseBeamAlpha(state);
+    if (alpha <= 0.01) return;
+    const { baseX, baseY, floatOffset, width, height } = metrics;
+    const pulse = 0.96 + Math.sin(now / 760) * 0.04;
+    const lampX = baseX;
+    const lampY = baseY + floatOffset - height * 0.29;
+    const beamLength = width * 4.2;
+    const outerHalfHeight = height * 0.52;
+    const innerHalfHeight = height * 0.24;
+    const sourceHalfHeight = Math.max(2, height * 0.035);
+
+    g.beginFill(0xffed99, alpha * 0.13 * pulse);
+    g.drawPolygon([
+      lampX - width * 0.04, lampY - sourceHalfHeight,
+      lampX - beamLength, lampY - outerHalfHeight,
+      lampX - beamLength, lampY + outerHalfHeight,
+      lampX - width * 0.04, lampY + sourceHalfHeight,
+    ]);
+    g.drawPolygon([
+      lampX + width * 0.04, lampY - sourceHalfHeight,
+      lampX + beamLength, lampY - outerHalfHeight,
+      lampX + beamLength, lampY + outerHalfHeight,
+      lampX + width * 0.04, lampY + sourceHalfHeight,
+    ]);
+    g.endFill();
+
+    g.beginFill(0xfffbd7, alpha * 0.19 * pulse);
+    g.drawPolygon([
+      lampX - width * 0.03, lampY - sourceHalfHeight * 0.55,
+      lampX - beamLength * 0.92, lampY - innerHalfHeight,
+      lampX - beamLength * 0.92, lampY + innerHalfHeight,
+      lampX - width * 0.03, lampY + sourceHalfHeight * 0.55,
+    ]);
+    g.drawPolygon([
+      lampX + width * 0.03, lampY - sourceHalfHeight * 0.55,
+      lampX + beamLength * 0.92, lampY - innerHalfHeight,
+      lampX + beamLength * 0.92, lampY + innerHalfHeight,
+      lampX + width * 0.03, lampY + sourceHalfHeight * 0.55,
+    ]);
+    g.endFill();
+
+    g.beginFill(0xffffff, alpha * 0.42);
+    g.drawCircle(lampX, lampY, Math.max(3, width * 0.09));
+    g.endFill();
   }
 
   function drawScenarioLandGlint(g, x, y, width, height, now, state) {
@@ -2457,9 +2514,11 @@
       if (!shouldRenderScenarioState(state, def)) return;
       if (!def || !Number.isFinite(state.gridX) || !Number.isFinite(state.gridY)) return;
       activeIds.add(state.id);
-      const { baseX, baseY, floating, floatOffset, width, height } = getScenarioRenderMetrics(state, def, now);
+      const metrics = getScenarioRenderMetrics(state, def, now);
+      const { baseX, baseY, floating, floatOffset, width, height } = metrics;
       const waterY = getScenarioWaterY(def, baseY, floatOffset, height);
 
+      if (state.id === 'lighthouse' && state.transformed) drawLighthouseBeams(scenarioGraphics, state, metrics, now);
       if (floating) drawWaterRipples(scenarioGraphics, baseX, waterY, width, height, now, state);
 
       beginFill(scenarioGraphics, floating ? 'rgba(0,104,166,0.2)' : 'rgba(0,0,0,0.3)');
@@ -2596,6 +2655,7 @@
     user.money = 0;
     user.inventory = {};
     user.unlockedResources = {};
+    user.resourceUpgrades = {};
     user.questLine = { index: 0, updatedAt: Date.now() };
     user.stats = { moneyEarned: 0, itemsCollected: 0, itemsCollectedById: {} };
     setUserState(user);
@@ -4367,7 +4427,7 @@
   }
 
   function isUiOpen() {
-    return Boolean(boatCutscene || document.querySelector('.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open'));
+    return Boolean(boatCutscene || document.querySelector('.panel-overlay.open,.shop-panel.open,.resource-upgrade-panel.open,.idle-panel.open,.finding-overlay.open'));
   }
 
   function onPointerDown(event) {

@@ -488,6 +488,67 @@
       box-sizing:border-box;
     }
     .inventory-badge.hidden{display:none;}
+    .farm-resource-strip{
+      position:absolute;
+      left:76px;
+      right:76px;
+      bottom:88px;
+      height:66px;
+      display:flex;
+      align-items:flex-end;
+      gap:7px;
+      overflow-x:auto;
+      overflow-y:hidden;
+      padding:0 2px 5px;
+      box-sizing:border-box;
+      scrollbar-width:none;
+      pointer-events:auto;
+      z-index:6;
+    }
+    .farm-resource-strip::-webkit-scrollbar{display:none;}
+    .farm-resource-card{
+      position:relative;
+      min-width:58px;
+      height:57px;
+      padding:3px 4px 4px;
+      border:2px solid #0c4d7e;
+      border-radius:11px;
+      background:linear-gradient(180deg,#2aaee2,#1577b5);
+      box-shadow:0 4px 0 #0c4d7e,0 7px 10px rgba(0,0,0,0.25);
+      color:#fff;
+      display:grid;
+      grid-template-rows:35px 14px;
+      place-items:center;
+      flex-shrink:0;
+      cursor:pointer;
+      box-sizing:border-box;
+    }
+    .farm-resource-card.active{background:linear-gradient(180deg,#55c953,#279238);}
+    .farm-resource-card img{
+      width:34px;
+      height:34px;
+      object-fit:contain;
+      filter:drop-shadow(0 2px 2px rgba(0,0,0,0.32));
+    }
+    .farm-resource-price{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:2px;
+      font-size:11px;
+      line-height:1;
+      font-weight:900;
+      text-shadow:0 1px 1px rgba(0,0,0,0.45);
+    }
+    .farm-resource-price::before{
+      content:"";
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      background:linear-gradient(135deg,#fff074,#e1a916);
+      box-shadow:inset 0 0 0 2px #bd7e0e;
+      flex-shrink:0;
+    }
     .upgrade-marker{
       position:absolute;
       top:-6px;
@@ -589,6 +650,126 @@
       z-index:9;
     }
     .inventory-panel.open{transform:translate(-50%, 0) scale(1);opacity:1;pointer-events:auto;}
+    .resource-upgrade-panel{
+      position:absolute;
+      left:50%;
+      top:18%;
+      width:min(246px, calc(100% - 30px));
+      padding:18px 16px 17px;
+      border:3px solid #c5965f;
+      border-radius:20px;
+      background:#fff1df;
+      box-shadow:0 9px 0 rgba(86,46,0,0.28),0 18px 32px rgba(0,0,0,0.42);
+      color:#414141;
+      text-align:center;
+      box-sizing:border-box;
+      pointer-events:none;
+      transform:translate(-50%, 10px) scale(0.97);
+      opacity:0;
+      transition:0.2s ease;
+      z-index:10;
+    }
+    .resource-upgrade-panel.open{
+      pointer-events:auto;
+      transform:translate(-50%, 0) scale(1);
+      opacity:1;
+    }
+    .resource-upgrade-close{
+      position:absolute;
+      top:8px;
+      right:8px;
+      width:30px;
+      height:30px;
+      border:0;
+      border-radius:50%;
+      background:#ff5427;
+      box-shadow:0 3px 0 #b82c14;
+      color:#fff;
+      font-size:18px;
+      font-weight:900;
+      line-height:28px;
+      cursor:pointer;
+    }
+    .resource-upgrade-icon{
+      width:58px;
+      height:58px;
+      margin:-4px auto 1px;
+      object-fit:contain;
+      filter:drop-shadow(0 3px 2px rgba(0,0,0,0.25));
+    }
+    .resource-upgrade-level{
+      font-size:21px;
+      line-height:1.05;
+      font-weight:900;
+    }
+    .resource-upgrade-name{
+      min-height:23px;
+      margin-top:2px;
+      color:#777;
+      font-size:18px;
+      line-height:1.1;
+      font-weight:800;
+    }
+    .resource-upgrade-stars{
+      margin:4px 0 6px;
+      color:#c9c9c9;
+      font-size:29px;
+      line-height:1;
+      letter-spacing:-2px;
+      white-space:nowrap;
+    }
+    .resource-upgrade-stars .filled{color:#4cc45c;}
+    .resource-upgrade-progress{
+      position:relative;
+      height:18px;
+      padding:3px;
+      border:3px solid #3978a5;
+      border-radius:999px;
+      background:#dce2e5;
+      box-shadow:inset 0 2px 2px rgba(0,0,0,0.2);
+      overflow:hidden;
+      box-sizing:border-box;
+    }
+    .resource-upgrade-progress-fill{
+      width:0%;
+      height:100%;
+      border-radius:999px;
+      background:#39b9e8;
+      transition:width 0.22s ease;
+    }
+    .resource-upgrade-stats{
+      margin:7px 3px 10px;
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      color:#424242;
+      font-size:17px;
+      font-weight:900;
+    }
+    .resource-upgrade-button{
+      min-width:150px;
+      height:52px;
+      padding:0 15px;
+      border:0;
+      border-radius:17px;
+      background:linear-gradient(180deg,#82df79,#51c45d);
+      box-shadow:0 5px 0 #27973e,inset 0 2px 0 rgba(255,255,255,0.38);
+      color:#23853d;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      font-size:19px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .resource-upgrade-button:disabled{
+      background:#c9c9c9;
+      box-shadow:0 5px 0 #979797;
+      color:#777;
+      cursor:default;
+    }
+    .resource-upgrade-button img{width:27px;height:27px;object-fit:contain;}
     .panel-header{
       display:flex;
       align-items:center;
@@ -1354,6 +1535,7 @@
           <span id="gemValue">0</span>
         </div>
       </div>
+      <div id="farmResourceStrip" class="farm-resource-strip" aria-label="Доступные ресурсы" data-ui-control></div>
       <button id="shopButton" class="shop-button" aria-label="Открыть магазин" data-ui-control>
         <img id="cartIcon" alt="cart" />
         <span id="upgradeMarker" class="upgrade-marker hidden">
@@ -1385,6 +1567,24 @@
         </div>
         <div id="inventoryList" class="inventory-list"></div>
       </div>
+      <div id="resourceUpgradePanel" class="resource-upgrade-panel" aria-hidden="true" data-ui-control>
+        <button id="closeResourceUpgrade" class="resource-upgrade-close" type="button" aria-label="Закрыть">x</button>
+        <img id="resourceUpgradeIcon" class="resource-upgrade-icon" alt="" />
+        <div id="resourceUpgradeLevel" class="resource-upgrade-level">Уровень 1</div>
+        <div id="resourceUpgradeName" class="resource-upgrade-name"></div>
+        <div id="resourceUpgradeStars" class="resource-upgrade-stars" aria-label="Звезды"></div>
+        <div class="resource-upgrade-progress">
+          <div id="resourceUpgradeProgressFill" class="resource-upgrade-progress-fill"></div>
+        </div>
+        <div class="resource-upgrade-stats">
+          <span id="resourceUpgradePrice">0</span>
+          <span id="resourceUpgradeBonus">+0%</span>
+        </div>
+        <button id="resourceUpgradeButton" class="resource-upgrade-button" type="button">
+          <img id="resourceUpgradeCoin" alt="coin" />
+          <span id="resourceUpgradeCost">0</span>
+        </button>
+      </div>
       <div id="findingOverlay" class="finding-overlay" aria-hidden="true" data-ui-control>
         <img id="findingShine" class="finding-shine" src="./img/ui/shine.png" alt="" />
         <img id="findingItem" class="finding-item" alt="" />
@@ -1403,7 +1603,7 @@
   <script src="./scenario-objects-config.js?v=20260607-island-polish"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260607-ui-cutscene"></script>
-  <script src="./pixi-ui.js?v=20260607-ui-cutscene"></script>
+  <script src="./pixi-game.js?v=20260607-lighthouse-rays"></script>
+  <script src="./pixi-ui.js?v=20260607-resource-upgrades"></script>
 </body>
 </html>

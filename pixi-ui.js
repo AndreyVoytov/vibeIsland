@@ -11,6 +11,9 @@
   const LIGHTHOUSE_REQUIRED_METERS = getScenarioRequiredMeters('lighthouse');
   const CROPS_PER_TWO_EXPANSIONS = 5;
   const METERS_PER_TWO_EXPANSIONS = 4;
+  const RESOURCE_UPGRADE_LEVELS_PER_STAR = 4;
+  const RESOURCE_UPGRADE_MAX_STARS = 5;
+  const RESOURCE_UPGRADE_MAX_LEVEL = RESOURCE_UPGRADE_LEVELS_PER_STAR * RESOURCE_UPGRADE_MAX_STARS;
   const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
   const SPECIAL_PROFIT_UPGRADES = [
     {
@@ -435,10 +438,42 @@
     }, 0);
   }
 
+  function ensureResourceUpgrades(user) {
+    if (!user.resourceUpgrades || typeof user.resourceUpgrades !== 'object' || Array.isArray(user.resourceUpgrades)) {
+      user.resourceUpgrades = {};
+    }
+    return user.resourceUpgrades;
+  }
+
+  function getResourceUpgradeLevel(user, resourceId) {
+    const upgrades = ensureResourceUpgrades(user);
+    return Math.min(RESOURCE_UPGRADE_MAX_LEVEL, Math.max(0, Math.floor(Number(upgrades[resourceId]) || 0)));
+  }
+
+  function getResourceUpgradeStars(user, resourceId) {
+    return Math.min(RESOURCE_UPGRADE_MAX_STARS, Math.floor(getResourceUpgradeLevel(user, resourceId) / RESOURCE_UPGRADE_LEVELS_PER_STAR));
+  }
+
+  function getResourceUpgradeBonusPercent(user, resourceId) {
+    return Math.min(200, getResourceUpgradeLevel(user, resourceId) * 10);
+  }
+
+  function getResourceUpgradeMultiplier(user, resourceId) {
+    const regularMultiplier = 1 + getResourceUpgradeBonusPercent(user, resourceId) / 100;
+    return regularMultiplier * (2 ** getResourceUpgradeStars(user, resourceId));
+  }
+
+  function getResourceUpgradeCost(resource, user) {
+    const level = getResourceUpgradeLevel(user, resource.id);
+    if (level >= RESOURCE_UPGRADE_MAX_LEVEL) return 0;
+    const baseCost = Math.max(10, Math.ceil((resource.unlockCost || 0) * 0.25), Math.ceil(resource.profit * 10));
+    return Math.ceil(baseCost * (1.65 ** level));
+  }
+
   function applyProfitBonus(value, user, resourceId) {
     const base = Math.max(0, Number(value) || 0);
     const bonus = getTentProfitBonusPercent(user) + getSpecialProfitBonusPercent(user, resourceId);
-    return Math.floor(base * (1 + bonus / 100));
+    return Math.ceil(base * getResourceUpgradeMultiplier(user, resourceId) * (1 + bonus / 100));
   }
 
   function hasLandNeighbor(map, x, y) {
@@ -667,6 +702,19 @@
   const idleDetail = document.getElementById('idleDetail');
   const idleClose = document.getElementById('idleClose');
   const resourceList = document.getElementById('resourceList');
+  const farmResourceStrip = document.getElementById('farmResourceStrip');
+  const resourceUpgradePanel = document.getElementById('resourceUpgradePanel');
+  const closeResourceUpgrade = document.getElementById('closeResourceUpgrade');
+  const resourceUpgradeIcon = document.getElementById('resourceUpgradeIcon');
+  const resourceUpgradeLevel = document.getElementById('resourceUpgradeLevel');
+  const resourceUpgradeName = document.getElementById('resourceUpgradeName');
+  const resourceUpgradeStars = document.getElementById('resourceUpgradeStars');
+  const resourceUpgradeProgressFill = document.getElementById('resourceUpgradeProgressFill');
+  const resourceUpgradePrice = document.getElementById('resourceUpgradePrice');
+  const resourceUpgradeBonus = document.getElementById('resourceUpgradeBonus');
+  const resourceUpgradeButton = document.getElementById('resourceUpgradeButton');
+  const resourceUpgradeCoin = document.getElementById('resourceUpgradeCoin');
+  const resourceUpgradeCost = document.getElementById('resourceUpgradeCost');
   const upgradeMarker = document.getElementById('upgradeMarker');
   const questStage = document.getElementById('questStage');
   const questTrackFill = document.getElementById('questTrackFill');
@@ -682,6 +730,8 @@
   const questClaim = document.getElementById('questClaim');
   const questToggle = document.getElementById('questToggle');
   const resourceCards = new Map();
+  const farmResourceCards = new Map();
+  let activeResourceUpgradeId = null;
   const EXPANSION_DELAY_MS = 900;
   const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
 
@@ -698,6 +748,7 @@
   }
 
   setImageWithFallback(document.getElementById('coinIcon'), 'coin');
+  setImageWithFallback(resourceUpgradeCoin, 'coin');
   setImageWithFallback(document.getElementById('cartIcon'), 'cart');
   setImageWithFallback(document.getElementById('arrowIcon'), 'arrowUp');
   setImageWithFallback(gemIcon, 'rainbowStone');
@@ -715,6 +766,7 @@
     if (typeof user.rainbowStones !== 'number' || Number.isNaN(user.rainbowStones)) user.rainbowStones = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
     if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
+    ensureResourceUpgrades(user);
     ensureUserStats(user);
     ensurePlayerProgress(user);
     ensureQuestState(user);
@@ -1019,6 +1071,133 @@
     return { card, button, label, detail: profit, check, lockDivider, lockLabel };
   }
 
+  function setResourceImage(img, resource) {
+    if (!img || !resource) return;
+    img.style.visibility = '';
+    img.alt = resource.title;
+    img.src = resource.assetUrl || resource.fallbackUrl || '';
+    img.onerror = () => {
+      if (resource.fallbackUrl && img.src !== resource.fallbackUrl) {
+        img.src = resource.fallbackUrl;
+        return;
+      }
+      img.style.visibility = 'hidden';
+    };
+  }
+
+  function createFarmResourceCard(resource) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'farm-resource-card';
+    card.setAttribute('data-ui-control', '');
+    card.setAttribute('aria-label', resource.title);
+    const icon = document.createElement('img');
+    const price = document.createElement('span');
+    price.className = 'farm-resource-price';
+    setResourceImage(icon, resource);
+    card.appendChild(icon);
+    card.appendChild(price);
+    card.addEventListener('click', () => toggleResourceUpgrade(true, resource.id));
+    farmResourceStrip.appendChild(card);
+    return { card, price };
+  }
+
+  function renderFarmResourceStrip(user = getUserState()) {
+    if (!farmResourceStrip) return;
+    const unlockedIds = new Set(
+      berryResources
+        .filter((resource) => user.unlockedResources[resource.id])
+        .map((resource) => resource.id)
+    );
+    farmResourceCards.forEach((entry, id) => {
+      if (unlockedIds.has(id)) return;
+      entry.card.remove();
+      farmResourceCards.delete(id);
+    });
+    berryResources.forEach((resource) => {
+      if (!unlockedIds.has(resource.id)) return;
+      let entry = farmResourceCards.get(resource.id);
+      if (!entry) {
+        entry = createFarmResourceCard(resource);
+        farmResourceCards.set(resource.id, entry);
+      }
+      entry.price.textContent = formatCompactNumber(applyProfitBonus(resource.profit, user, resource.id));
+      entry.card.classList.toggle(
+        'active',
+        Boolean(resourceUpgradePanel && resourceUpgradePanel.classList.contains('open') && activeResourceUpgradeId === resource.id)
+      );
+    });
+  }
+
+  function renderResourceUpgradePanel(user = getUserState()) {
+    if (!resourceUpgradePanel || !activeResourceUpgradeId) return;
+    const resource = berryResources.find((item) => item.id === activeResourceUpgradeId);
+    if (!resource || !user.unlockedResources[resource.id]) {
+      toggleResourceUpgrade(false);
+      return;
+    }
+    const level = getResourceUpgradeLevel(user, resource.id);
+    const stars = getResourceUpgradeStars(user, resource.id);
+    const starMultiplier = 2 ** stars;
+    const atMax = level >= RESOURCE_UPGRADE_MAX_LEVEL;
+    setResourceImage(resourceUpgradeIcon, resource);
+    resourceUpgradeLevel.textContent = `Уровень ${level + 1}`;
+    resourceUpgradeName.textContent = resource.title;
+    resourceUpgradeStars.replaceChildren();
+    for (let index = 0; index < RESOURCE_UPGRADE_MAX_STARS; index += 1) {
+      const star = document.createElement('span');
+      star.textContent = '★';
+      if (index < stars) star.className = 'filled';
+      resourceUpgradeStars.appendChild(star);
+    }
+    const progress = atMax ? 100 : ((level % RESOURCE_UPGRADE_LEVELS_PER_STAR) / RESOURCE_UPGRADE_LEVELS_PER_STAR) * 100;
+    resourceUpgradeProgressFill.style.width = `${progress}%`;
+    resourceUpgradePrice.textContent = `+${formatCompactNumber(applyProfitBonus(resource.profit, user, resource.id))}`;
+    resourceUpgradeBonus.textContent = `+${getResourceUpgradeBonusPercent(user, resource.id)}% · x${starMultiplier}`;
+    resourceUpgradeButton.disabled = atMax || user.money < getResourceUpgradeCost(resource, user);
+    resourceUpgradeCost.textContent = atMax ? 'MAX' : formatCompactNumber(getResourceUpgradeCost(resource, user));
+    resourceUpgradeCoin.style.display = atMax ? 'none' : '';
+  }
+
+  function toggleResourceUpgrade(forceOpen, resourceId = activeResourceUpgradeId) {
+    if (!resourceUpgradePanel) return;
+    const open = typeof forceOpen === 'boolean' ? forceOpen : !resourceUpgradePanel.classList.contains('open');
+    if (open) {
+      const user = getUserState();
+      const resource = berryResources.find((item) => item.id === resourceId);
+      if (!resource || !user.unlockedResources[resource.id]) return;
+      activeResourceUpgradeId = resource.id;
+      shopPanel.classList.remove('open');
+      shopPanel.setAttribute('aria-hidden', 'true');
+      if (inventoryPanel) {
+        inventoryPanel.classList.remove('open');
+        inventoryPanel.setAttribute('aria-hidden', 'true');
+      }
+    }
+    resourceUpgradePanel.classList.toggle('open', open);
+    resourceUpgradePanel.setAttribute('aria-hidden', String(!open));
+    if (!open) activeResourceUpgradeId = null;
+    syncPanelOverlay();
+    renderFarmResourceStrip();
+    if (open) renderResourceUpgradePanel();
+  }
+
+  function buyResourceUpgrade() {
+    if (!activeResourceUpgradeId) return;
+    const user = getUserState();
+    const resource = berryResources.find((item) => item.id === activeResourceUpgradeId);
+    if (!resource || !user.unlockedResources[resource.id]) return;
+    const level = getResourceUpgradeLevel(user, resource.id);
+    const cost = getResourceUpgradeCost(resource, user);
+    if (level >= RESOURCE_UPGRADE_MAX_LEVEL || user.money < cost) return;
+    user.money -= cost;
+    ensureResourceUpgrades(user)[resource.id] = level + 1;
+    setUserState(user);
+    renderResources();
+    renderResourceUpgradePanel(user);
+    window.dispatchEvent(new CustomEvent('vibe-resource-upgraded', { detail: { id: resource.id, level: level + 1 } }));
+  }
+
   function formatCompactNumber(value) {
     const number = Math.max(0, Math.floor(Number(value) || 0));
     if (number >= 1000000) {
@@ -1250,6 +1429,8 @@
     });
     upgradeMarker.classList.toggle('hidden', !canUpgrade);
     if (preserveScroll && resourceList) resourceList.scrollTop = previousScrollTop;
+    renderFarmResourceStrip(user);
+    if (resourceUpgradePanel && resourceUpgradePanel.classList.contains('open')) renderResourceUpgradePanel(user);
   }
 
   function renderPlayerProgress() {
@@ -1528,7 +1709,8 @@
   function syncPanelOverlay() {
     const shopOpen = shopPanel.classList.contains('open');
     const inventoryOpen = inventoryPanel && inventoryPanel.classList.contains('open');
-    panelOverlay.classList.toggle('open', shopOpen || inventoryOpen);
+    const resourceUpgradeOpen = resourceUpgradePanel && resourceUpgradePanel.classList.contains('open');
+    panelOverlay.classList.toggle('open', shopOpen || inventoryOpen || resourceUpgradeOpen);
   }
 
   function toggleInventory(forceOpen) {
@@ -1537,6 +1719,11 @@
     if (open) {
       shopPanel.classList.remove('open');
       shopPanel.setAttribute('aria-hidden', 'true');
+      if (resourceUpgradePanel) {
+        resourceUpgradePanel.classList.remove('open');
+        resourceUpgradePanel.setAttribute('aria-hidden', 'true');
+        activeResourceUpgradeId = null;
+      }
     }
     inventoryPanel.classList.toggle('open', open);
     inventoryPanel.setAttribute('aria-hidden', String(!open));
@@ -1563,6 +1750,11 @@
       inventoryPanel.classList.remove('open');
       inventoryPanel.setAttribute('aria-hidden', 'true');
     }
+    if (open && resourceUpgradePanel) {
+      resourceUpgradePanel.classList.remove('open');
+      resourceUpgradePanel.setAttribute('aria-hidden', 'true');
+      activeResourceUpgradeId = null;
+    }
     shopPanel.classList.toggle('open', open);
     shopPanel.setAttribute('aria-hidden', String(!open));
     syncPanelOverlay();
@@ -1576,6 +1768,8 @@
   closePanel.addEventListener('click', () => togglePanel(false));
   if (inventoryButton) inventoryButton.addEventListener('click', () => toggleInventory());
   if (closeInventory) closeInventory.addEventListener('click', () => toggleInventory(false));
+  if (closeResourceUpgrade) closeResourceUpgrade.addEventListener('click', () => toggleResourceUpgrade(false));
+  if (resourceUpgradeButton) resourceUpgradeButton.addEventListener('click', buyResourceUpgrade);
   if (findingOk) findingOk.addEventListener('click', finishFindingItem);
   if (questClaim) questClaim.addEventListener('click', claimQuestReward);
   if (questToggle && questCard) {
@@ -1593,6 +1787,7 @@
   panelOverlay.addEventListener('click', () => {
     togglePanel(false);
     toggleInventory(false);
+    toggleResourceUpgrade(false);
   });
   idleClose.addEventListener('click', hideIdlePanel);
   idleOverlay.addEventListener('click', hideIdlePanel);
