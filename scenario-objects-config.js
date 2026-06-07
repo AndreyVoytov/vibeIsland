@@ -88,8 +88,9 @@
     {
       id: 'lifebuoy',
       titleRu: 'Спасательный круг',
-      distanceCells: 7,
+      distanceCells: 6,
       direction: 'west',
+      positionVersion: 1,
       assetUrl: './images/scenario/lifebuoy.png',
       fallbackUrl: './images/scenario/lifebuoy-fallback.svg',
       widthPx: 70,
@@ -105,8 +106,9 @@
     {
       id: 'message-bottle',
       titleRu: 'Бутылка',
-      distanceCells: 10,
+      distanceCells: 6,
       direction: 'northWest',
+      positionVersion: 1,
       assetUrl: './images/scenario/message-bottle.png',
       fallbackUrl: './images/scenario/message-bottle-fallback.svg',
       widthPx: 68,
@@ -121,8 +123,9 @@
     {
       id: 'lighthouse',
       titleRu: 'Старый маяк',
-      distanceCells: 14,
+      distanceCells: 7,
       direction: 'north',
+      positionVersion: 1,
       assetUrl: './images/scenario/lighthouse-off.png',
       fallbackUrl: './images/scenario/lighthouse-off-fallback.svg',
       transformOnApproach: {
@@ -142,9 +145,9 @@
     {
       id: 'broken-boat',
       titleRu: 'Разбитый катер',
-      distanceCells: 14,
+      distanceCells: 7,
       direction: 'north',
-      positionVersion: 5,
+      positionVersion: 6,
       renderOffsetPx: { y: 40 },
       assetUrl: './images/scenario/boat-broken.png',
       repairedAssetUrl: './images/scenario/boat-repaired.png',
@@ -163,6 +166,7 @@
       titleRu: 'Человек под одеялом',
       newIslandOnly: true,
       position: 'center',
+      renderOffsetPx: { y: -12 },
       widthPx: 92,
       heightPx: 56,
       colliderRadius: 1,
@@ -180,14 +184,19 @@
       position: 'westShore',
       direction: 'west',
       distanceCells: 1,
+      renderOffsetPx: { x: -59 },
       widthPx: 118,
       heightPx: 62,
       waterShadowYFactor: 0.2,
       colliderRadius: 1,
+      triggerRadiusCells: 3,
       persistentAfterTrigger: true,
       forceFloating: true,
       noSpawnLand: true,
       assetUrl: './images/scenario/boat-repaired.png',
+      dialog: [
+        'Топливо закончилось',
+      ],
     },
   ];
 

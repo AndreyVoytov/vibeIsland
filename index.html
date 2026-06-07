@@ -279,7 +279,7 @@
     }
     .quest-card{
       position:absolute;
-      top:56px;
+      top:102px;
       left:50%;
       transform:translateX(-50%);
       width:min(330px, calc(100% - 132px));
@@ -400,6 +400,39 @@
     .quest-card.finished .quest-reward,
     .quest-card.finished .quest-claim,
     .quest-card.finished .quest-progress-row{display:none;}
+    .quest-toggle{
+      position:absolute;
+      top:56px;
+      left:50%;
+      transform:translateX(-50%);
+      min-width:146px;
+      height:38px;
+      padding:0 14px;
+      border:3px solid #fff;
+      border-radius:10px;
+      background:linear-gradient(180deg,#24afe5,#177ebc);
+      color:#fff;
+      box-shadow:0 4px 0 #0d5688, 0 7px 12px rgba(0,0,0,0.28);
+      font-size:13px;
+      font-weight:900;
+      letter-spacing:0.02em;
+      cursor:pointer;
+      pointer-events:auto;
+      z-index:7;
+    }
+    .quest-toggle::after{
+      content:"";
+      display:inline-block;
+      width:7px;
+      height:7px;
+      margin-left:9px;
+      border-right:3px solid #fff;
+      border-bottom:3px solid #fff;
+      transform:translateY(-2px) rotate(45deg);
+      transition:transform 0.18s ease;
+    }
+    .quest-toggle.open::after{transform:translateY(2px) rotate(225deg);}
+    .quest-card:not(.open){display:none;}
     .shop-button{
       position:absolute;
       bottom:16px;
@@ -1145,9 +1178,10 @@
         right:10px;
       }
       .quest-card{
-        top:106px;
+        top:148px;
         width:calc(100% - 20px);
       }
+      .quest-toggle{top:106px;}
       .quest-card.finished{width:calc(100% - 20px);}
     }
     .resource-card.available .unlock-button::after{
@@ -1205,6 +1239,67 @@
       box-sizing:border-box;
     }
     .runtime-error.open{display:flex;}
+    #uiRoot::after{
+      content:"";
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:78px;
+      background:linear-gradient(180deg,rgba(25,117,171,0.88),rgba(13,72,124,0.96));
+      border-top:3px solid rgba(255,255,255,0.85);
+      box-shadow:0 -5px 0 rgba(7,52,91,0.5),0 -10px 24px rgba(0,0,0,0.18);
+      pointer-events:none;
+      z-index:4;
+    }
+    .profile-panel{
+      border:3px solid #fff;
+      border-radius:11px;
+      background:linear-gradient(180deg,#267fc1,#174f8e);
+      box-shadow:0 4px 0 #0c3c70,0 7px 12px rgba(0,0,0,0.3);
+    }
+    .profile-avatar{border-radius:8px;box-shadow:inset 0 0 0 2px #fff,0 2px 0 rgba(0,0,0,0.28);}
+    .money-pill,.gem-pill,.island-size-pill{
+      border:2px solid #fff;
+      border-radius:10px;
+      background:linear-gradient(180deg,#385f88,#213d65);
+      box-shadow:0 3px 0 #142b4c,0 5px 10px rgba(0,0,0,0.3);
+    }
+    .quest-level-pill{
+      border:3px solid #fff;
+      border-radius:9px;
+      background:linear-gradient(180deg,#2aafe3,#177db9);
+      color:#fff;
+      box-shadow:0 4px 0 #0d5788;
+    }
+    .quest-track{
+      height:16px;
+      border:3px solid #fff;
+      background:#56718a;
+      box-shadow:0 4px 0 #294660;
+    }
+    .quest-track-fill{background:linear-gradient(90deg,#39d25f,#f3ca35);}
+    .quest-milestone{border:3px solid #fff;box-shadow:0 3px 0 #5c4315;}
+    .quest-card{
+      border:3px solid #fff;
+      border-radius:10px;
+      background:#f7e8cf;
+      box-shadow:0 5px 0 #9e7140,0 9px 16px rgba(0,0,0,0.3);
+    }
+    .shop-button,.inventory-button{
+      bottom:11px;
+      width:56px;
+      height:56px;
+      transform:none;
+      border:3px solid #fff;
+      border-radius:10px;
+      background:linear-gradient(180deg,#25aae0,#1476b3);
+      box-shadow:0 4px 0 #0c4d7e,0 7px 12px rgba(0,0,0,0.32);
+      z-index:6;
+    }
+    .shop-button{left:auto;right:12px;}
+    .inventory-button{left:12px;}
+    .shop-button img,.inventory-button img{width:34px;height:34px;}
   </style>
 </head>
 <body>
@@ -1234,6 +1329,7 @@
           <div id="questMilestones" class="quest-milestones"></div>
         </div>
       </div>
+      <button id="questToggle" class="quest-toggle" type="button" aria-expanded="false" data-ui-control>Текущее задание</button>
       <div id="questCard" class="quest-card" data-ui-control>
         <div class="quest-icon">
           <img id="questIcon" alt="quest" />
@@ -1309,10 +1405,10 @@
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
   <script src="./berries-config.js?v=20260605-strawberry-outline4"></script>
   <script src="./buildings-config.js"></script>
-  <script src="./scenario-objects-config.js?v=20260606-boat-arrival"></script>
+  <script src="./scenario-objects-config.js?v=20260607-island-polish"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
-  <script src="./enlarge-config.js?v=20260606-island-upgrades"></script>
-  <script src="./pixi-game.js?v=20260606-visual-tuning"></script>
-  <script src="./pixi-ui.js?v=20260606-visual-tuning"></script>
+  <script src="./enlarge-config.js?v=20260607-island-polish"></script>
+  <script src="./pixi-game.js?v=20260607-island-polish"></script>
+  <script src="./pixi-ui.js?v=20260607-island-polish"></script>
 </body>
 </html>

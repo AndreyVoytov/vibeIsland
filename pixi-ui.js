@@ -7,7 +7,7 @@
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
   const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
   const DEFAULT_ISLAND_METERS = 18;
-  const BOAT_REPAIR_COST = 100000;
+  const BOAT_REPAIR_COST = 20000;
   const LIGHTHOUSE_REQUIRED_METERS = getScenarioRequiredMeters('lighthouse');
   const CROPS_PER_TWO_EXPANSIONS = 5;
   const METERS_PER_TWO_EXPANSIONS = 4;
@@ -545,7 +545,7 @@
   }
 
   let cropResourceIndex = 0;
-  const berryResources = (berryConfig.berries || []).map((def, index) => {
+  const berryResources = (berryConfig.berries || []).filter((def) => def.resourceType !== 'extractable').map((def, index) => {
     const profit = typeof def.profit === 'number' ? def.profit : index + 1;
     const cropIndex = isCropResource(def) ? cropResourceIndex++ : -1;
     return {
@@ -600,12 +600,13 @@
     onUnlock: () => {
       const current = loadMap();
       const result = expandIsland(current, getExpansionSurfaceValue(def));
+      localStorage.setItem('islandExpansionPreviousMap', JSON.stringify(current));
       localStorage.setItem('mapShift', JSON.stringify(result.shift || { x: 0, y: 0 }));
       localStorage.setItem('map', JSON.stringify(result.map));
       const expansionLevel = Number(localStorage.getItem('islandExpansionLevel') || '0');
       const nextLevel = Number.isFinite(expansionLevel) ? Math.max(0, Math.floor(expansionLevel) + 1) : 1;
       localStorage.setItem('islandExpansionLevel', String(nextLevel));
-      localStorage.setItem('islandWiggleAt', String(Date.now()));
+      localStorage.setItem('islandExpansionAt', String(Date.now()));
       window.dispatchEvent(new CustomEvent('vibe-map-changed'));
     },
   }));
@@ -679,6 +680,7 @@
   const questRewardIcon = document.getElementById('questRewardIcon');
   const questRewardValue = document.getElementById('questRewardValue');
   const questClaim = document.getElementById('questClaim');
+  const questToggle = document.getElementById('questToggle');
   const resourceCards = new Map();
   const EXPANSION_DELAY_MS = 1500;
   const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
@@ -1576,6 +1578,13 @@
   if (closeInventory) closeInventory.addEventListener('click', () => toggleInventory(false));
   if (findingOk) findingOk.addEventListener('click', finishFindingItem);
   if (questClaim) questClaim.addEventListener('click', claimQuestReward);
+  if (questToggle && questCard) {
+    questToggle.addEventListener('click', () => {
+      const open = questCard.classList.toggle('open');
+      questToggle.classList.toggle('open', open);
+      questToggle.setAttribute('aria-expanded', String(open));
+    });
+  }
   window.addEventListener('vibe-found-item', (event) => showFindingItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', () => {
     renderResources();

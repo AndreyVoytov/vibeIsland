@@ -27,6 +27,8 @@
   const ISLAND_OUTLINE_COLOR = 0x0092dc;
   const WORLD_ZOOM = 1.15;
   const BASE_CELL_PX = 28;
+  const EXPANSION_ANIMATION_MS = 1900;
+  const LEAF_PARTICLE_ASSET = './img/fx/lime-leaf-particle.png';
 
   const SPAWN_MS = 1000;
   const BURST_R_PCT = 12;
@@ -107,7 +109,7 @@
   const ISLAND_RUN_KEY = 'islandRun';
   const BOAT_REPAIRED_KEY = 'boatRepaired';
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
-  const BOAT_REPAIR_COST = 100000;
+  const BOAT_REPAIR_COST = 20000;
   const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
   const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
   const SPECIAL_PROFIT_UPGRADES = [
@@ -150,6 +152,8 @@
   const HORIZON_MIN_HEIGHT = 120;
   const HORIZON_TOP_OVERSCAN_PX = 2;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
+  const SECOND_ISLAND_CAMPFIRE_SCALE = 0.82;
+  const SECOND_ISLAND_CAMPFIRE_RAISE_CELLS = 0.32;
   const RESOURCE_AURA_PERIOD_MS = 1900;
   const RESOURCE_AURA_PARTICLES = 4;
 
@@ -207,6 +211,7 @@
     './img/berry/beet-bush.png',
     './img/berry/radish-bush.png',
     './img/berry/potato-bush.png',
+    LEAF_PARTICLE_ASSET,
     './img/rare/pine-cone.png',
     './img/rare/colorado-beetle.png',
   ];
@@ -464,6 +469,8 @@
   islandLayer.zIndex = 2;
   const scenarioSpriteLayer = new PIXI.Container();
   scenarioSpriteLayer.zIndex = 3;
+  const foregroundScenarioSpriteLayer = new PIXI.Container();
+  foregroundScenarioSpriteLayer.zIndex = 5.3;
   const scenarioGraphics = new PIXI.Graphics();
   scenarioGraphics.zIndex = 2.8;
   const scenarioFxGraphics = new PIXI.Graphics();
@@ -504,6 +511,7 @@
     buildingGlowGraphics,
     buildingsGraphics,
     buildingSpriteLayer,
+    foregroundScenarioSpriteLayer,
     resourceShadowGraphics,
     resourceSpriteLayer,
     resourceGraphics,
@@ -556,6 +564,8 @@
   const clouds = [];
   const waterBursts = [];
   let nextWaterBurstDelay = 0;
+  let islandRenderVisibility = null;
+  let lastExpansionIslandRedraw = 0;
   let horizonSprite = null;
   let horizonBackdropGraphics = null;
   let horizonTopFillGraphics = null;
@@ -873,11 +883,38 @@
     return 0;
   }
 
+  function getExpansionAnimationProgress() {
+    const startedAt = Number(localStorage.getItem('islandExpansionAt') || 0);
+    if (!startedAt) return 1;
+    return clamp((Date.now() - startedAt) / EXPANSION_ANIMATION_MS, 0, 1);
+  }
+
+  function getFixedWorldCellPx() {
+    const baseGridW = getBaseGridW();
+    if (!baseGridW) return 0;
+    const vw = parseFloat(localStorage.getItem('gameWidth')) || gameWidth;
+    return (vw / baseGridW) * WORLD_ZOOM;
+  }
+
+  function getAssetSizeScale() {
+    const fixedCell = getFixedWorldCellPx();
+    return fixedCell > 0 ? fixedCell / BASE_CELL_PX : 1;
+  }
+
+  function getFixedPctPx(value) {
+    const baseGridW = getBaseGridW();
+    return baseGridW ? getFixedWorldCellPx() * baseGridW * value / 100 : pct2px(value);
+  }
+
   function getWorldCellPx() {
     const baseGridW = getBaseGridW();
     if (!baseGridW) return 0;
     const vw = parseFloat(localStorage.getItem('gameWidth')) || gameWidth;
-    const scale = Math.pow(0.97, getExpansionLevel()) * WORLD_ZOOM;
+    const level = getExpansionLevel();
+    const targetScale = Math.pow(0.97, level);
+    const progress = getExpansionAnimationProgress();
+    const startScale = level > 0 ? Math.pow(0.97, level - 1) : targetScale;
+    const scale = lerp(startScale, targetScale, easeInOutQuad(progress)) * WORLD_ZOOM;
     return (vw / baseGridW) * scale;
   }
 
@@ -1000,7 +1037,7 @@
       let x = 0;
       while (x < GRID_W) {
         const cellValue = map[y] && map[y][x];
-        if (!cellValue || (map[y + 1] && map[y + 1][x])) {
+        if (!hasIslandCell(x, y) || hasIslandCell(x, y + 1)) {
           x += 1;
           continue;
         }
@@ -1009,8 +1046,8 @@
         let endX = x;
         while (
           endX + 1 < GRID_W
-          && map[y] && map[y][endX + 1]
-          && !(map[y + 1] && map[y + 1][endX + 1])
+          && hasIslandCell(endX + 1, y)
+          && !hasIslandCell(endX + 1, y + 1)
           && getTileRunKey(map[y][endX + 1]) === runKey
         ) {
           endX += 1;
@@ -1034,7 +1071,8 @@
   }
 
   function hasIslandCell(x, y) {
-    return Boolean(map[y] && map[y][x]);
+    if (!map[y] || !map[y][x]) return false;
+    return !islandRenderVisibility || islandRenderVisibility.has(cellKey(x, y));
   }
 
   function getIslandTileCornerRadii(x, y, radius) {
@@ -1083,14 +1121,41 @@
         while (endX + 1 < GRID_W && hasIslandCell(endX + 1, y) && !hasIslandCell(endX + 1, y + 1)) {
           endX += 1;
         }
-        const sx = x * cellSize - thickness * 0.7;
-        const sy = (y + 1) * cellSize - thickness * 0.2;
-        const width = (endX - x + 1) * cellSize + thickness * 1.4;
-        drawRoundedRect(g, sx, sy, width, bottomThickness, thickness * 0.65);
+        const extendLeft = !hasIslandCell(x - 1, y);
+        const extendRight = !hasIslandCell(endX + 1, y);
+        const sx = x * cellSize - (extendLeft ? thickness : 0);
+        const sy = (y + 1) * cellSize;
+        const width = (endX - x + 1) * cellSize + (extendLeft ? thickness : 0) + (extendRight ? thickness : 0);
+        drawCornerRoundedRect(g, sx, sy, width, bottomThickness, {
+          bl: extendLeft ? thickness * 0.65 : 0,
+          br: extendRight ? thickness * 0.65 : 0,
+        });
         x = endX + 1;
       }
     }
     g.endFill();
+  }
+
+  function getExpansionRenderVisibility() {
+    const progress = getExpansionAnimationProgress();
+    const previousMap = safeJson('islandExpansionPreviousMap', null);
+    if (progress >= 1 || !Array.isArray(previousMap) || !previousMap.length) return null;
+    const shift = safeJson('mapShift', { x: 0, y: 0 });
+    const shiftX = Number.isFinite(shift.x) ? shift.x : 0;
+    const shiftY = Number.isFinite(shift.y) ? shift.y : 0;
+    const visible = new Set();
+    previousMap.forEach((row, y) => {
+      (row || []).forEach((value, x) => {
+        if (value) visible.add(cellKey(x + shiftX, y + shiftY));
+      });
+    });
+    const newCells = land
+      .filter((cell) => !visible.has(cellKey(cell.x, cell.y)))
+      .sort((a, b) => (b.y - a.y) || (Math.abs(a.x - GRID_W / 2) - Math.abs(b.x - GRID_W / 2)));
+    const revealProgress = clamp((progress - 0.08) / 0.82, 0, 1);
+    const visibleCount = Math.floor(newCells.length * easeOutQuad(revealProgress));
+    newCells.slice(0, visibleCount).forEach((cell) => visible.add(cellKey(cell.x, cell.y)));
+    return visible;
   }
 
   function getIslandBoundsCells(landCells) {
@@ -1223,9 +1288,10 @@
   }
 
   function redrawIsland() {
-    islandLayer.removeChildren();
+    islandLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     const cell = getWorldCellPx();
     if (!cell || !GRID_W) return;
+    islandRenderVisibility = getExpansionRenderVisibility();
     const g = new PIXI.Graphics();
     islandLayer.addChild(g);
     drawIslandWaterOutline(g, cell);
@@ -1235,7 +1301,7 @@
     beginFill(g, 'rgba(0,0,0,0.16)', '#000000');
     for (let y = 0; y < GRID_H; y += 1) {
       for (let x = 0; x < GRID_W; x += 1) {
-        if (!map[y] || !map[y][x]) continue;
+        if (!hasIslandCell(x, y)) continue;
         drawRoundedRect(g, x * cell - overlap / 2, y * cell + cell * 0.24 - overlap / 2, cell + overlap, cell + overlap, radius);
       }
     }
@@ -1244,7 +1310,7 @@
     for (let y = 0; y < GRID_H; y += 1) {
       for (let x = 0; x < GRID_W; x += 1) {
         const cellValue = map[y] && map[y][x];
-        if (!cellValue) continue;
+        if (!cellValue || !hasIslandCell(x, y)) continue;
         const sx = x * cell - overlap / 2;
         const sy = y * cell - overlap / 2;
         const ww = cell + overlap;
@@ -1265,15 +1331,16 @@
 
     for (let y = 0; y < GRID_H; y += 1) {
       for (let x = 0; x < GRID_W; x += 1) {
-        if (!map[y] || !map[y][x]) continue;
+        if (!hasIslandCell(x, y)) continue;
         const sx = x * cell;
         const sy = y * cell;
-        if (!map[y][x + 1]) {
+        if (!hasIslandCell(x + 1, y)) {
           drawIslandTileRightSide(g, map[y][x], sx, sy, cell);
         }
       }
     }
     drawIslandFrontSides(g, cell);
+    islandRenderVisibility = null;
   }
 
   function getUserState() {
@@ -2294,9 +2361,7 @@
       const rx = width * (0.42 + t * 0.36 + wobble);
       const ry = height * (0.17 + t * 0.16 - wobble * 0.45);
       const lineWidth = Math.max(1.4, getWorldCellPx() * 0.026);
-      g.lineStyle(lineWidth, 0x007fbd, alpha);
-      g.drawEllipse(x, y, rx, ry);
-      g.lineStyle(Math.max(1, lineWidth * 0.48), 0xe5faff, alpha * 0.72);
+      g.lineStyle(lineWidth, 0xffffff, alpha * 0.82);
       g.drawEllipse(x, y, rx, ry);
     }
     g.lineStyle(0, 0xffffff, 0);
@@ -2393,9 +2458,14 @@
 
       if (floating) drawWaterRipples(scenarioGraphics, baseX, waterY, width, height, now, state);
 
-      beginFill(scenarioGraphics, floating ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)');
+      beginFill(scenarioGraphics, floating ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.3)');
       scenarioGraphics.drawEllipse(baseX, waterY, width * 0.35, height * 0.16);
       scenarioGraphics.endFill();
+      if (floating) {
+        scenarioGraphics.lineStyle(Math.max(1.5, getWorldCellPx() * 0.028), 0xffffff, 0.72);
+        scenarioGraphics.drawEllipse(baseX, waterY, width * 0.4, height * 0.19);
+        scenarioGraphics.lineStyle(0, 0xffffff, 0);
+      }
 
       let sprite = scenarioSprites.get(state.id);
       const texture = getScenarioTexture(def, state);
@@ -2404,7 +2474,7 @@
           sprite = new PIXI.Sprite(texture);
           sprite.anchor.set(0.5);
           scenarioSprites.set(state.id, sprite);
-          scenarioSpriteLayer.addChild(sprite);
+          (def.id === 'blanket-survivor' ? foregroundScenarioSpriteLayer : scenarioSpriteLayer).addChild(sprite);
         } else if (sprite.texture !== texture) {
           sprite.texture = texture;
         }
@@ -2513,6 +2583,8 @@
     localStorage.setItem('baseGridW', String(NEW_ISLAND_MAP_SIZE));
     localStorage.setItem('islandExpansionLevel', '0');
     localStorage.setItem('mapShift', JSON.stringify({ x: 0, y: 0 }));
+    localStorage.removeItem('islandExpansionAt');
+    localStorage.removeItem('islandExpansionPreviousMap');
     localStorage.removeItem('campfireCenter');
     localStorage.removeItem('campfireCenterMapSig');
     localStorage.removeItem(SCENARIO_OPENED_KEY);
@@ -2676,12 +2748,14 @@
   const resourceSpawnCells = new Set();
   const resourceSprites = new Map();
   const berrySprites = new Map();
+  const leafSprites = new Map();
   const buildingSprites = new Map();
   const sharkSprites = [];
   let pendingResourceColliderSync = false;
   let lastPickMs = 0;
   let nextBushUid = 1;
   let nextBerryUid = 1;
+  let nextLeafUid = 1;
   let activeChopTargetUid = null;
 
   function requestResourceColliderSync() {
@@ -2786,6 +2860,7 @@
       vyPct = -rnd(Math.min(upMin, upMax), Math.max(upMin, upMax));
     }
     return {
+      uid: nextLeafUid++,
       xPct,
       yPct,
       vxPct,
@@ -3685,9 +3760,9 @@
     if (!shouldDrawTreeShadow(b, visual)) return;
     const scaleParts = getCenteredBushScale(now, b);
     const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
-    const fallbackH = pct2px(BUSH_R_PCT) * 5;
-    const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
+    const sizeScale = getAssetSizeScale();
+    const fallbackH = getFixedPctPx(BUSH_R_PCT) * 5;
+    const fallbackW = getFixedPctPx(BUSH_R_PCT) * 3.6;
     const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
     const width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
     const height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
@@ -3722,9 +3797,9 @@
     }
     const scaleParts = getCenteredBushScale(now, b);
     const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
-    const fallbackH = pct2px(BUSH_R_PCT) * 5;
-    const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
+    const sizeScale = getAssetSizeScale();
+    const fallbackH = getFixedPctPx(BUSH_R_PCT) * 5;
+    const fallbackW = getFixedPctPx(BUSH_R_PCT) * 3.6;
     const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
     const x = pct2px(b.xPct);
     const y = pct2px(b.yPct);
@@ -3747,7 +3822,7 @@
   function drawBushCentered(g, b, now, visual) {
     if (b.stage === 'exploded' || b.stage === 'dead') return;
     const scaleParts = getCenteredBushScale(now, b);
-    const base = pct2px(BUSH_R_PCT);
+    const base = getFixedPctPx(BUSH_R_PCT);
     const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
     const extractScale = getExtractStageScale(b);
     const w = base * 6 * scaleParts.sx * visualScale * extractScale;
@@ -3763,7 +3838,7 @@
   function drawBushBottom(g, b, now) {
     if (b.stage === 'exploded' || b.stage === 'dead') return;
     const s = getBushScale(b.stage, b.t0, now);
-    const r = pct2px(BUSH_R_PCT) * s;
+    const r = getFixedPctPx(BUSH_R_PCT) * s;
     const x = pct2px(b.xPct);
     const y = pct2px(b.yPct);
     beginFill(g, '#145c2b');
@@ -3778,7 +3853,7 @@
   function drawBushTop(g, b, now) {
     if (b.stage === 'exploded' || b.stage === 'dead') return;
     const s = getTopBushScale(b.stage, b.t0, now);
-    const r = pct2px(BUSH_R_PCT) * s;
+    const r = getFixedPctPx(BUSH_R_PCT) * s;
     beginFill(g, '#1a7b38');
     g.drawCircle(pct2px(b.xPct) - 0.2 * r, pct2px(b.yPct) - 0.35 * r, 0.82 * r);
     g.drawCircle(pct2px(b.xPct) + 0.35 * r, pct2px(b.yPct) - 0.3 * r, 0.9 * r);
@@ -3803,7 +3878,7 @@
     } else if (sprite.texture !== texture) {
       sprite.texture = texture;
     }
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
+    const sizeScale = getAssetSizeScale();
     const s = be.onBush ? be.scale : 1;
     const centeredScale = def.bushType === 'centered' ? 0.6 : 1;
     const dropScale = be.onBush ? 1 : DROP_RESOURCE_DISPLAY_SCALE;
@@ -3828,7 +3903,7 @@
     const def = be.def || { primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.6)' } };
     const monolithScale = def.bushType === 'centered' ? 1 / 2.5 : 1;
     const dropScale = be.onBush ? 1 : DROP_RESOURCE_DISPLAY_SCALE;
-    const r = pct2px(BERRY_R_PCT) * s * monolithScale * dropScale;
+    const r = getFixedPctPx(BERRY_R_PCT) * s * monolithScale * dropScale;
     const x = pct2px(be.xPct);
     const y = pct2px(be.yPct);
     const primitive = def.primitive || {};
@@ -3869,13 +3944,33 @@
     g.endFill();
   }
 
-  function drawLeaf(g, leaf, now) {
+  function drawLeaf(g, leaf, now, activeLeafSpriteIds) {
     const alpha = clamp(1 - (now - leaf.t0) / (leaf.lifeMs || LEAF_LIFE_MS), 0, 1);
     const x = pct2px(leaf.xPct);
     const y = pct2px(leaf.yPct);
     const size = (Number.isFinite(leaf.sizePct) ? leaf.sizePct : 1) * LEAF_SIZE_SCALE;
-    const w = pct2px(2 * size);
-    const h = pct2px(1 * size);
+    const texture = getTexture(LEAF_PARTICLE_ASSET);
+    if (texture && activeLeafSpriteIds) {
+      let sprite = leafSprites.get(leaf.uid);
+      if (!sprite) {
+        sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        leafSprites.set(leaf.uid, sprite);
+        resourceSpriteLayer.addChild(sprite);
+      }
+      const targetWidth = 28 * getAssetSizeScale() * size;
+      sprite.visible = true;
+      sprite.x = x;
+      sprite.y = y;
+      sprite.rotation = leaf.rot;
+      sprite.alpha = alpha;
+      sprite.scale.set(targetWidth / Math.max(1, texture.width));
+      sprite.zIndex = y + 2;
+      activeLeafSpriteIds.add(leaf.uid);
+      return;
+    }
+    const w = getFixedPctPx(2 * size);
+    const h = getFixedPctPx(1 * size);
     const c = Math.cos(leaf.rot);
     const s = Math.sin(leaf.rot);
     const points = [
@@ -3894,8 +3989,8 @@
     if (alpha <= 0) return;
     const x = pct2px(chip.xPct);
     const y = pct2px(chip.yPct);
-    const w = Math.max(2, pct2px(chip.sizePct * WOOD_CHIP_SIZE_SCALE * 1.35));
-    const h = Math.max(1.2, pct2px(chip.sizePct * WOOD_CHIP_SIZE_SCALE * 0.46));
+    const w = Math.max(2, getFixedPctPx(chip.sizePct * WOOD_CHIP_SIZE_SCALE * 1.35));
+    const h = Math.max(1.2, getFixedPctPx(chip.sizePct * WOOD_CHIP_SIZE_SCALE * 0.46));
     const c = Math.cos(chip.rot);
     const s = Math.sin(chip.rot);
     const points = [
@@ -3938,14 +4033,14 @@
     const x = pct2px(b.xPct);
     const y = pct2px(b.yPct);
     if (!centered) {
-      const r = pct2px(BUSH_R_PCT);
+      const r = getFixedPctPx(BUSH_R_PCT);
       return { x, y, width: r * 2.8, height: r * 2.6, topY: y - r * 1.55, baseY: y + r * 0.28, primitive };
     }
     const scaleParts = getCenteredBushScale(now, b);
     const visualScale = typeof visual.scale === 'number' ? visual.scale : 1;
-    const sizeScale = getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1;
-    const fallbackH = pct2px(BUSH_R_PCT) * 5;
-    const fallbackW = pct2px(BUSH_R_PCT) * 3.6;
+    const sizeScale = getAssetSizeScale();
+    const fallbackH = getFixedPctPx(BUSH_R_PCT) * 5;
+    const fallbackW = getFixedPctPx(BUSH_R_PCT) * 3.6;
     const stageScale = Array.isArray(visual.assetUrls) && visual.assetUrls.length ? 1 : getExtractStageScale(b);
     const width = (visual.widthPx || fallbackW) * sizeScale * scaleParts.sx * visualScale * stageScale;
     const height = (visual.heightPx || fallbackH) * sizeScale * scaleParts.sy * visualScale * stageScale;
@@ -3999,6 +4094,7 @@
     resourceShadowGraphics.clear();
     const activeSpriteIds = new Set();
     const activeBerrySpriteIds = new Set();
+    const activeLeafSpriteIds = new Set();
     bushes.forEach((b) => {
       const visual = getBushVisualDef(b);
       let bushSpriteRendered = false;
@@ -4011,7 +4107,7 @@
         bushSpriteRendered = renderBushSprite(b, now, visual, activeSpriteIds);
         if (!bushSpriteRendered) drawBushBottom(resourceGraphics, b, now);
       }
-      b.leafs.forEach((leaf) => drawLeaf(resourceGraphics, leaf, now));
+      b.leafs.forEach((leaf) => drawLeaf(resourceGraphics, leaf, now, activeLeafSpriteIds));
       if (b.woodChips && b.woodChips.length) b.woodChips.forEach((chip) => drawWoodChip(resourceGraphics, chip, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
       if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
@@ -4033,6 +4129,11 @@
       if (activeBerrySpriteIds.has(id)) return;
       resourceSpriteLayer.removeChild(sprite);
       berrySprites.delete(id);
+    });
+    leafSprites.forEach((sprite, id) => {
+      if (activeLeafSpriteIds.has(id)) return;
+      resourceSpriteLayer.removeChild(sprite);
+      leafSprites.delete(id);
     });
   }
 
@@ -4116,8 +4217,8 @@
       height = texture.height * fit;
     }
     if (isCampfireBuilding(def)) {
-      width *= CAMPFIRE_DISPLAY_SCALE;
-      height *= CAMPFIRE_DISPLAY_SCALE;
+      width *= getCampfireDisplayScale();
+      height *= getCampfireDisplayScale();
     }
     sprite.visible = true;
     sprite.anchor.set(0.5, Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : 0.76);
@@ -4132,6 +4233,14 @@
 
   function isCampfireBuilding(def) {
     return def && def.primitive && def.primitive.kind === 'campfire';
+  }
+
+  function isSecondIsland() {
+    return Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1)) >= 2;
+  }
+
+  function getCampfireDisplayScale() {
+    return CAMPFIRE_DISPLAY_SCALE * (isSecondIsland() ? SECOND_ISLAND_CAMPFIRE_SCALE : 1);
   }
 
   function drawCampfireGlow(centerX, centerY, size, now, def) {
@@ -4195,10 +4304,11 @@
       const size = buildingCellPx * 0.82 * (radius * 2 + 1);
       const centerX = anchorX + (spot.x - anchorSpot.x) * virtualCellPx;
       const centerY = anchorY + (spot.y - anchorSpot.y) * virtualCellPx;
-      const visualSize = isCampfireBuilding(def) ? size * CAMPFIRE_DISPLAY_SCALE : size;
-      if (isCampfireBuilding(def)) drawCampfireGlow(centerX, centerY, visualSize, now, def);
-      if (!renderBuildingSprite(def, centerX, centerY, size, activeBuildingIds)) {
-        drawBuildingPrimitive(buildingsGraphics, def, centerX, centerY, visualSize);
+      const renderCenterY = centerY - (isCampfireBuilding(def) && isSecondIsland() ? getFixedWorldCellPx() * SECOND_ISLAND_CAMPFIRE_RAISE_CELLS : 0);
+      const visualSize = isCampfireBuilding(def) ? size * getCampfireDisplayScale() : size;
+      if (isCampfireBuilding(def)) drawCampfireGlow(centerX, renderCenterY, visualSize, now, def);
+      if (!renderBuildingSprite(def, centerX, renderCenterY, size, activeBuildingIds)) {
+        drawBuildingPrimitive(buildingsGraphics, def, centerX, renderCenterY, visualSize);
       }
     });
     buildingSprites.forEach((sprite, id) => {
@@ -4488,11 +4598,12 @@
       return;
     }
     const cell = getWorldCellPx();
-    if (!cell) return;
+    const fixedCell = getFixedWorldCellPx();
+    if (!cell || !fixedCell) return;
     const baseGridW = getBaseGridW();
     const heroCellScale = baseGridW ? HERO_CHAR_R_PCT * baseGridW / 100 : 1.5;
-    const charR = cell * heroCellScale;
-    const footOffset = cell ? (38 / BASE_CELL_PX) * cell : 38;
+    const charR = fixedCell * heroCellScale;
+    const footOffset = (38 / BASE_CELL_PX) * fixedCell;
     const headTexture = heroParts.head && heroParts.head.texture;
     const headHeight = headTexture && headTexture.height ? headTexture.height : 100;
     const S = ((charR * 2) / headHeight) * HERO_SCALE;
@@ -4761,6 +4872,7 @@
     const cx = bbox ? bbox.xPct + bbox.wPct / 2 : 50;
     const cy = bbox ? bbox.yPct + bbox.hPct / 2 : H_PCT / 2;
     const push = Math.max(expansionOffset * 1.6, 0);
+    const minYPct = getSharkMinYPct();
     anchors.forEach((a) => {
       let vx = a.xPct - cx;
       let vy = a.yPct - cy;
@@ -4768,13 +4880,18 @@
       vx /= len;
       vy /= len;
       a.xPct = Math.max(5, Math.min(95, a.xPct + vx * push));
-      a.yPct = Math.max(5, Math.min(H_PCT - 5, a.yPct + vy * push));
+      a.yPct = Math.max(minYPct, Math.min(H_PCT - 5, a.yPct + vy * push));
       if (isNearScenario(a.xPct, a.yPct, scenarioCells, safeDist)) {
         a.xPct = Math.max(5, Math.min(95, a.xPct + vx * safeDist));
-        a.yPct = Math.max(5, Math.min(H_PCT - 5, a.yPct + vy * safeDist));
+        a.yPct = Math.max(minYPct, Math.min(H_PCT - 5, a.yPct + vy * safeDist));
       }
     });
     return anchors;
+  }
+
+  function getSharkMinYPct() {
+    if (!horizonSprite || !horizonSprite.visible) return Math.max(5, H_PCT * 0.22);
+    return clamp(px2pct(horizonSprite.y + horizonSprite.height * 0.5), 5, Math.max(5, H_PCT - SHARK_WANDER_R));
   }
 
   function spawnSharks() {
@@ -4795,7 +4912,7 @@
         sx = anchor ? anchor.xPct + rnd(-SHARK_WANDER_R, SHARK_WANDER_R) : rnd(SHARK_WANDER_R, 100 - SHARK_WANDER_R);
         sy = anchor ? anchor.yPct + rnd(-SHARK_WANDER_R, SHARK_WANDER_R) : rnd(SHARK_WANDER_R, H_PCT - SHARK_WANDER_R);
         sx = Math.max(SHARK_WANDER_R, Math.min(100 - SHARK_WANDER_R, sx));
-        sy = Math.max(SHARK_WANDER_R, Math.min(H_PCT - SHARK_WANDER_R, sy));
+        sy = Math.max(getSharkMinYPct(), Math.min(H_PCT - SHARK_WANDER_R, sy));
         ok = true;
         if (bbox && distPointRect(sx, sy, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct) < SHARK_SAFE_FACTOR * SHARK_WANDER_R + expansionOffset) ok = false;
         if (isNearScenario(sx, sy, scenarioCells, safeDist) || isLandAtPct(sx, sy)) ok = false;
@@ -4832,7 +4949,7 @@
       }
       s.angle += s.angSpeed * dt;
       s.xPct = Math.max(0, Math.min(100, s.sxPct + Math.cos(s.angle) * s.R));
-      s.yPct = Math.max(0, Math.min(H_PCT, s.syPct + Math.sin(s.angle * 1.25 + s.phase) * (s.R * 0.65)));
+      s.yPct = Math.max(getSharkMinYPct(), Math.min(H_PCT, s.syPct + Math.sin(s.angle * 1.25 + s.phase) * (s.R * 0.65)));
       if (bbox) {
         const d = distPointRect(s.xPct, s.yPct, bbox.xPct, bbox.yPct, bbox.wPct, bbox.hPct);
         const minD = SHARK_SAFE_FACTOR * s.R * 0.98 + expansionOffset;
@@ -4852,9 +4969,9 @@
       if (Math.abs(vxPct) > 0.002) s.flip = vxPct > 0 ? -1 : 1;
       const x = pct2px(s.xPct);
       const y = pct2px(s.yPct);
-      sharkGraphics.beginFill(0xffffff, 0.5);
+      sharkGraphics.lineStyle(2, 0xffffff, 0.62);
       sharkGraphics.drawEllipse(x, y + 4, 16, 6);
-      sharkGraphics.endFill();
+      sharkGraphics.lineStyle(0, 0xffffff, 0);
       const flip = s.flip || 1;
       if (finTexture) {
         let sprite = sharkSprites[index];
@@ -4880,6 +4997,24 @@
       if (activeSharks.has(index)) return;
       sprite.visible = false;
     });
+  }
+
+  function updateExpansionAnimation(now) {
+    const startedAt = Number(localStorage.getItem('islandExpansionAt') || 0);
+    if (!startedAt) return;
+    const active = Date.now() - startedAt < EXPANSION_ANIMATION_MS;
+    if (active && now - lastExpansionIslandRedraw >= 45) {
+      lastExpansionIslandRedraw = now;
+      redrawIsland();
+      renderHorizon();
+      return;
+    }
+    if (!active && localStorage.getItem('islandExpansionPreviousMap')) {
+      localStorage.removeItem('islandExpansionPreviousMap');
+      localStorage.removeItem('islandExpansionAt');
+      redrawIsland();
+      renderHorizon();
+    }
   }
 
   function resize() {
@@ -4927,6 +5062,7 @@
   let spawnAccumulator = 0;
   function frame(deltaMS) {
     const now = performance.now();
+    updateExpansionAnimation(now);
     consumeBoatRepairRequest();
     updateBoatCutscene(now);
     updateHeroLogic(deltaMS);
