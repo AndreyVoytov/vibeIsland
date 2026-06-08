@@ -31,12 +31,12 @@
     ],
     'player.treeFall': ['./audio/player/tree-fall.ogg'],
     'player.pickup': [
-      './audio/player/pickup-01.ogg',
-      './audio/player/pickup-02.ogg',
-      './audio/player/pickup-03.ogg',
-      './audio/player/pickup-04.ogg',
+      './audio/player/pickup-01.ogg?v=20260608-casual-pickup',
+      './audio/player/pickup-02.ogg?v=20260608-casual-pickup',
+      './audio/player/pickup-03.ogg?v=20260608-casual-pickup',
+      './audio/player/pickup-04.ogg?v=20260608-casual-pickup',
     ],
-    'player.pickupRare': ['./audio/player/pickup-rare.ogg'],
+    'player.pickupRare': ['./audio/player/pickup-rare.ogg?v=20260608-casual-pickup'],
     'player.leavesBurst': [
       './audio/player/leaves-burst-01.ogg?v=20260608-soft-foley',
       './audio/player/leaves-burst-02.ogg?v=20260608-soft-foley',
@@ -68,6 +68,11 @@
     ],
     'world.scenarioGlint': ['./audio/world/scenario-glint.ogg'],
     'world.scenarioOpen': ['./audio/world/scenario-open.ogg'],
+    'world.scenarioBreak': [
+      './audio/world/scenario-break-01.ogg',
+      './audio/world/scenario-break-02.ogg',
+      './audio/world/scenario-break-03.ogg',
+    ],
     'world.islandExpand': ['./audio/world/island-expand.ogg'],
     'world.resourceUnlock': ['./audio/world/resource-unlock.ogg'],
     'ui.tap': [
@@ -93,8 +98,8 @@
     'ambience.island': 0.08,
     'ambience.island2': 0.025,
     'ambience.lighthouse': 0.03,
-    'player.footstep': 0.07,
-    'player.pickup': 0.24,
+    'player.footstep': 0.03,
+    'player.pickup': 0.12,
     'water.ripple': 0.06,
     'water.sharkPass': 0.05,
     'water.burst': 0.026,
@@ -102,12 +107,12 @@
   };
 
   const loops = new Map();
+  const loopVolumes = new Map();
   const effects = new Set();
   const lastPlayedAt = new Map();
-  let audioContext = null;
-  let pickupNoteIndex = 0;
   let unlocked = false;
-  let muted = localStorage.getItem('audioMuted') === '1';
+  let musicMuted = localStorage.getItem('musicMuted') === '1';
+  let effectsMuted = localStorage.getItem('effectsMuted') === '1' || localStorage.getItem('audioMuted') === '1';
   let activeMusicKey = '';
 
   function choose(key) {
@@ -115,51 +120,25 @@
     return variants.length ? variants[Math.floor(Math.random() * variants.length)] : '';
   }
 
+  function isMusicKey(key) {
+    return String(key).startsWith('music.');
+  }
+
+  function isKeyMuted(key) {
+    return isMusicKey(key) ? musicMuted : effectsMuted;
+  }
+
   function volumeFor(key, volume) {
-    if (muted) return 0;
+    if (isKeyMuted(key)) return 0;
     if (Number.isFinite(volume)) return Math.max(0, Math.min(1, volume));
     return defaultVolumes[key] ?? 0.32;
   }
 
-  function ensureAudioContext() {
-    const AudioContextClass = global.AudioContext || global.webkitAudioContext;
-    if (!AudioContextClass) return null;
-    if (!audioContext) audioContext = new AudioContextClass();
-    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
-    return audioContext;
-  }
-
-  function playSoftPickup(options = {}) {
-    if (!ensureAudioContext()) return null;
-    const now = audioContext.currentTime;
-    const noteSteps = [0, 2, 4, 7, 9, 7, 4, 2];
-    const step = noteSteps[pickupNoteIndex % noteSteps.length];
-    pickupNoteIndex += 1;
-    const baseFrequency = 255 * (2 ** (step / 12));
-    const gain = audioContext.createGain();
-    const oscillator = audioContext.createOscillator();
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(baseFrequency * 0.72, now);
-    oscillator.frequency.exponentialRampToValueAtTime(baseFrequency, now + 0.11);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volumeFor('player.pickup', options.volume) * 0.16), now + 0.018);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.15);
-    return oscillator;
-  }
-
   function play(key, options = {}) {
-    if (!unlocked || muted) return null;
+    if (!unlocked || isKeyMuted(key)) return null;
     const now = performance.now();
     const cooldownMs = Number.isFinite(options.cooldownMs) ? options.cooldownMs : 0;
     if (cooldownMs && now - (lastPlayedAt.get(key) || 0) < cooldownMs) return null;
-    if (key === 'player.pickup') {
-      lastPlayedAt.set(key, now);
-      return playSoftPickup(options);
-    }
     const src = choose(key);
     if (!src) return null;
     const audio = new Audio(src);
@@ -177,6 +156,7 @@
 
   function ensureLoop(key, volume) {
     if (!unlocked) return null;
+    if (Number.isFinite(volume)) loopVolumes.set(key, volume);
     let audio = loops.get(key);
     if (!audio) {
       const src = choose(key);
@@ -187,7 +167,7 @@
       loops.set(key, audio);
     }
     audio.volume = volumeFor(key, volume);
-    if (!muted && audio.paused) audio.play().catch(() => {});
+    if (!isKeyMuted(key) && audio.paused) audio.play().catch(() => {});
     return audio;
   }
 
@@ -197,6 +177,7 @@
     audio.pause();
     audio.currentTime = 0;
     loops.delete(key);
+    loopVolumes.delete(key);
   }
 
   function setLoopVolume(key, volume) {
@@ -226,17 +207,32 @@
   function unlock() {
     if (unlocked) return;
     unlocked = true;
-    ensureAudioContext();
     syncIslandAudio();
   }
 
-  function setMuted(value) {
-    muted = Boolean(value);
-    localStorage.setItem('audioMuted', muted ? '1' : '0');
+  function refreshLoopVolumes() {
     loops.forEach((audio, key) => {
-      audio.volume = muted ? 0 : volumeFor(key);
-      if (!muted && audio.paused) audio.play().catch(() => {});
+      audio.volume = volumeFor(key, loopVolumes.get(key));
+      if (!isKeyMuted(key) && audio.paused) audio.play().catch(() => {});
     });
+  }
+
+  function setMusicMuted(value) {
+    musicMuted = Boolean(value);
+    localStorage.setItem('musicMuted', musicMuted ? '1' : '0');
+    refreshLoopVolumes();
+  }
+
+  function setEffectsMuted(value) {
+    effectsMuted = Boolean(value);
+    localStorage.setItem('effectsMuted', effectsMuted ? '1' : '0');
+    localStorage.removeItem('audioMuted');
+    refreshLoopVolumes();
+  }
+
+  function setMuted(value) {
+    setMusicMuted(value);
+    setEffectsMuted(value);
   }
 
   function playBoatDeparture() {
@@ -276,6 +272,10 @@
     syncIslandAudio,
     playBoatDeparture,
     setMuted,
-    isMuted: () => muted,
+    setMusicMuted,
+    setEffectsMuted,
+    isMuted: () => musicMuted && effectsMuted,
+    isMusicMuted: () => musicMuted,
+    isEffectsMuted: () => effectsMuted,
   };
 })(window);

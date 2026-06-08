@@ -68,7 +68,6 @@
       url: './img/ui/arrow-up.png',
       fallback: svgDataUri(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
-          "<circle cx='32' cy='32' r='28' fill='#1ec971'/>" +
           "<path d='M32 14l16 18h-10v18h-12V32H16z' fill='#ffffff'/>" +
           '</svg>'
       ),

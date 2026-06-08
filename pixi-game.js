@@ -16,12 +16,21 @@
 
   const mount = document.getElementById('pixiMount');
   const shell = document.getElementById('gameShell');
+  const fpsCounter = document.getElementById('fpsCounter');
   const berriesConfig = window.BerriesConfig || { berries: [], getResourceWeight: () => 1 };
   const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
   const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
   const playSound = (key, options) => {
     if (window.VibeAudio) window.VibeAudio.play(key, options);
   };
+  function getGameDay() {
+    const stored = Math.floor(Number(localStorage.getItem('gameDay') || 0));
+    if (stored > 0) return stored;
+    return Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1));
+  }
+  function isFirstGameDay() {
+    return getGameDay() === 1 && Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1)) === 1;
+  }
 
   const DEFAULT_MAP_WIDTH = 25;
   const DEFAULT_MAP_HEIGHT = 25;
@@ -116,18 +125,21 @@
   const DIALOGUE_SPEAKER_KEY = 'scenarioDialogueSpeaker';
   const DIALOGUE_TEXT_TTL_MS = 15000;
   const ISLAND_RUN_KEY = 'islandRun';
+  const GAME_DAY_KEY = 'gameDay';
+  const BASE_LAND_CELLS_KEY = 'baseLandCellCount';
   const BOAT_REPAIRED_KEY = 'boatRepaired';
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
   const BOAT_REPAIR_COST = 20000;
   const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
   const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
   const SPECIAL_PROFIT_UPGRADES = [
-    { id: 'upgrade-sharp-sight', resourceIds: ['strawberry', 'blueberry', 'raspberry'], bonusPercent: 100 },
     { id: 'upgrade-mushroom-sense', resourceIds: ['champignon'], bonusPercent: 200 },
     { id: 'upgrade-digging-technique', resourceIds: ['potato'], bonusPercent: 200 },
     { id: 'upgrade-root-care', resourceIds: ['beet', 'radish'], bonusPercent: 150 },
     { id: 'upgrade-tomato-watering', resourceIds: ['tomato'], bonusPercent: 200 },
   ];
+  const STRAWBERRY_FERTILIZER_ID = 'upgrade-strawberry-fertilizer';
+  const SHARP_SIGHT_ID = 'upgrade-sharp-sight';
   const NEW_ISLAND_SIZE = 27;
   const NEW_ISLAND_MAP_SIZE = 37;
   const WATER_RIPPLE_PERIOD_MS = 1900;
@@ -158,7 +170,7 @@
   const HORIZON_WATER_GAP_CELLS = 2.8;
   const HORIZON_LINE_Y_RATIO = 0.67;
   const HORIZON_SIDE_PAD_MULT = 3.6;
-  const HORIZON_BOTTOM_FADE_RATIO = 0.34;
+  const HORIZON_BOTTOM_FADE_RATIO = 0.1;
   const HORIZON_MAX_HEIGHT = 190;
   const HORIZON_MIN_HEIGHT = 120;
   const HORIZON_TOP_OVERSCAN_PX = 2;
@@ -358,6 +370,9 @@
       './img/ui/inventory-bag.png',
       './img/ui/quest-journal.png',
       './img/ui/shine.png',
+      './img/intro/day-1-comic-plane.webp',
+      './img/intro/day-1-comic-exit.webp',
+      './img/intro/day-1-comic-parachute.webp',
     ].forEach((url) => urls.add(url));
     return Array.from(urls);
   }
@@ -415,6 +430,7 @@
     loadingScreen.classList.add('done');
     window.setTimeout(() => {
       loadingScreen.hidden = true;
+      window.dispatchEvent(new CustomEvent('vibe-game-ready'));
     }, 380);
   }
 
@@ -596,6 +612,10 @@
   heroLayer.zIndex = 7;
   const foregroundCloudShadowGraphics = new PIXI.Graphics();
   foregroundCloudShadowGraphics.zIndex = 7.8;
+  if (PIXI.BlurFilter) {
+    cloudShadowGraphics.filters = [new PIXI.BlurFilter(10, 2)];
+    foregroundCloudShadowGraphics.filters = [new PIXI.BlurFilter(10, 2)];
+  }
   const foregroundCloudLayer = new PIXI.Container();
   foregroundCloudLayer.zIndex = 8.2;
   foregroundCloudLayer.eventMode = 'none';
@@ -637,6 +657,16 @@
   }));
   transitionText.anchor.set(0.5);
   transitionText.zIndex = 31;
+  const transitionSubtitleText = new PIXI.Text('', new PIXI.TextStyle({
+    fontFamily: 'Segoe UI, system-ui, sans-serif',
+    fontSize: 16,
+    fontWeight: '700',
+    fill: 0xffffff,
+    align: 'center',
+  }));
+  transitionSubtitleText.anchor.set(0.5);
+  transitionSubtitleText.alpha = 0.74;
+  transitionSubtitleText.zIndex = 31;
   const cutsceneGraphics = new PIXI.Graphics();
   cutsceneGraphics.zIndex = 29;
   const cutsceneHeroContainer = new PIXI.Container();
@@ -647,7 +677,7 @@
   cutsceneBoatSprite.anchor.set(0.5);
   cutsceneBoatSprite.zIndex = 29.1;
   cutsceneBoatSprite.visible = false;
-  screenLayer.addChild(cutsceneGraphics, cutsceneHeroContainer, cutsceneBoatSprite, transitionGraphics, transitionText);
+  screenLayer.addChild(cutsceneGraphics, cutsceneHeroContainer, cutsceneBoatSprite, transitionGraphics, transitionSubtitleText, transitionText);
 
   let gameWidth = mount.clientWidth || window.innerWidth;
   let gameHeight = mount.clientHeight || window.innerHeight;
@@ -789,12 +819,12 @@
       horizonLeftEdgeSprite.y = y;
       horizonLeftEdgeSprite.width = sidePad;
       horizonLeftEdgeSprite.height = height;
-      horizonLeftEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
+      horizonLeftEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 1;
       horizonRightEdgeSprite.x = x + width;
       horizonRightEdgeSprite.y = y;
       horizonRightEdgeSprite.width = sidePad;
       horizonRightEdgeSprite.height = height;
-      horizonRightEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
+      horizonRightEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 1;
     }
 
     horizonFadeGraphics.clear();
@@ -802,7 +832,7 @@
     const steps = 18;
     for (let i = 0; i < steps; i += 1) {
       const t = i / Math.max(1, steps - 1);
-      const alpha = t * t * 0.98;
+      const alpha = t;
       horizonFadeGraphics.beginFill(SEA_COLOR, alpha);
       horizonFadeGraphics.drawRect(bx, fadeStart + (height - (fadeStart - y)) * (i / steps), bw, Math.ceil((height * HORIZON_BOTTOM_FADE_RATIO) / steps) + 1);
       horizonFadeGraphics.endFill();
@@ -835,7 +865,7 @@
     horizonSprite.y = topY;
     horizonSprite.width = width;
     horizonSprite.height = displayHeight;
-    horizonSprite.alpha = 0.88;
+    horizonSprite.alpha = 1;
     drawHorizonBackdrop(horizonSprite.x, horizonSprite.y, horizonSprite.width, horizonSprite.height);
     if (horizonFadeGraphics && horizonFadeGraphics.parent === horizonLayer) horizonLayer.setChildIndex(horizonFadeGraphics, horizonLayer.children.length - 1);
   }
@@ -1349,6 +1379,13 @@
         landSet.add(cellKey(x, y));
       });
     });
+    if (!Number(localStorage.getItem(BASE_LAND_CELLS_KEY))) {
+      const previousMap = safeJson('islandExpansionPreviousMap', []);
+      const previousLandCount = Array.isArray(previousMap)
+        ? previousMap.reduce((sum, row) => sum + (Array.isArray(row) ? row.filter(Boolean).length : 0), 0)
+        : 0;
+      localStorage.setItem(BASE_LAND_CELLS_KEY, String(Math.max(1, previousLandCount || land.length)));
+    }
     BUSH_DENSITY = land.length ? TARGET_BUSHES_AT_CURRENT_MAP / land.length : 0.05;
     MAX_UNPICKED_BUSHES = Math.max(1, Math.round(land.length * BUSH_DENSITY));
     islandBounds = getIslandBoundsPct(land, cellPct);
@@ -1569,11 +1606,29 @@
     }, 0);
   }
 
+  function getResourceGrowthSpeedMultiplier(user, resourceId) {
+    if (resourceId === 'strawberry' && user?.unlockedResources?.[STRAWBERRY_FERTILIZER_ID]) return 1.5;
+    return 1;
+  }
+
+  function getResourceYieldMultiplier(user, resourceId) {
+    if (resourceId === 'strawberry' && user?.unlockedResources?.[SHARP_SIGHT_ID]) return 1.5;
+    return 1;
+  }
+
+  function getTerritorySpawnMultiplier() {
+    const base = Math.max(1, Math.floor(Number(localStorage.getItem(BASE_LAND_CELLS_KEY)) || land.length || 1));
+    return Math.max(1, land.length / base);
+  }
+
   function getResourceUpgradeLevel(user, resourceId) {
     const upgrades = user && user.resourceUpgrades && typeof user.resourceUpgrades === 'object'
       ? user.resourceUpgrades
       : {};
-    return Math.min(RESOURCE_UPGRADE_MAX_LEVEL, Math.max(0, Math.floor(Number(upgrades[resourceId]) || 0)));
+    const maxLevel = isFirstGameDay() && resourceId === 'strawberry'
+      ? RESOURCE_UPGRADE_LEVELS_PER_STAR * 3
+      : RESOURCE_UPGRADE_MAX_LEVEL;
+    return Math.min(maxLevel, Math.max(0, Math.floor(Number(upgrades[resourceId]) || 0)));
   }
 
   function getResourceUpgradeMultiplierAtLevel(level) {
@@ -1628,6 +1683,7 @@
     if (!BERRIES_LIST.length) {
       return { id: 'fallback', titleRu: 'Berry', widthPx: 24, heightPx: 24, primitive: { base: '#e11', highlight: 'rgba(255,255,255,0.6)' } };
     }
+    if (isFirstGameDay()) return BERRIES_LIST.find((def) => def.id === 'strawberry') || BERRIES_LIST[0];
     const unlocked = new Set(getUnlockedResourceIds());
     const hasSurface = (def) => !land.length || land.some((cell) => canSpawnResourceOnCell(def, cell.x, cell.y));
     const available = BERRIES_LIST.filter((def) => (unlocked.has(def.id) || isBiomeOnlyResource(def)) && hasSurface(def));
@@ -2034,6 +2090,7 @@
 
   function shouldRenderScenarioState(state, def) {
     if (!state || !def) return false;
+    if (isFirstGameDay()) return false;
     if (!scenarioRequirementMet(def)) return false;
     if (state.hidden) return false;
     return !state.triggered || def.persistentAfterTrigger;
@@ -2211,7 +2268,7 @@
     persistOpenedIds();
     persistScenarioState();
     rebuildScenarioColliderCells();
-    playSound('world.scenarioOpen', { volume: 0.3 });
+    playSound(getScenarioDropRules(def).length ? 'world.scenarioBreak' : 'world.scenarioOpen', { volume: 0.22 });
     if (state.id === 'lighthouse' && state.transformed) {
       playSound('world.lighthouseStart', { volume: 0.36 });
       setTimeout(() => playSound('world.lighthouseBlink', { volume: 0.28 }), 420);
@@ -2779,9 +2836,11 @@
 
   function resetProgressForNextIsland() {
     localStorage.setItem(ISLAND_RUN_KEY, '2');
+    localStorage.setItem(GAME_DAY_KEY, String(getGameDay() + 1));
     localStorage.setItem('map', JSON.stringify(createSmallIslandMap()));
     localStorage.setItem('baseGridW', String(DEFAULT_MAP_WIDTH));
     localStorage.setItem('islandExpansionLevel', '0');
+    localStorage.removeItem(BASE_LAND_CELLS_KEY);
     localStorage.setItem('mapShift', JSON.stringify({ x: 0, y: 0 }));
     localStorage.removeItem('islandExpansionAt');
     localStorage.removeItem('islandExpansionPreviousMap');
@@ -2945,6 +3004,7 @@
     cutsceneGraphics.clear();
     transitionGraphics.clear();
     transitionText.text = '';
+    transitionSubtitleText.text = '';
     cutsceneHeroContainer.visible = false;
     cutsceneBoatSprite.visible = false;
     if (!boatCutscene) return;
@@ -2959,9 +3019,12 @@
       transitionGraphics.endFill();
     }
     if (boatCutscene.phase === 'timeText') {
-      transitionText.text = '8 часов спустя';
+      transitionSubtitleText.text = 'прошло 8 часов';
+      transitionSubtitleText.x = gameWidth / 2;
+      transitionSubtitleText.y = gameHeight / 2 - 25;
+      transitionText.text = `День ${getGameDay()}`;
       transitionText.x = gameWidth / 2;
-      transitionText.y = gameHeight / 2;
+      transitionText.y = gameHeight / 2 + 13;
     }
   }
 
@@ -3609,11 +3672,12 @@
     }
   }
 
-  function updateBush(b) {
+  function updateBush(b, user = getUserState()) {
     const now = performance.now();
+    const growthSpeed = getResourceGrowthSpeedMultiplier(user, b.berryDef && b.berryDef.id);
     updateWoodChips(b, now);
     if (b.stage === 'growing') {
-      b.scale = outBack(clamp((now - b.t0) / BUSH_GROW_MS, 0, 1));
+      b.scale = outBack(clamp((now - b.t0) / (BUSH_GROW_MS / growthSpeed), 0, 1));
       if (b.scale >= 1) {
         b.stage = 'ripe';
         if (isExtractable(b.berryDef)) {
@@ -3621,7 +3685,7 @@
           b.harvestStart = 0;
           return;
         }
-        const n = rndi(...BERRIES_MIN_MAX);
+        const n = Math.max(1, Math.round(rndi(...BERRIES_MIN_MAX) * getResourceYieldMultiplier(user, b.berryDef && b.berryDef.id)));
         if (!b.berryDef) b.berryDef = pickBerryDef();
         const bushType = b.berryDef && b.berryDef.bushType;
         for (let i = 0; i < n; i += 1) {
@@ -3660,7 +3724,7 @@
         }
         return;
       }
-      b.berries.forEach((be) => { be.scale = clamp((now - be.t0) / BERRIES_GROW_MS, 0, 1); });
+      b.berries.forEach((be) => { be.scale = clamp((now - be.t0) / (BERRIES_GROW_MS / growthSpeed), 0, 1); });
       const h = getHero();
       const dist = Math.hypot(pct2px(h.charXPct - b.xPct), pct2px(h.charYPct - b.yPct));
       const touch = bushTouchesHero(b.xPct, b.yPct, h.charXPct, h.charYPct, BUSH_R_PCT);
@@ -3731,7 +3795,7 @@
     if (!be || !be.alive) return;
     be.alive = false;
     be.stage = 'done';
-    playSound('player.pickup', { volume: 0.22, cooldownMs: 65 });
+    if (!be.pickupSoundStarted) playSound('player.pickup', { volume: 0.12, cooldownMs: 65 });
     if (isInventoryDropDef(be.def)) {
       collectInventoryDrop(be.def);
       return;
@@ -3769,8 +3833,8 @@
     drop.stage = 'finding';
     persistScenarioDrops();
     localStorage.setItem(PENDING_FOUND_ITEM_KEY, JSON.stringify(detail));
-    playSound('player.pickupRare', { volume: 0.34 });
-    playSound('music.discovery', { volume: 0.26 });
+    playSound('player.pickupRare', { volume: 0.18 });
+    playSound('music.discovery', { volume: 0.2 });
     window.dispatchEvent(new CustomEvent('vibe-found-item', { detail }));
   }
 
@@ -3892,7 +3956,16 @@
     const ux = be.xPct - hxPct;
     const uy = be.yPct - hyPct;
     const len = Math.hypot(ux, uy) || 1;
-    Object.assign(be, { ux: ux / len, uy: uy / len, stage: 'collectOut', tPick0: now, x0: be.xPct, y0: be.yPct });
+    playSound('player.pickup', { volume: 0.12, cooldownMs: 65 });
+    Object.assign(be, {
+      ux: ux / len,
+      uy: uy / len,
+      stage: 'collectOut',
+      tPick0: now,
+      x0: be.xPct,
+      y0: be.yPct,
+      pickupSoundStarted: true,
+    });
   }
 
   function drawMushroomPrimitive(g, x, y, w, h, primitive) {
@@ -4583,7 +4656,7 @@
   }
 
   function isUiOpen() {
-    return Boolean(boatCutscene || document.querySelector('.panel-overlay.open,.shop-panel.open,.resource-upgrade-panel.open,.idle-panel.open,.finding-overlay.open'));
+    return Boolean(boatCutscene || document.querySelector('.intro-comic:not([hidden]),.day-title-overlay.open,.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open'));
   }
 
   function onPointerDown(event) {
@@ -4806,7 +4879,7 @@
     const now = performance.now();
     if ((movedX || movedY) && now - lastFootstepAt >= 310) {
       lastFootstepAt = now;
-      playSound('player.footstep', { volume: 0.07 });
+      playSound('player.footstep', { volume: 0.03 });
     }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
     updateCameraToHero();
@@ -5379,14 +5452,23 @@
   }
 
   let spawnAccumulator = 0;
+  let fpsElapsed = 0;
+  let fpsFrames = 0;
   function frame(deltaMS) {
     const now = performance.now();
+    fpsElapsed += deltaMS;
+    fpsFrames += 1;
+    if (fpsCounter && fpsElapsed >= 350) {
+      fpsCounter.textContent = `${Math.round(fpsFrames * 1000 / fpsElapsed)} FPS`;
+      fpsElapsed = 0;
+      fpsFrames = 0;
+    }
     updateSpatialAudio(now);
     updateExpansionAnimation(now);
     consumeBoatRepairRequest();
     updateBoatCutscene(now);
     updateHeroLogic(deltaMS);
-    if (!boatCutscene) {
+    if (!boatCutscene && !isFirstGameDay()) {
       spawnScenarioLand();
       updateDialogue(now);
       checkScenarioTriggers();
@@ -5395,7 +5477,7 @@
 
     if (!boatCutscene) {
       spawnAccumulator += deltaMS;
-      if (spawnAccumulator >= SPAWN_MS) {
+      if (spawnAccumulator >= SPAWN_MS / getTerritorySpawnMultiplier()) {
         spawnAccumulator = 0;
         const unpicked = bushes.filter((b) => b.stage === 'growing' || b.stage === 'ripe').length;
         if (land.length && unpicked < MAX_UNPICKED_BUSHES) spawnBush(pickBerryDef());
@@ -5403,8 +5485,9 @@
     }
 
     if (!boatCutscene) {
+      const frameUser = getUserState();
       bushes.forEach((b) => {
-        if (b.stage !== 'dead') updateBush(b);
+        if (b.stage !== 'dead') updateBush(b, frameUser);
       });
       for (let i = bushes.length - 1; i >= 0; i -= 1) {
         if (bushes[i].stage !== 'dead') continue;
