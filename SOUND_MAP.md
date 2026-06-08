@@ -6,8 +6,8 @@
 
 | Файл | Где играет | Требования |
 |---|---|---|
-| `audio/music/main-theme.ogg` | Основной игровой экран, первый остров | Спокойная запоминающаяся тема, 90-150 секунд, бесшовная петля |
-| `audio/music/island-2-theme.ogg` | Второй остров | Вариация основной темы с более вечерним и сюжетным настроением |
+| `audio/music/main-theme.mp3` | Основной игровой экран, первый остров | Спокойная запоминающаяся тема, 90-150 секунд, бесшовная петля |
+| `audio/music/island-2-theme.mp3` | Второй остров | Вариация основной темы с более вечерним и сюжетным настроением |
 | `audio/music/boat-cutscene.ogg` | Катсцена отплытия | Короткий переход 8-15 секунд, без петли |
 | `audio/music/discovery-sting.ogg` | Важная сюжетная находка или открытие острова | Короткая музыкальная отбивка 2-4 секунды |
 
@@ -15,7 +15,7 @@
 
 | Файл | Где играет | Требования |
 |---|---|---|
-| `audio/ambience/ocean-loop.ogg` | Постоянный фон у острова | Мягкий океан, бесшовная петля |
+| `audio/ambience/ocean-loop.mp3` | Постоянный фон у острова | Мягкий океан, бесшовная петля |
 | `audio/ambience/island-loop.ogg` | На острове | Листья, редкие птицы, легкий ветер |
 | `audio/ambience/island-2-night-loop.ogg` | Второй остров | Тихий вечерний ветер и редкие ночные звуки |
 | `audio/ambience/campfire-loop.ogg` | Рядом с костром | Треск огня, бесшовная петля с затуханием по расстоянию |
@@ -87,8 +87,8 @@
 
 | Файл | Вариант 1 | Вариант 2 |
 |---|---|---|
-| `audio/music/main-theme.ogg` | [Calm gaming](https://pixabay.com/music/search/calm%20gaming/) | [Island music](https://pixabay.com/music/search/island/) |
-| `audio/music/island-2-theme.ogg` | [Sunset ambient](https://pixabay.com/music/search/sunset%20ambient/) | [Emotional island](https://pixabay.com/music/search/emotional%20island/) |
+| `audio/music/main-theme.mp3` | [Calm gaming](https://pixabay.com/music/search/calm%20gaming/) | [Island music](https://pixabay.com/music/search/island/) |
+| `audio/music/island-2-theme.mp3` | [Sunset ambient](https://pixabay.com/music/search/sunset%20ambient/) | [Emotional island](https://pixabay.com/music/search/emotional%20island/) |
 | `audio/music/boat-cutscene.ogg` | [Cinematic transition](https://pixabay.com/music/search/cinematic%20transition/) | [Short adventure](https://pixabay.com/music/search/short%20adventure/) |
 | `audio/music/discovery-sting.ogg` | [Discovery](https://pixabay.com/music/search/discovery/) | [Achievement](https://pixabay.com/music/search/achievement/) |
 
@@ -96,7 +96,7 @@
 
 | Файл | Вариант 1 | Вариант 2 |
 |---|---|---|
-| `audio/ambience/ocean-loop.ogg` | [Ocean waves loop](https://pixabay.com/sound-effects/search/ocean%20waves%20loop/) | [Calm ocean](https://pixabay.com/sound-effects/search/calm%20ocean/) |
+| `audio/ambience/ocean-loop.mp3` | [Ocean waves loop](https://pixabay.com/sound-effects/search/ocean%20waves%20loop/) | [Calm ocean](https://pixabay.com/sound-effects/search/calm%20ocean/) |
 | `audio/ambience/island-loop.ogg` | [Tropical ambience](https://pixabay.com/sound-effects/search/tropical%20ambience/) | [Birds and wind](https://pixabay.com/sound-effects/search/birds%20wind%20ambience/) |
 | `audio/ambience/island-2-night-loop.ogg` | [Night ambience](https://pixabay.com/sound-effects/search/night%20ambience/) | [Night wind](https://pixabay.com/sound-effects/search/night%20wind/) |
 | `audio/ambience/campfire-loop.ogg` | [Fireplace loop](https://pixabay.com/sound-effects/search/fireplace%20loop/) | [Campfire ambience](https://pixabay.com/sound-effects/search/campfire%20ambience/) |

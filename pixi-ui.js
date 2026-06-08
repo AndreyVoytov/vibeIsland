@@ -4,6 +4,9 @@
   const buildingConfig = window.BuildingsConfig || { buildings: [] };
   const enlargeConfig = window.EnlargeConfig || { expansions: [] };
   const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
+  const playSound = (key, options) => {
+    if (window.VibeAudio) window.VibeAudio.play(key, options);
+  };
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
   const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
   const DEFAULT_ISLAND_METERS = 18;
@@ -652,6 +655,7 @@
       const nextLevel = Number.isFinite(expansionLevel) ? Math.max(0, Math.floor(expansionLevel) + 1) : 1;
       localStorage.setItem('islandExpansionLevel', String(nextLevel));
       localStorage.setItem('islandExpansionAt', String(Date.now()));
+      playSound('world.islandExpand', { volume: 0.34 });
       window.dispatchEvent(new CustomEvent('vibe-map-changed'));
     },
   }));
@@ -999,7 +1003,10 @@
     if (latest.unlockedResources[res.id]) return false;
     const lockInfo = getResourceLockInfo(res, latest);
     if (lockInfo.expansionLocked) return false;
-    if (latest.money < res.unlockCost) return false;
+    if (latest.money < res.unlockCost) {
+      playSound('ui.notEnoughMoney', { volume: 0.28, cooldownMs: 250 });
+      return false;
+    }
     latest.money -= res.unlockCost;
     latest.unlockedResources[res.id] = true;
     setUserState(latest);
@@ -1011,6 +1018,8 @@
       if (isExpansion) setTimeout(() => res.onUnlock(), EXPANSION_DELAY_MS);
       else res.onUnlock();
     }
+    playSound('ui.purchase', { volume: 0.27 });
+    if (!isExpansion && !isBoatRepair) playSound('world.resourceUnlock', { volume: 0.24 });
     renderResources();
     return true;
   }
@@ -1209,6 +1218,7 @@
     syncPanelOverlay();
     renderFarmResourceStrip();
     if (open) renderResourceUpgradePanel();
+    playSound(open ? 'ui.panelOpen' : 'ui.panelClose', { volume: 0.2, cooldownMs: 80 });
   }
 
   function buyResourceUpgrade() {
@@ -1224,6 +1234,7 @@
     setUserState(user);
     renderResources();
     renderResourceUpgradePanel(user);
+    playSound((level + 1) % RESOURCE_UPGRADE_LEVELS_PER_STAR === 0 ? 'ui.starEarned' : 'ui.resourceUpgrade', { volume: 0.3 });
     window.dispatchEvent(new CustomEvent('vibe-resource-upgraded', { detail: { id: resource.id, level: level + 1 } }));
   }
 
@@ -1337,6 +1348,7 @@
       renderResources();
       renderInventory();
       renderQuestLine();
+      playSound('ui.questReward', { volume: 0.32 });
       return;
     }
     applyQuestReward(user, quest.reward);
@@ -1346,6 +1358,7 @@
     renderResources();
     renderInventory();
     renderQuestLine();
+    playSound('ui.questReward', { volume: 0.32 });
   }
 
   function renderQuestLine() {
@@ -1782,6 +1795,7 @@
     inventoryPanel.setAttribute('aria-hidden', String(!open));
     syncPanelOverlay();
     if (open) renderInventory();
+    playSound(open ? 'ui.panelOpen' : 'ui.panelClose', { volume: 0.2, cooldownMs: 80 });
   }
 
   function focusCheapestLocked() {
@@ -1815,6 +1829,7 @@
       renderResources();
       requestAnimationFrame(focusCheapestLocked);
     }
+    playSound(open ? 'ui.panelOpen' : 'ui.panelClose', { volume: 0.2, cooldownMs: 80 });
   }
 
   shopButton.addEventListener('click', () => togglePanel());

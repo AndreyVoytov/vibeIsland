@@ -1666,6 +1666,44 @@
     .shop-button{left:auto;right:12px;}
     .inventory-button{left:12px;}
     .shop-button img,.inventory-button img{width:34px;height:34px;}
+    @media (min-width:601px){
+      #uiRoot{
+        --desktop-ui-edge:max(0px, calc((100vw - 500px) / 2));
+      }
+      .profile-panel{
+        left:calc(var(--desktop-ui-edge) + 10px);
+      }
+      .wallet-row{
+        right:calc(var(--desktop-ui-edge) + 10px);
+      }
+      .quest-strip{
+        left:calc(var(--desktop-ui-edge) + 10px);
+        right:calc(var(--desktop-ui-edge) + 10px);
+      }
+      .quest-card{
+        width:min(480px, calc(100% - 20px));
+      }
+      .quest-card.finished{
+        width:min(480px, calc(100% - 20px));
+      }
+      .quest-toggle{
+        right:var(--desktop-ui-edge);
+      }
+      .farm-resource-strip{
+        left:calc(var(--desktop-ui-edge) + 6px);
+        right:calc(var(--desktop-ui-edge) + 6px);
+      }
+      #uiRoot::after{
+        left:var(--desktop-ui-edge);
+        right:var(--desktop-ui-edge);
+      }
+      .shop-button{
+        right:calc(var(--desktop-ui-edge) + 12px);
+      }
+      .inventory-button{
+        left:calc(var(--desktop-ui-edge) + 12px);
+      }
+    }
   </style>
 </head>
 <body>
@@ -1808,7 +1846,8 @@
   <script src="./scenario-objects-config.js?v=20260608-survivor-dialogue"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260608-full-desktop-width"></script>
-  <script src="./pixi-ui.js?v=20260608-island-day-label"></script>
+  <script src="./audio-manager.js?v=20260608-audio-integration"></script>
+  <script src="./pixi-game.js?v=20260608-audio-events"></script>
+  <script src="./pixi-ui.js?v=20260608-audio-events"></script>
 </body>
 </html>

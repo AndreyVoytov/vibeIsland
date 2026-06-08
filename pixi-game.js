@@ -19,6 +19,9 @@
   const berriesConfig = window.BerriesConfig || { berries: [], getResourceWeight: () => 1 };
   const buildingsConfig = window.BuildingsConfig || { buildings: [], getBuildingLayout: () => [] };
   const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
+  const playSound = (key, options) => {
+    if (window.VibeAudio) window.VibeAudio.play(key, options);
+  };
 
   const DEFAULT_MAP_WIDTH = 25;
   const DEFAULT_MAP_HEIGHT = 25;
@@ -670,6 +673,8 @@
   let nextWaterBurstDelay = 0;
   let islandRenderVisibility = null;
   let lastExpansionIslandRedraw = 0;
+  let lastFootstepAt = 0;
+  let lastSpatialAudioAt = 0;
   let horizonSprite = null;
   let horizonBackdropGraphics = null;
   let horizonTopFillGraphics = null;
@@ -2205,6 +2210,15 @@
     persistOpenedIds();
     persistScenarioState();
     rebuildScenarioColliderCells();
+    playSound('world.scenarioOpen', { volume: 0.3 });
+    if (state.id === 'lighthouse' && state.transformed) {
+      playSound('world.lighthouseStart', { volume: 0.36 });
+      setTimeout(() => playSound('world.lighthouseBlink', { volume: 0.28 }), 420);
+      setTimeout(() => playSound('world.lighthouseBlink', { volume: 0.28 }), 850);
+    }
+    if (state.id === 'broken-boat' && Math.max(1, Number(localStorage.getItem(ISLAND_RUN_KEY) || 1)) >= 2) {
+      playSound('boat.noFuel', { volume: 0.3 });
+    }
     startDialogue(def.dialog || [], def.dialogSpeaker === 'self' ? state.id : '');
     return true;
   }
@@ -2841,6 +2855,7 @@
     controllerState.vxPct = 0;
     controllerState.vyPct = 0;
     saveController();
+    if (window.VibeAudio) window.VibeAudio.playBoatDeparture();
   }
 
   function consumeBoatRepairRequest() {
@@ -3498,6 +3513,8 @@
   function spawnResourceBurst(b, now) {
     if (!b || b.resourceBurstSpawned) return;
     b.resourceBurstSpawned = true;
+    playSound('player.axeHitBush', { volume: 0.25, cooldownMs: 120 });
+    playSound('player.leavesBurst', { volume: 0.22, cooldownMs: 120 });
     const visual = getBushVisualDef(b);
     const colors = getResourceBurstColors(b, visual);
     for (let i = 0; i < RESOURCE_BURST_COUNT; i += 1) {
@@ -3564,6 +3581,7 @@
     activeChopTargetUid = b.uid;
     b.chopSwingAt = now;
     b.chopStrikeDone = false;
+    playSound('player.axeSwing', { volume: 0.24, cooldownMs: 180 });
     localStorage.setItem('heroAction', JSON.stringify({ chopAt: now, targetUid: b.uid }));
   }
 
@@ -3574,9 +3592,11 @@
     const stages = getExtractStages(b.berryDef);
     const nextStage = (typeof b.extractStage === 'number' ? b.extractStage : 0) + 1;
     const willFinish = nextStage >= stages.length;
+    playSound('player.axeHitTree', { volume: 0.3, cooldownMs: 140 });
     spawnRareDrops(b, now, avoidSet, willFinish ? 'final' : 'hit');
     b.extractStage = nextStage;
     if (b.extractStage >= stages.length) {
+      if (isTreeDef(b.berryDef)) playSound('player.treeFall', { volume: 0.34 });
       awardChopExperience(b);
       b.stage = 'exploded';
       if (isTreeDef(b.berryDef)) b.shadowFadeUntil = now + TREE_SHADOW_FADE_MS;
@@ -3711,6 +3731,7 @@
     if (!be || !be.alive) return;
     be.alive = false;
     be.stage = 'done';
+    playSound('player.pickup', { volume: 0.22, cooldownMs: 65 });
     if (isInventoryDropDef(be.def)) {
       collectInventoryDrop(be.def);
       return;
@@ -3748,6 +3769,8 @@
     drop.stage = 'finding';
     persistScenarioDrops();
     localStorage.setItem(PENDING_FOUND_ITEM_KEY, JSON.stringify(detail));
+    playSound('player.pickupRare', { volume: 0.34 });
+    playSound('music.discovery', { volume: 0.26 });
     window.dispatchEvent(new CustomEvent('vibe-found-item', { detail }));
   }
 
@@ -4780,6 +4803,11 @@
       }
     }
     if (Math.abs(vx) > 0.001) facing = vx > 0 ? 1 : -1;
+    const now = performance.now();
+    if ((movedX || movedY) && now - lastFootstepAt >= 310) {
+      lastFootstepAt = now;
+      playSound('player.footstep', { volume: 0.18 });
+    }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
     updateCameraToHero();
   }
@@ -5106,6 +5134,25 @@
       rotation: sprite.rotation,
       spin: rnd(-0.08, 0.08),
     });
+    playSound('water.burst', { volume: 0.13, cooldownMs: 800 });
+  }
+
+  function updateSpatialAudio(now) {
+    if (!window.VibeAudio || !cellPct || now - lastSpatialAudioAt < 250) return;
+    lastSpatialAudioAt = now;
+    const heroGX = charXPct / cellPct;
+    const heroGY = charYPct / cellPct;
+    if (campfireCenter) {
+      const distance = Math.hypot(heroGX - (campfireCenter.x + 0.5), heroGY - (campfireCenter.y + 0.5));
+      window.VibeAudio.setLoopVolume('ambience.campfire', Math.max(0, 1 - distance / 8) * 0.22);
+    }
+    const lighthouse = scenarioState.find((state) => state.id === 'lighthouse' && state.transformed);
+    if (lighthouse) {
+      const distance = Math.hypot(heroGX - (lighthouse.gridX + 0.5), heroGY - (lighthouse.gridY + 0.5));
+      window.VibeAudio.setLoopVolume('ambience.lighthouse', Math.max(0, 1 - distance / 10) * 0.12);
+    } else {
+      window.VibeAudio.stopLoop('ambience.lighthouse');
+    }
   }
 
   function updateWaterBursts(now, deltaMS) {
@@ -5338,6 +5385,7 @@
   let spawnAccumulator = 0;
   function frame(deltaMS) {
     const now = performance.now();
+    updateSpatialAudio(now);
     updateExpansionAnimation(now);
     consumeBoatRepairRequest();
     updateBoatCutscene(now);
