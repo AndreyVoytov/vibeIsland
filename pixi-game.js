@@ -613,8 +613,8 @@
   const foregroundCloudShadowGraphics = new PIXI.Graphics();
   foregroundCloudShadowGraphics.zIndex = 7.8;
   if (PIXI.BlurFilter) {
-    cloudShadowGraphics.filters = [new PIXI.BlurFilter(10, 2)];
-    foregroundCloudShadowGraphics.filters = [new PIXI.BlurFilter(10, 2)];
+    cloudShadowGraphics.filters = [new PIXI.BlurFilter(6, 2)];
+    foregroundCloudShadowGraphics.filters = [new PIXI.BlurFilter(6, 2)];
   }
   const foregroundCloudLayer = new PIXI.Container();
   foregroundCloudLayer.zIndex = 8.2;
@@ -2090,7 +2090,7 @@
 
   function shouldRenderScenarioState(state, def) {
     if (!state || !def) return false;
-    if (isFirstGameDay()) return false;
+    if (isFirstGameDay() && state.id !== 'lighthouse' && state.id !== 'broken-boat') return false;
     if (!scenarioRequirementMet(def)) return false;
     if (state.hidden) return false;
     return !state.triggered || def.persistentAfterTrigger;
@@ -3795,7 +3795,7 @@
     if (!be || !be.alive) return;
     be.alive = false;
     be.stage = 'done';
-    if (!be.pickupSoundStarted) playSound('player.pickup', { volume: 0.12, cooldownMs: 65 });
+    if (!be.pickupSoundStarted) playSound('player.pickup', { volume: 0.03, cooldownMs: 65 });
     if (isInventoryDropDef(be.def)) {
       collectInventoryDrop(be.def);
       return;
@@ -3956,7 +3956,7 @@
     const ux = be.xPct - hxPct;
     const uy = be.yPct - hyPct;
     const len = Math.hypot(ux, uy) || 1;
-    playSound('player.pickup', { volume: 0.12, cooldownMs: 65 });
+    playSound('player.pickup', { volume: 0.03, cooldownMs: 65 });
     Object.assign(be, {
       ux: ux / len,
       uy: uy / len,

@@ -73,23 +73,48 @@
     .intro-comic[hidden]{display:none;}
     .intro-comic-panels{
       width:min(100%,540px);
-      height:100%;
+      height:calc(100% - 70px);
+      align-self:flex-start;
       display:grid;
       grid-template-rows:repeat(3,minmax(0,1fr));
-      gap:5px;
+      gap:0;
       background:#fff;
       transition:opacity 0.45s ease;
     }
     .intro-comic-panel{
       width:100%;
-      height:100%;
+      height:calc(100% + 12px);
       object-fit:cover;
       opacity:0;
       transform:scale(1.045);
       transition:opacity 0.42s ease,transform 0.7s ease;
     }
+    .intro-comic-panel:nth-child(1){clip-path:polygon(0 0,100% 0,100% 94%,0 100%);}
+    .intro-comic-panel:nth-child(2){clip-path:polygon(0 6%,100% 0,100% 94%,0 100%);}
+    .intro-comic-panel:nth-child(3){clip-path:polygon(0 6%,100% 0,100% 100%,0 100%);}
     .intro-comic-panel.visible{opacity:1;transform:scale(1);}
     .intro-comic.finishing .intro-comic-panels{opacity:0;}
+    .intro-comic-continue{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:70px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#000;
+      color:#ffd642;
+      font-size:15px;
+      font-weight:900;
+      letter-spacing:0.02em;
+      text-align:center;
+      opacity:0;
+      transform:translateY(8px);
+      transition:opacity 0.35s ease,transform 0.35s ease;
+    }
+    .intro-comic.ready .intro-comic-continue{opacity:1;transform:none;}
+    .intro-comic.finishing .intro-comic-continue{opacity:0;}
     .day-title-overlay{
       position:absolute;
       inset:0;
@@ -116,6 +141,101 @@
       font-size:clamp(38px,12vw,72px);
       font-weight:900;
       letter-spacing:0.025em;
+    }
+    .movement-hint{
+      position:absolute;
+      inset:0;
+      z-index:40;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding-top:min(30vh,240px);
+      box-sizing:border-box;
+      pointer-events:none;
+      opacity:1;
+      transition:opacity 0.22s ease;
+    }
+    .movement-hint[hidden],
+    .strawberry-upgrade-hint[hidden]{display:none;}
+    .movement-hint.hiding{opacity:0;}
+    .movement-hint-gesture{
+      position:relative;
+      width:260px;
+      height:130px;
+      filter:drop-shadow(0 3px 2px rgba(16,49,76,0.42));
+    }
+    .movement-hint-path{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      overflow:visible;
+    }
+    .movement-hint-path path{
+      fill:none;
+      stroke:rgba(255,255,255,0.96);
+      stroke-width:15;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+    .tutorial-hand{
+      width:58px;
+      height:58px;
+      overflow:visible;
+      filter:drop-shadow(0 3px 2px rgba(16,49,76,0.5));
+    }
+    .movement-hint-hand{
+      position:absolute;
+      left:0;
+      top:0;
+      width:58px;
+      height:58px;
+      animation:tutorial-figure-eight 2.8s linear infinite;
+    }
+    .movement-hint-hand .tutorial-hand{transform:rotate(24deg);}
+    .movement-hint-label{
+      margin-top:4px;
+      padding:10px 18px 12px;
+      border:3px solid #c5965f;
+      border-radius:16px;
+      background:#fff1df;
+      box-shadow:0 6px 0 rgba(86,46,0,0.3),0 12px 24px rgba(0,0,0,0.25);
+      color:#5b3c29;
+      font-size:16px;
+      line-height:1.1;
+      font-weight:900;
+      text-align:center;
+    }
+    .strawberry-upgrade-hint{
+      position:absolute;
+      left:0;
+      top:0;
+      z-index:41;
+      width:64px;
+      height:68px;
+      pointer-events:none;
+      animation:tutorial-point-down 0.85s ease-in-out infinite;
+    }
+    .strawberry-upgrade-hint .tutorial-hand{
+      width:64px;
+      height:64px;
+      transform:rotate(180deg);
+    }
+    @keyframes tutorial-figure-eight{
+      0%{transform:translate(0,36px) rotate(-12deg);}
+      12.5%{transform:translate(42px,0) rotate(2deg);}
+      25%{transform:translate(101px,36px) rotate(13deg);}
+      37.5%{transform:translate(160px,72px) rotate(2deg);}
+      50%{transform:translate(202px,36px) rotate(-12deg);}
+      62.5%{transform:translate(160px,0) rotate(-25deg);}
+      75%{transform:translate(101px,36px) rotate(-12deg);}
+      87.5%{transform:translate(42px,72px) rotate(2deg);}
+      100%{transform:translate(0,36px) rotate(-12deg);}
+    }
+    @keyframes tutorial-point-down{
+      0%,100%{transform:translateY(-7px);}
+      50%{transform:translateY(3px);}
     }
     .loading-panel{
       width:min(280px, calc(100% - 48px));
@@ -739,14 +859,14 @@
       position:absolute;
       left:50%;
       width:var(--farm-resource-strip-width,calc(100% - 12px));
-      bottom:87px;
-      height:78px;
+      bottom:4px;
+      height:86px;
       display:grid;
       grid-template-columns:repeat(var(--farm-resource-columns, 8), minmax(0, 1fr));
       align-items:end;
       gap:3px;
-      overflow:hidden;
-      padding:0 0 5px;
+      overflow:visible;
+      padding:8px 0 5px;
       box-sizing:border-box;
       pointer-events:none;
       z-index:6;
@@ -756,15 +876,15 @@
       position:relative;
       min-width:0;
       width:100%;
-      height:68px;
-      padding:3px 1px 7px;
+      height:76px;
+      padding:3px 1px 8px;
       border:2px solid #0c4d7e;
       border-radius:9px;
       background:linear-gradient(180deg,#2aaee2,#1577b5);
       box-shadow:0 3px 0 #0c4d7e,0 5px 8px rgba(0,0,0,0.22);
       color:#fff;
       display:grid;
-      grid-template-rows:36px 10px 10px;
+      grid-template-rows:43px 14px 12px;
       place-items:center;
       cursor:pointer;
       pointer-events:auto;
@@ -783,33 +903,9 @@
       filter:none;
       opacity:1;
     }
-    .farm-resource-card.can-upgrade::after{
-      content:"";
-      position:absolute;
-      top:-7px;
-      right:-6px;
-      width:20px;
-      height:20px;
-      border-radius:50%;
-      background:#f01e2d;
-      box-shadow:0 2px 0 #ac1420,0 2px 5px rgba(0,0,0,0.38);
-      animation:upgrade-attention 4.2s ease-in-out infinite;
-    }
-    .farm-resource-card.can-upgrade::before{
-      content:"";
-      position:absolute;
-      top:-4px;
-      right:-1px;
-      width:11px;
-      height:14px;
-      background:#fff;
-      clip-path:polygon(50% 0,100% 42%,70% 42%,70% 100%,30% 100%,30% 42%,0 42%);
-      z-index:2;
-      animation:upgrade-attention 4.2s ease-in-out infinite;
-    }
     .farm-resource-card img{
-      width:clamp(28px, 8vw, 36px);
-      height:clamp(28px, 8vw, 36px);
+      width:clamp(35px, 10vw, 45px);
+      height:clamp(35px, 10vw, 45px);
       object-fit:contain;
       filter:drop-shadow(0 2px 2px rgba(0,0,0,0.32));
     }
@@ -817,9 +913,9 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      gap:1px;
+      gap:3px;
       max-width:100%;
-      font-size:9px;
+      font-size:11px;
       line-height:1;
       font-weight:900;
       overflow:hidden;
@@ -828,8 +924,8 @@
     }
     .farm-resource-price::before{
       content:"";
-      width:7px;
-      height:7px;
+      width:14px;
+      height:14px;
       border-radius:50%;
       background:linear-gradient(135deg,#fff074,#e1a916);
       box-shadow:inset 0 0 0 1px #bd7e0e;
@@ -841,7 +937,7 @@
       align-items:center;
       justify-content:center;
       color:#ffd642;
-      font-size:clamp(6px, 1.8vw, 8px);
+      font-size:clamp(12px, 3.6vw, 16px);
       line-height:1;
       letter-spacing:-0.5px;
       overflow:hidden;
@@ -881,16 +977,24 @@
       align-items:center;
       justify-content:center;
       box-shadow:0 2px 0 #ac1420,0 0 0 2px rgba(0,0,0,0.52);
+      z-index:3;
+      pointer-events:none;
       animation:upgrade-attention 4.2s ease-in-out infinite;
     }
-    .upgrade-marker img{width:14px;height:14px;filter:brightness(0) invert(1);}
+    .upgrade-marker::before{
+      content:"";
+      width:13px;
+      height:15px;
+      background:#fff;
+      clip-path:polygon(50% 0,100% 42%,70% 42%,70% 100%,30% 100%,30% 42%,0 42%);
+    }
     .upgrade-marker.hidden{display:none;}
     @keyframes upgrade-attention{
-      0%,72%,100%{transform:rotate(0deg);}
-      78%{transform:rotate(-13deg);}
-      84%{transform:rotate(12deg);}
-      90%{transform:rotate(-7deg);}
-      96%{transform:rotate(5deg);}
+      0%,70%,100%{transform:translateX(0) rotate(0deg);}
+      76%{transform:translateX(-3px) rotate(-14deg);}
+      82%{transform:translateX(3px) rotate(13deg);}
+      88%{transform:translateX(-2px) rotate(-8deg);}
+      94%{transform:translateX(2px) rotate(6deg);}
     }
     .panel-overlay{
       position:absolute;
@@ -982,31 +1086,31 @@
       position:absolute;
       left:var(--resource-panel-left,50%);
       top:var(--resource-panel-top,18%);
-      width:min(246px, calc(100% - 30px));
-      padding:18px 16px 17px;
-      border:3px solid #c5965f;
-      border-radius:20px;
+      width:min(154px, calc(100% - 30px));
+      padding:9px 8px 9px;
+      border:2px solid #c5965f;
+      border-radius:13px;
       background:#fff1df;
-      box-shadow:0 9px 0 rgba(86,46,0,0.28),0 18px 32px rgba(0,0,0,0.42);
+      box-shadow:0 5px 0 rgba(86,46,0,0.28),0 10px 18px rgba(0,0,0,0.36);
       color:#414141;
       text-align:center;
       box-sizing:border-box;
       pointer-events:none;
       transform:translate(-50%, 10px) scale(0.97);
       opacity:0;
-      transition:0.2s ease;
+      transition:opacity 0.16s ease,transform 0.16s ease;
       z-index:10;
     }
     .resource-upgrade-panel::after{
       content:"";
       position:absolute;
       left:var(--resource-panel-tail-left,50%);
-      bottom:-13px;
-      width:22px;
-      height:22px;
+      bottom:-8px;
+      width:14px;
+      height:14px;
       background:#fff1df;
-      border-right:3px solid #c5965f;
-      border-bottom:3px solid #c5965f;
+      border-right:2px solid #c5965f;
+      border-bottom:2px solid #c5965f;
       transform:translateX(-50%) rotate(45deg);
       z-index:-1;
     }
@@ -1017,14 +1121,14 @@
     }
     .resource-upgrade-close{
       position:absolute;
-      top:9px;
-      right:9px;
-      width:42px;
-      height:48px;
+      top:5px;
+      right:5px;
+      width:25px;
+      height:28px;
       border:0;
-      border-radius:13px;
+      border-radius:8px;
       background:#ff1f1f;
-      box-shadow:0 5px 0 #bd1717, inset 0 2px 0 rgba(255,255,255,0.35);
+      box-shadow:0 3px 0 #bd1717, inset 0 1px 0 rgba(255,255,255,0.35);
       color:#fff;
       font-size:0;
       font-weight:900;
@@ -1036,37 +1140,37 @@
       position:absolute;
       left:50%;
       top:50%;
-      width:25px;
-      height:7px;
+      width:15px;
+      height:4px;
       border-radius:999px;
       background:#fff;
       transform:translate(-50%, -50%) rotate(45deg);
     }
     .resource-upgrade-close::after{transform:translate(-50%, -50%) rotate(-45deg);}
     .resource-upgrade-icon{
-      width:58px;
-      height:58px;
-      margin:-4px auto 1px;
+      width:38px;
+      height:38px;
+      margin:-2px auto 0;
       object-fit:contain;
       filter:drop-shadow(0 3px 2px rgba(0,0,0,0.25));
     }
     .resource-upgrade-level{
-      font-size:21px;
+      font-size:13px;
       line-height:1.05;
       font-weight:900;
     }
     .resource-upgrade-name{
-      min-height:23px;
-      margin-top:2px;
+      min-height:14px;
+      margin-top:1px;
       color:#777;
-      font-size:18px;
+      font-size:11px;
       line-height:1.1;
       font-weight:800;
     }
     .resource-upgrade-stars{
-      margin:4px 0 6px;
+      margin:2px 0 3px;
       color:#c9c9c9;
-      font-size:29px;
+      font-size:18px;
       line-height:1;
       letter-spacing:-2px;
       white-space:nowrap;
@@ -1074,9 +1178,9 @@
     .resource-upgrade-stars .filled{color:#4cc45c;}
     .resource-upgrade-progress{
       position:relative;
-      height:18px;
-      padding:3px;
-      border:3px solid #3978a5;
+      height:11px;
+      padding:2px;
+      border:2px solid #3978a5;
       border-radius:999px;
       background:#dce2e5;
       box-shadow:inset 0 2px 2px rgba(0,0,0,0.2);
@@ -1090,53 +1194,53 @@
       background:#39b9e8;
     }
     .resource-upgrade-stats{
-      margin:7px 3px 10px;
+      margin:4px 2px 5px;
       display:flex;
       justify-content:space-between;
-      gap:8px;
+      gap:4px;
       color:#424242;
-      font-size:17px;
+      font-size:10px;
       font-weight:900;
     }
     .resource-upgrade-extra-stats{
       display:grid;
       grid-template-columns:repeat(3,1fr);
-      gap:6px;
-      margin:-3px 3px 10px;
+      gap:3px;
+      margin:-1px 1px 5px;
       color:#6d5136;
-      font-size:12px;
+      font-size:7px;
       font-weight:900;
     }
     .resource-upgrade-extra-stats span{
-      padding:5px 4px;
-      border-radius:8px;
+      padding:3px 1px;
+      border-radius:5px;
       background:rgba(255,255,255,0.48);
       box-shadow:inset 0 0 0 1px rgba(126,88,49,0.18);
     }
     .resource-upgrade-button{
-      min-width:150px;
-      height:52px;
-      padding:0 15px;
+      min-width:92px;
+      height:31px;
+      padding:0 8px;
       border:0;
-      border-radius:17px;
+      border-radius:10px;
       background:linear-gradient(180deg,#82df79,#51c45d);
-      box-shadow:0 5px 0 #27973e,inset 0 2px 0 rgba(255,255,255,0.38);
+      box-shadow:0 3px 0 #27973e,inset 0 1px 0 rgba(255,255,255,0.38);
       color:#23853d;
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      gap:7px;
-      font-size:19px;
+      gap:4px;
+      font-size:12px;
       font-weight:900;
       cursor:pointer;
     }
     .resource-upgrade-button:disabled{
       background:#c9c9c9;
-      box-shadow:0 5px 0 #979797;
+      box-shadow:0 3px 0 #979797;
       color:#777;
       cursor:default;
     }
-    .resource-upgrade-button img{width:27px;height:27px;object-fit:contain;}
+    .resource-upgrade-button img{width:17px;height:17px;object-fit:contain;}
     .panel-header{
       display:flex;
       align-items:center;
@@ -1784,19 +1888,23 @@
     .first-day .quest-stage-column,
     .first-day .quest-toggle,
     .first-day .inventory-button,
-    .first-day .quest-collapse{display:none!important;}
+    .first-day .quest-collapse,
+    .first-day .quest-card{display:none!important;}
     .first-day .settings-button{left:10px;}
     .first-day .settings-panel{left:10px;}
-    .first-day .quest-strip{top:14px;left:10px;right:10px;}
-    .first-day .quest-card{top:64px;}
+    .first-day .quest-strip{top:58px;left:10px;right:10px;height:30px;}
+    .first-day .quest-track{margin-top:4px;}
     .first-day .quest-reward{display:none;}
+    .first-day .farm-resource-card img{width:48px;height:48px;}
+    .first-day .farm-resource-price{font-size:14px;gap:5px;}
+    .first-day .farm-resource-price::before{width:17px;height:17px;}
     #uiRoot::after{
       content:"";
       position:absolute;
       left:0;
       right:0;
       bottom:0;
-      height:78px;
+      height:92px;
       background:linear-gradient(180deg,rgba(25,117,171,0.88),rgba(13,72,124,0.96));
       border-top:3px solid rgba(7,52,91,0.72);
       box-shadow:0 -5px 0 rgba(7,52,91,0.5),0 -10px 24px rgba(0,0,0,0.18);
@@ -1838,7 +1946,7 @@
       box-shadow:0 5px 0 #9e7140,0 9px 16px rgba(0,0,0,0.3);
     }
     .shop-button,.inventory-button{
-      bottom:11px;
+      bottom:104px;
       width:56px;
       height:56px;
       transform:none;
@@ -1909,10 +2017,29 @@
         <img class="intro-comic-panel" src="./img/intro/day-1-comic-exit.webp" alt="" />
         <img class="intro-comic-panel" src="./img/intro/day-1-comic-parachute.webp" alt="" />
       </div>
+      <div class="intro-comic-continue">Нажмите, чтобы продолжить</div>
     </div>
     <div id="dayTitleOverlay" class="day-title-overlay" data-ui-control>
       <div id="dayTitleSubtitle" class="day-title-subtitle"></div>
       <div id="dayTitleText" class="day-title-text">День 1</div>
+    </div>
+    <div id="movementHint" class="movement-hint" hidden aria-hidden="true">
+      <div class="movement-hint-gesture">
+        <svg class="movement-hint-path" viewBox="0 0 260 130" aria-hidden="true">
+          <path d="M29 65C29 17 91 17 130 65C169 113 231 113 231 65C231 17 169 17 130 65C91 113 29 113 29 65Z"></path>
+        </svg>
+        <div class="movement-hint-hand">
+          <svg class="tutorial-hand" viewBox="0 0 64 64" aria-hidden="true">
+            <path d="M23 53C15 47 10 37 12 33C13 30 16 30 19 33L24 38V13C24 9 30 9 30 13V29V20C30 16 36 16 36 20V30V23C36 19 42 19 42 23V32V27C42 23 48 23 48 27V39C48 52 38 58 23 53Z" fill="#fff" stroke="#8a78a0" stroke-width="3" stroke-linejoin="round"></path>
+          </svg>
+        </div>
+      </div>
+      <div class="movement-hint-label">Води пальцем, чтобы двигаться</div>
+    </div>
+    <div id="strawberryUpgradeHint" class="strawberry-upgrade-hint" hidden aria-hidden="true">
+      <svg class="tutorial-hand" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M23 53C15 47 10 37 12 33C13 30 16 30 19 33L24 38V13C24 9 30 9 30 13V29V20C30 16 36 16 36 20V30V23C36 19 42 19 42 23V32V27C42 23 48 23 48 27V39C48 52 38 58 23 53Z" fill="#fff" stroke="#8a78a0" stroke-width="3" stroke-linejoin="round"></path>
+      </svg>
     </div>
     <div id="pixiMount"></div>
     <div id="uiRoot">
@@ -1988,9 +2115,7 @@
       <div id="farmResourceStrip" class="farm-resource-strip" aria-label="Доступные ресурсы" data-ui-control></div>
       <button id="shopButton" class="shop-button" aria-label="Открыть магазин" data-ui-control>
         <img id="cartIcon" alt="cart" />
-        <span id="upgradeMarker" class="upgrade-marker hidden">
-          <img id="arrowIcon" alt="upgrade" />
-        </span>
+        <span id="upgradeMarker" class="upgrade-marker hidden" aria-hidden="true"></span>
       </button>
       <button id="inventoryButton" class="inventory-button" aria-label="Открыть инвентарь" data-ui-control>
         <img id="inventoryIcon" alt="inventory" />
@@ -2056,11 +2181,11 @@
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
   <script src="./berries-config.js?v=20260605-strawberry-outline4"></script>
   <script src="./buildings-config.js"></script>
-  <script src="./scenario-objects-config.js?v=20260608-survivor-dialogue"></script>
+  <script src="./scenario-objects-config.js?v=20260608-day-one-scenery"></script>
   <script src="./ui-config.js?v=20260608-ui-audio"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./audio-manager.js?v=20260608-ui-audio"></script>
-  <script src="./pixi-game.js?v=20260608-day-one"></script>
-  <script src="./pixi-ui.js?v=20260608-day-one"></script>
+  <script src="./audio-manager.js?v=20260608-intro-audio"></script>
+  <script src="./pixi-game.js?v=20260608-ui-polish"></script>
+  <script src="./pixi-ui.js?v=20260608-ui-polish"></script>
 </body>
 </html>

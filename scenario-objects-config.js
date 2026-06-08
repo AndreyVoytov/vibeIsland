@@ -28,6 +28,8 @@
       titleRu: 'Обломок крыла',
       distanceCells: 3,
       direction: 'east',
+      offsetCells: { x: 1 },
+      positionVersion: 1,
       assetUrl: './images/scenario/plane-wing.png',
       fallbackUrl: './images/scenario/plane-wing-fallback.svg',
       widthPx: 90,

@@ -5,10 +5,13 @@
   const enlargeConfig = window.EnlargeConfig || { expansions: [] };
   const scenarioConfig = window.ScenarioObjectsConfig || { objects: [] };
   const playSound = (key, options) => {
-    if (window.VibeAudio) window.VibeAudio.play(key, options);
+    if (window.VibeAudio) return window.VibeAudio.play(key, options);
+    return null;
   };
   const GAME_DAY_KEY = 'gameDay';
   const BASE_LAND_CELLS_KEY = 'baseLandCellCount';
+  const MOVEMENT_HINT_SEEN_KEY = 'movementHintSeen';
+  const STRAWBERRY_UPGRADE_HINT_SEEN_KEY = 'strawberryUpgradeHintSeen';
   const FIRST_DAY_ALLOWED_UPGRADES = new Set(['upgrade-strawberry-fertilizer', 'upgrade-sharp-sight', 'expand-1']);
   function getGameDay() {
     const stored = Math.floor(Number(localStorage.getItem(GAME_DAY_KEY) || 0));
@@ -150,10 +153,10 @@
 
   const DAY_ONE_QUESTS = [
     {
-      id: 'day-1-save-5000',
-      type: 'moneyOwned',
-      title: 'Накопить 5k монет',
-      target: 5000,
+      id: 'day-1-collect-10000',
+      type: 'moneyEarned',
+      title: 'Собрать 10k монет',
+      target: 10000,
       reward: { type: 'dayTransition', amount: 0 },
     },
   ];
@@ -760,10 +763,13 @@
   const moneyValue = document.getElementById('moneyValue');
   const uiRoot = document.getElementById('uiRoot');
   const gameShell = document.getElementById('gameShell');
+  const loadingScreen = document.getElementById('loadingScreen');
   const introComic = document.getElementById('introComic');
   const dayTitleOverlay = document.getElementById('dayTitleOverlay');
   const dayTitleSubtitle = document.getElementById('dayTitleSubtitle');
   const dayTitleText = document.getElementById('dayTitleText');
+  const movementHint = document.getElementById('movementHint');
+  const strawberryUpgradeHint = document.getElementById('strawberryUpgradeHint');
   const gemValue = document.getElementById('gemValue');
   const gemIcon = document.getElementById('gemIcon');
   const heroPortrait = document.getElementById('heroPortrait');
@@ -833,6 +839,7 @@
   const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
 
   function setImageWithFallback(img, key) {
+    if (!img) return;
     const asset = uiConfig.uiAssets[key] || {};
     if (knownAssetUrl(asset.url)) {
       img.src = asset.url;
@@ -847,7 +854,6 @@
   setImageWithFallback(document.getElementById('coinIcon'), 'coin');
   setImageWithFallback(resourceUpgradeCoin, 'coin');
   setImageWithFallback(document.getElementById('cartIcon'), 'cart');
-  setImageWithFallback(document.getElementById('arrowIcon'), 'arrowUp');
   setImageWithFallback(gemIcon, 'rainbowStone');
   setImageWithFallback(heroPortrait, 'heroPortrait');
   if (inventoryIcon) inventoryIcon.src = knownAssetUrl('./img/ui/inventory-bag.png') || './img/ui/inventory-bag.png';
@@ -1211,14 +1217,21 @@
     const progressFill = document.createElement('span');
     progressFill.className = 'farm-resource-progress-fill';
     progress.appendChild(progressFill);
+    const marker = document.createElement('span');
+    marker.className = 'upgrade-marker hidden';
+    marker.setAttribute('aria-hidden', 'true');
     setResourceImage(icon, resource);
     card.appendChild(icon);
     card.appendChild(price);
     card.appendChild(stars);
     card.appendChild(progress);
-    card.addEventListener('click', () => toggleResourceUpgrade(true, resource.id));
+    card.appendChild(marker);
+    card.addEventListener('click', () => {
+      if (resource.id === 'strawberry') dismissStrawberryUpgradeHint();
+      toggleResourceUpgrade(true, resource.id);
+    });
     farmResourceStrip.appendChild(card);
-    return { card, price, stars, progressFill };
+    return { card, price, stars, progressFill, marker };
   }
 
   function renderFarmResourceStrip(user = getUserState()) {
@@ -1260,7 +1273,9 @@
       const canUpgrade = level < maxLevel && user.money >= getResourceUpgradeCost(resource, user);
       entry.card.classList.toggle('can-upgrade', canUpgrade);
       entry.card.classList.toggle('cannot-upgrade', !canUpgrade);
+      entry.marker.classList.toggle('hidden', !canUpgrade);
     });
+    renderStrawberryUpgradeHint();
   }
 
   function renderResourceUpgradePanel(user = getUserState()) {
@@ -1296,21 +1311,22 @@
     resourceUpgradeButton.disabled = atMax || user.money < getResourceUpgradeCost(resource, user);
     resourceUpgradeCost.textContent = atMax ? 'MAX' : formatCompactNumber(getResourceUpgradeCost(resource, user));
     resourceUpgradeCoin.style.display = atMax ? 'none' : '';
-    requestAnimationFrame(positionResourceUpgradePanel);
+    if (resourceUpgradePanel.classList.contains('open')) requestAnimationFrame(positionResourceUpgradePanel);
   }
 
   function positionResourceUpgradePanel() {
-    if (!resourceUpgradePanel || !uiRoot || !activeResourceUpgradeId || !resourceUpgradePanel.classList.contains('open')) return;
+    if (!resourceUpgradePanel || !uiRoot || !activeResourceUpgradeId) return;
     const entry = farmResourceCards.get(activeResourceUpgradeId);
     if (!entry || !entry.card) return;
     const rootRect = uiRoot.getBoundingClientRect();
     const cardRect = entry.card.getBoundingClientRect();
-    const panelRect = resourceUpgradePanel.getBoundingClientRect();
-    const halfWidth = panelRect.width / 2;
+    const panelWidth = resourceUpgradePanel.offsetWidth;
+    const panelHeight = resourceUpgradePanel.offsetHeight;
+    const halfWidth = panelWidth / 2;
     const desiredCenter = cardRect.left - rootRect.left + cardRect.width / 2;
     const center = Math.max(halfWidth + 8, Math.min(rootRect.width - halfWidth - 8, desiredCenter));
-    const top = Math.max(8, cardRect.top - rootRect.top - panelRect.height - 14);
-    const tail = Math.max(18, Math.min(panelRect.width - 18, desiredCenter - center + halfWidth));
+    const top = Math.max(8, cardRect.top - rootRect.top - panelHeight - 14);
+    const tail = Math.max(12, Math.min(panelWidth - 12, desiredCenter - center + halfWidth));
     resourceUpgradePanel.style.setProperty('--resource-panel-left', `${center}px`);
     resourceUpgradePanel.style.setProperty('--resource-panel-top', `${top}px`);
     resourceUpgradePanel.style.setProperty('--resource-panel-tail-left', `${tail}px`);
@@ -1331,15 +1347,18 @@
         inventoryPanel.setAttribute('aria-hidden', 'true');
       }
     }
-    resourceUpgradePanel.classList.toggle('open', open);
-    resourceUpgradePanel.setAttribute('aria-hidden', String(!open));
-    if (!open) activeResourceUpgradeId = null;
-    syncPanelOverlay();
-    renderFarmResourceStrip();
     if (open) {
       renderResourceUpgradePanel();
+      positionResourceUpgradePanel();
+      resourceUpgradePanel.classList.add('open');
       requestAnimationFrame(positionResourceUpgradePanel);
+    } else {
+      resourceUpgradePanel.classList.remove('open');
+      activeResourceUpgradeId = null;
     }
+    resourceUpgradePanel.setAttribute('aria-hidden', String(!open));
+    syncPanelOverlay();
+    renderFarmResourceStrip();
     playSound(open ? 'ui.panelOpen' : 'ui.panelClose', { volume: 0.2, cooldownMs: 80 });
   }
 
@@ -1424,7 +1443,7 @@
     activeQuests.forEach((quest, index) => {
       const dot = document.createElement('span');
       dot.className = 'quest-milestone';
-      dot.style.left = `${((index + 0.5) / activeQuests.length) * 100}%`;
+      dot.style.left = `${activeQuests.length === 1 ? 100 : ((index + 0.5) / activeQuests.length) * 100}%`;
       dot.dataset.questId = quest.id;
       questMilestones.appendChild(dot);
     });
@@ -1528,6 +1547,10 @@
       });
     }
     positionQuestPointer(done ? -1 : index);
+    if (isFirstGameDay() && claimReady) {
+      claimQuestReward();
+      return;
+    }
 
     if (!questCard || !questTitle) return;
     if (questToggle) {
@@ -1570,25 +1593,123 @@
     const firstDay = isFirstGameDay();
     if (gameShell) gameShell.classList.toggle('first-day', firstDay);
     if (firstDay && questCard) {
-      questCard.classList.add('open');
+      questCard.classList.remove('open');
       if (questToggle) questToggle.classList.remove('visible');
     }
   }
 
   let dayTitleTimer = 0;
+  let movementHintTimer = 0;
+  let movementHintHideTimer = 0;
+
+  function dismissMovementHint(markSeen = true) {
+    window.clearTimeout(movementHintTimer);
+    window.clearTimeout(movementHintHideTimer);
+    if (markSeen) localStorage.setItem(MOVEMENT_HINT_SEEN_KEY, '1');
+    if (!movementHint || movementHint.hidden) return;
+    movementHint.classList.add('hiding');
+    window.setTimeout(() => {
+      movementHint.hidden = true;
+      movementHint.classList.remove('hiding');
+      movementHint.setAttribute('aria-hidden', 'true');
+      renderStrawberryUpgradeHint();
+    }, 220);
+  }
+
+  function showMovementHint() {
+    if (!movementHint || !isFirstGameDay() || localStorage.getItem(MOVEMENT_HINT_SEEN_KEY) === '1') return;
+    const loading = loadingScreen && !loadingScreen.hidden && !loadingScreen.classList.contains('done');
+    const introOpen = introComic && !introComic.hidden;
+    const dayTitleOpen = dayTitleOverlay && dayTitleOverlay.classList.contains('open');
+    if (loading || introOpen || dayTitleOpen) {
+      movementHintTimer = window.setTimeout(showMovementHint, 300);
+      return;
+    }
+    movementHint.hidden = false;
+    movementHint.setAttribute('aria-hidden', 'false');
+    movementHintHideTimer = window.setTimeout(() => dismissMovementHint(true), 9000);
+  }
+
+  function scheduleMovementHint(delay = 300) {
+    window.clearTimeout(movementHintTimer);
+    movementHintTimer = window.setTimeout(showMovementHint, delay);
+  }
+
+  function dismissStrawberryUpgradeHint() {
+    if (!strawberryUpgradeHint) return;
+    localStorage.setItem(STRAWBERRY_UPGRADE_HINT_SEEN_KEY, '1');
+    strawberryUpgradeHint.hidden = true;
+    strawberryUpgradeHint.setAttribute('aria-hidden', 'true');
+  }
+
+  function positionStrawberryUpgradeHint() {
+    if (!strawberryUpgradeHint || strawberryUpgradeHint.hidden || !gameShell) return;
+    const entry = farmResourceCards.get('strawberry');
+    if (!entry || !entry.card) return;
+    const shellRect = gameShell.getBoundingClientRect();
+    const cardRect = entry.card.getBoundingClientRect();
+    const left = cardRect.left - shellRect.left + cardRect.width / 2 - strawberryUpgradeHint.offsetWidth / 2;
+    const top = cardRect.top - shellRect.top - strawberryUpgradeHint.offsetHeight + 5;
+    strawberryUpgradeHint.style.left = `${Math.max(5, Math.min(shellRect.width - strawberryUpgradeHint.offsetWidth - 5, left))}px`;
+    strawberryUpgradeHint.style.top = `${Math.max(5, top)}px`;
+  }
+
+  function renderStrawberryUpgradeHint() {
+    if (!strawberryUpgradeHint || localStorage.getItem(STRAWBERRY_UPGRADE_HINT_SEEN_KEY) === '1') return;
+    const entry = farmResourceCards.get('strawberry');
+    const blocked = (loadingScreen && !loadingScreen.hidden && !loadingScreen.classList.contains('done'))
+      || (introComic && !introComic.hidden)
+      || (dayTitleOverlay && dayTitleOverlay.classList.contains('open'))
+      || (movementHint && !movementHint.hidden);
+    const shouldShow = Boolean(entry && entry.card.classList.contains('can-upgrade') && !blocked);
+    strawberryUpgradeHint.hidden = !shouldShow;
+    strawberryUpgradeHint.setAttribute('aria-hidden', String(!shouldShow));
+    if (shouldShow) requestAnimationFrame(positionStrawberryUpgradeHint);
+  }
+
   function showDayTitle(day, subtitle = '') {
     if (!dayTitleOverlay || !dayTitleText || !dayTitleSubtitle) return;
     window.clearTimeout(dayTitleTimer);
     dayTitleSubtitle.textContent = subtitle;
     dayTitleText.textContent = `День ${day}`;
     dayTitleOverlay.classList.add('open');
-    dayTitleTimer = window.setTimeout(() => dayTitleOverlay.classList.remove('open'), 1850);
+    dayTitleTimer = window.setTimeout(() => {
+      dayTitleOverlay.classList.remove('open');
+      scheduleMovementHint();
+      renderStrawberryUpgradeHint();
+    }, 1850);
   }
 
   let introFinished = false;
+  let introCanContinue = false;
+  let introFinishTimer = 0;
+  let introMusicAudio = null;
+  let introMusicStartedAt = 0;
+
+  function startIntroMusic() {
+    if (introMusicAudio) return introMusicAudio;
+    introMusicAudio = playSound('music.intro', { volume: 0.22 });
+    if (introMusicAudio) introMusicStartedAt = performance.now();
+    return introMusicAudio;
+  }
+
+  function stopIntroMusic(minimumPlayMs = 0) {
+    if (!introMusicAudio) return;
+    const audio = introMusicAudio;
+    const delay = Math.max(0, minimumPlayMs - (performance.now() - introMusicStartedAt));
+    introMusicAudio = null;
+    introMusicStartedAt = 0;
+    window.setTimeout(() => {
+      audio.pause();
+      audio.currentTime = 0;
+    }, delay);
+  }
+
   function finishIntroComic() {
-    if (introFinished || !introComic || introComic.hidden) return;
+    if (introFinished || !introCanContinue || !introComic || introComic.hidden) return;
     introFinished = true;
+    window.clearTimeout(introFinishTimer);
+    stopIntroMusic(2200);
     introComic.classList.add('finishing');
     localStorage.setItem('dayOneIntroSeen', '1');
     showDayTitle(1);
@@ -1599,13 +1720,39 @@
   }
 
   function startIntroComic() {
-    if (!introComic || !isFirstGameDay() || localStorage.getItem('dayOneIntroSeen') === '1') return;
+    if (!introComic || !isFirstGameDay() || localStorage.getItem('dayOneIntroSeen') === '1') return false;
     introFinished = false;
+    introCanContinue = false;
     introComic.hidden = false;
+    introComic.classList.remove('ready');
+    Array.from(introComic.querySelectorAll('.intro-comic-panel')).forEach((panel) => panel.classList.remove('visible'));
+    startIntroMusic();
     Array.from(introComic.querySelectorAll('.intro-comic-panel')).forEach((panel, index) => {
-      window.setTimeout(() => panel.classList.add('visible'), index * 700);
+      window.setTimeout(() => {
+        panel.classList.add('visible');
+        playSound('ui.introSlide', { volume: 0.22, playbackRate: 0.96 + index * 0.04 });
+      }, index * 1100);
     });
-    window.setTimeout(finishIntroComic, 4000);
+    window.setTimeout(() => {
+      introCanContinue = true;
+      introComic.classList.add('ready');
+    }, 4000);
+    introFinishTimer = window.setTimeout(finishIntroComic, 10000);
+    return true;
+  }
+
+  function handleIntroClick() {
+    if (!introCanContinue) {
+      startIntroMusic();
+      playSound('ui.introSlide', { volume: 0.18 });
+      return;
+    }
+    startIntroMusic();
+    finishIntroComic();
+  }
+
+  function handleGameReady() {
+    if (!startIntroComic()) scheduleMovementHint();
   }
 
   function renderResources() {
@@ -2086,13 +2233,14 @@
   if (questToggle && questCard) {
     questToggle.addEventListener('click', () => setQuestCardOpen(true));
   }
-  if (introComic) introComic.addEventListener('click', finishIntroComic);
-  window.addEventListener('vibe-game-ready', startIntroComic);
+  if (introComic) introComic.addEventListener('click', handleIntroClick);
+  window.addEventListener('vibe-game-ready', handleGameReady);
   window.addEventListener('vibe-day-changed', (event) => {
     const day = Math.max(1, Math.floor(Number(event.detail && event.detail.day) || getGameDay()));
     togglePanel(false);
     toggleInventory(false);
     toggleResourceUpgrade(false);
+    if (day > 1) setQuestCardOpen(true);
     showDayTitle(day, event.detail && event.detail.subtitle ? event.detail.subtitle : '');
     renderResources();
     renderQuestLine();
@@ -2109,12 +2257,15 @@
   });
   document.addEventListener('pointerdown', (event) => {
     const target = event.target;
+    if (movementHint && !movementHint.hidden && target.closest('#pixiMount canvas')) {
+      dismissMovementHint();
+    }
     if (settingsPanel && settingsPanel.classList.contains('open') && !target.closest('#settingsPanel,#settingsButton')) {
       toggleSettings(false);
     }
     if (!resourceUpgradePanel || !resourceUpgradePanel.classList.contains('open')) return;
     if (target.closest('#resourceUpgradePanel,.farm-resource-card')) return;
-    if (target.closest('button,[role="button"]')) toggleResourceUpgrade(false);
+    toggleResourceUpgrade(false);
   }, true);
   idleClose.addEventListener('click', hideIdlePanel);
   idleOverlay.addEventListener('click', hideIdlePanel);
@@ -2125,7 +2276,7 @@
   renderPlayerProgress();
   renderInventory();
   renderQuestLine();
-  if (document.getElementById('loadingScreen')?.hidden) startIntroComic();
+  if (loadingScreen?.hidden) handleGameReady();
   try {
     const pendingFinding = JSON.parse(localStorage.getItem(PENDING_FOUND_ITEM_KEY) || 'null');
     if (pendingFinding && pendingFinding.id) setTimeout(() => showFindingItem(pendingFinding), 300);
@@ -2147,6 +2298,7 @@
   window.addEventListener('resize', () => {
     renderQuestLine();
     positionResourceUpgradePanel();
+    positionStrawberryUpgradeHint();
   });
   window.addEventListener('pagehide', setLastActiveAt);
   window.addEventListener('beforeunload', setLastActiveAt);
