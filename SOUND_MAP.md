@@ -18,7 +18,6 @@
 | `audio/ambience/ocean-loop.mp3` | Постоянный фон у острова | Мягкий океан, бесшовная петля |
 | `audio/ambience/island-loop.ogg` | На острове | Листья, редкие птицы, легкий ветер |
 | `audio/ambience/island-2-night-loop.ogg` | Второй остров | Тихий вечерний ветер и редкие ночные звуки |
-| `audio/ambience/campfire-loop.ogg` | Рядом с костром | Треск огня, бесшовная петля с затуханием по расстоянию |
 | `audio/ambience/lighthouse-loop.ogg` | Рядом с включенным маяком | Очень тихий механический гул |
 
 ## Персонаж и сбор
@@ -99,7 +98,6 @@
 | `audio/ambience/ocean-loop.mp3` | [Ocean waves loop](https://pixabay.com/sound-effects/search/ocean%20waves%20loop/) | [Calm ocean](https://pixabay.com/sound-effects/search/calm%20ocean/) |
 | `audio/ambience/island-loop.ogg` | [Tropical ambience](https://pixabay.com/sound-effects/search/tropical%20ambience/) | [Birds and wind](https://pixabay.com/sound-effects/search/birds%20wind%20ambience/) |
 | `audio/ambience/island-2-night-loop.ogg` | [Night ambience](https://pixabay.com/sound-effects/search/night%20ambience/) | [Night wind](https://pixabay.com/sound-effects/search/night%20wind/) |
-| `audio/ambience/campfire-loop.ogg` | [Fireplace loop](https://pixabay.com/sound-effects/search/fireplace%20loop/) | [Campfire ambience](https://pixabay.com/sound-effects/search/campfire%20ambience/) |
 | `audio/ambience/lighthouse-loop.ogg` | [Mechanical hum](https://pixabay.com/sound-effects/search/mechanical%20hum/) | [Quiet machine loop](https://pixabay.com/sound-effects/search/quiet%20machine%20loop/) |
 
 ### Персонаж и сбор

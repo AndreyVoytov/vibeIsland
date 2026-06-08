@@ -769,7 +769,7 @@
     const topFillY = Math.min(y - 1, -gameHeight * 2 - HORIZON_TOP_OVERSCAN_PX);
     const topFillHeight = Math.max(0, y - topFillY + 1);
     beginFill(horizonTopFillGraphics, '#9a66a1');
-    horizonTopFillGraphics.drawRect(bx, topFillY, Math.max(0, x - bx + 1), topFillHeight);
+    horizonTopFillGraphics.drawRect(bx, topFillY, Math.max(0, x - bx), topFillHeight);
     horizonTopFillGraphics.endFill();
     const topSteps = 36;
     for (let i = 0; i < topSteps; i += 1) {
@@ -782,17 +782,17 @@
       horizonTopFillGraphics.endFill();
     }
     beginFill(horizonTopFillGraphics, '#9665a2');
-    horizonTopFillGraphics.drawRect(x + width - 1, topFillY, Math.max(0, bx + bw - x - width + 1), topFillHeight);
+    horizonTopFillGraphics.drawRect(x + width, topFillY, Math.max(0, bx + bw - x - width), topFillHeight);
     horizonTopFillGraphics.endFill();
     if (hasEdges) {
       horizonLeftEdgeSprite.x = bx;
       horizonLeftEdgeSprite.y = y;
-      horizonLeftEdgeSprite.width = sidePad + 1;
+      horizonLeftEdgeSprite.width = sidePad;
       horizonLeftEdgeSprite.height = height;
       horizonLeftEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
-      horizonRightEdgeSprite.x = x + width - 1;
+      horizonRightEdgeSprite.x = x + width;
       horizonRightEdgeSprite.y = y;
-      horizonRightEdgeSprite.width = sidePad + 1;
+      horizonRightEdgeSprite.width = sidePad;
       horizonRightEdgeSprite.height = height;
       horizonRightEdgeSprite.alpha = horizonSprite ? horizonSprite.alpha : 0.88;
     }
@@ -822,13 +822,14 @@
     const ratio = texture.width && texture.height ? texture.height / texture.width : 0.41;
     const cell = getWorldCellPx();
     const worldW = getWorldWidth();
-    const width = Math.max(gameWidth * 1.35, worldW * 1.18);
-    const height = clamp(width * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.26));
+    const targetWidth = Math.max(gameWidth * 1.35, worldW * 1.18);
+    const height = clamp(targetWidth * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.26));
     const topRef = getTopScenarioOrIslandWorldY();
     const gap = Math.max(cell * HORIZON_WATER_GAP_CELLS, gameHeight * 0.055);
     const baseY = topRef - gap - height * HORIZON_LINE_Y_RATIO;
     const topY = Math.min(baseY, -HORIZON_TOP_OVERSCAN_PX);
     const displayHeight = height + (baseY - topY);
+    const width = displayHeight / ratio;
     horizonSprite.visible = true;
     horizonSprite.x = (worldW - width) / 2;
     horizonSprite.y = topY;
@@ -3513,7 +3514,7 @@
   function spawnResourceBurst(b, now) {
     if (!b || b.resourceBurstSpawned) return;
     b.resourceBurstSpawned = true;
-    playSound('player.leavesBurst', { volume: 0.27, cooldownMs: 120 });
+    playSound('player.leavesBurst', { volume: 0.22, cooldownMs: 120 });
     const visual = getBushVisualDef(b);
     const colors = getResourceBurstColors(b, visual);
     for (let i = 0; i < RESOURCE_BURST_COUNT; i += 1) {
@@ -3580,7 +3581,7 @@
     activeChopTargetUid = b.uid;
     b.chopSwingAt = now;
     b.chopStrikeDone = false;
-    playSound('player.axeSwing', { volume: 0.24, cooldownMs: 180 });
+    playSound('player.axeSwing', { volume: 0.09, playbackRate: 1.08, cooldownMs: 180 });
     localStorage.setItem('heroAction', JSON.stringify({ chopAt: now, targetUid: b.uid }));
   }
 
@@ -4805,7 +4806,7 @@
     const now = performance.now();
     if ((movedX || movedY) && now - lastFootstepAt >= 310) {
       lastFootstepAt = now;
-      playSound('player.footstep', { volume: 0.18 });
+      playSound('player.footstep', { volume: 0.07 });
     }
     localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
     updateCameraToHero();
@@ -5140,10 +5141,6 @@
     lastSpatialAudioAt = now;
     const heroGX = charXPct / cellPct;
     const heroGY = charYPct / cellPct;
-    if (campfireCenter) {
-      const distance = Math.hypot(heroGX - (campfireCenter.x + 0.5), heroGY - (campfireCenter.y + 0.5));
-      window.VibeAudio.setLoopVolume('ambience.campfire', Math.max(0, 1 - distance / 8) * 0.22);
-    }
     const lighthouse = scenarioState.find((state) => state.id === 'lighthouse' && state.transformed);
     if (lighthouse) {
       const distance = Math.hypot(heroGX - (lighthouse.gridX + 0.5), heroGY - (lighthouse.gridY + 0.5));
