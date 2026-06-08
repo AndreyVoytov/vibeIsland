@@ -1625,7 +1625,7 @@
     const upgrades = user && user.resourceUpgrades && typeof user.resourceUpgrades === 'object'
       ? user.resourceUpgrades
       : {};
-    const maxLevel = isFirstGameDay() && resourceId === 'strawberry'
+    const maxLevel = resourceId === 'strawberry'
       ? RESOURCE_UPGRADE_LEVELS_PER_STAR * 3
       : RESOURCE_UPGRADE_MAX_LEVEL;
     return Math.min(maxLevel, Math.max(0, Math.floor(Number(upgrades[resourceId]) || 0)));
@@ -5468,9 +5468,9 @@
     consumeBoatRepairRequest();
     updateBoatCutscene(now);
     updateHeroLogic(deltaMS);
+    if (!boatCutscene) updateDialogue(now);
     if (!boatCutscene && !isFirstGameDay()) {
       spawnScenarioLand();
-      updateDialogue(now);
       checkScenarioTriggers();
     }
     syncDialogueText(getActiveDialogueText(), getActiveDialogueSpeakerId());
@@ -5520,6 +5520,10 @@
   window.addEventListener('vibe-found-item-complete', (event) => completeScenarioFoundItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', onMapChanged);
   window.addEventListener('vibe-boat-repair', consumeBoatRepairRequest);
+  window.addEventListener('vibe-dialogue', (event) => {
+    const detail = event.detail || {};
+    startDialogue(Array.isArray(detail.lines) ? detail.lines : [], detail.speakerId || '');
+  });
   window.addEventListener('beforeunload', markResourceSeen);
   window.addEventListener('pagehide', markResourceSeen);
   document.addEventListener('visibilitychange', () => {

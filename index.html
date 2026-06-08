@@ -157,7 +157,7 @@
       transition:opacity 0.22s ease;
     }
     .movement-hint[hidden],
-    .strawberry-upgrade-hint[hidden]{display:none;}
+    .tutorial-point-hint[hidden]{display:none;}
     .movement-hint.hiding{opacity:0;}
     .movement-hint-gesture{
       position:relative;
@@ -207,7 +207,7 @@
       font-weight:900;
       text-align:center;
     }
-    .strawberry-upgrade-hint{
+    .tutorial-point-hint{
       position:absolute;
       left:0;
       top:0;
@@ -217,7 +217,7 @@
       pointer-events:none;
       animation:tutorial-point-down 0.85s ease-in-out infinite;
     }
-    .strawberry-upgrade-hint .tutorial-hand{
+    .tutorial-point-hint .tutorial-hand{
       width:64px;
       height:64px;
       transform:rotate(180deg);
@@ -1888,8 +1888,9 @@
     .first-day .quest-stage-column,
     .first-day .quest-toggle,
     .first-day .inventory-button,
-    .first-day .quest-collapse,
-    .first-day .quest-card{display:none!important;}
+    .first-day .quest-collapse{display:none!important;}
+    .first-day:not(.first-day-quest-ready) .quest-card{display:none!important;}
+    .first-day.first-day-quest-ready .quest-card{display:grid!important;}
     .first-day .settings-button{left:10px;}
     .first-day .settings-panel{left:10px;}
     .first-day .quest-strip{top:58px;left:10px;right:10px;height:30px;}
@@ -2036,7 +2037,17 @@
       </div>
       <div class="movement-hint-label">Води пальцем, чтобы двигаться</div>
     </div>
-    <div id="strawberryUpgradeHint" class="strawberry-upgrade-hint" hidden aria-hidden="true">
+    <div id="strawberryUpgradeHint" class="tutorial-point-hint" hidden aria-hidden="true">
+      <svg class="tutorial-hand" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M23 53C15 47 10 37 12 33C13 30 16 30 19 33L24 38V13C24 9 30 9 30 13V29V20C30 16 36 16 36 20V30V23C36 19 42 19 42 23V32V27C42 23 48 23 48 27V39C48 52 38 58 23 53Z" fill="#fff" stroke="#8a78a0" stroke-width="3" stroke-linejoin="round"></path>
+      </svg>
+    </div>
+    <div id="resourceUpgradeActionHint" class="tutorial-point-hint" hidden aria-hidden="true">
+      <svg class="tutorial-hand" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M23 53C15 47 10 37 12 33C13 30 16 30 19 33L24 38V13C24 9 30 9 30 13V29V20C30 16 36 16 36 20V30V23C36 19 42 19 42 23V32V27C42 23 48 23 48 27V39C48 52 38 58 23 53Z" fill="#fff" stroke="#8a78a0" stroke-width="3" stroke-linejoin="round"></path>
+      </svg>
+    </div>
+    <div id="questPanelHint" class="tutorial-point-hint" hidden aria-hidden="true">
       <svg class="tutorial-hand" viewBox="0 0 64 64" aria-hidden="true">
         <path d="M23 53C15 47 10 37 12 33C13 30 16 30 19 33L24 38V13C24 9 30 9 30 13V29V20C30 16 36 16 36 20V30V23C36 19 42 19 42 23V32V27C42 23 48 23 48 27V39C48 52 38 58 23 53Z" fill="#fff" stroke="#8a78a0" stroke-width="3" stroke-linejoin="round"></path>
       </svg>
@@ -2185,7 +2196,7 @@
   <script src="./ui-config.js?v=20260608-ui-audio"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
   <script src="./audio-manager.js?v=20260608-intro-audio"></script>
-  <script src="./pixi-game.js?v=20260608-ui-polish"></script>
-  <script src="./pixi-ui.js?v=20260608-ui-polish"></script>
+  <script src="./pixi-game.js?v=20260609-day-progression"></script>
+  <script src="./pixi-ui.js?v=20260609-day-progression"></script>
 </body>
 </html>
