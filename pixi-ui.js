@@ -1018,8 +1018,7 @@
       if (isExpansion) setTimeout(() => res.onUnlock(), EXPANSION_DELAY_MS);
       else res.onUnlock();
     }
-    playSound('ui.purchase', { volume: 0.27 });
-    if (!isExpansion && !isBoatRepair) playSound('world.resourceUnlock', { volume: 0.24 });
+    playSound('ui.questReward', { volume: 0.3 });
     renderResources();
     return true;
   }
@@ -1234,7 +1233,7 @@
     setUserState(user);
     renderResources();
     renderResourceUpgradePanel(user);
-    playSound((level + 1) % RESOURCE_UPGRADE_LEVELS_PER_STAR === 0 ? 'ui.starEarned' : 'ui.resourceUpgrade', { volume: 0.3 });
+    playSound('ui.questReward', { volume: 0.3 });
     window.dispatchEvent(new CustomEvent('vibe-resource-upgraded', { detail: { id: resource.id, level: level + 1 } }));
   }
 

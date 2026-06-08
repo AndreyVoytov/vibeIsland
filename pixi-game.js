@@ -3513,8 +3513,7 @@
   function spawnResourceBurst(b, now) {
     if (!b || b.resourceBurstSpawned) return;
     b.resourceBurstSpawned = true;
-    playSound('player.axeHitBush', { volume: 0.25, cooldownMs: 120 });
-    playSound('player.leavesBurst', { volume: 0.22, cooldownMs: 120 });
+    playSound('player.leavesBurst', { volume: 0.27, cooldownMs: 120 });
     const visual = getBushVisualDef(b);
     const colors = getResourceBurstColors(b, visual);
     for (let i = 0; i < RESOURCE_BURST_COUNT; i += 1) {
@@ -5134,7 +5133,6 @@
       rotation: sprite.rotation,
       spin: rnd(-0.08, 0.08),
     });
-    playSound('water.burst', { volume: 0.13, cooldownMs: 800 });
   }
 
   function updateSpatialAudio(now) {
@@ -5149,7 +5147,7 @@
     const lighthouse = scenarioState.find((state) => state.id === 'lighthouse' && state.transformed);
     if (lighthouse) {
       const distance = Math.hypot(heroGX - (lighthouse.gridX + 0.5), heroGY - (lighthouse.gridY + 0.5));
-      window.VibeAudio.setLoopVolume('ambience.lighthouse', Math.max(0, 1 - distance / 10) * 0.12);
+      window.VibeAudio.setLoopVolume('ambience.lighthouse', Math.max(0, 1 - distance / 10) * 0.03);
     } else {
       window.VibeAudio.stopLoop('ambience.lighthouse');
     }
@@ -5346,7 +5344,8 @@
     gameHeight = mount.clientHeight || window.innerHeight;
     app.renderer.resolution = Math.min(window.devicePixelRatio || 1, 2);
     app.renderer.resize(gameWidth, gameHeight);
-    joyR = JOY_R_PCT * gameWidth / 100;
+    const desktopJoystickScale = window.matchMedia('(hover: hover) and (pointer: fine)').matches ? 1 / 2.4 : 1;
+    joyR = JOY_R_PCT * gameWidth / 100 * desktopJoystickScale;
     redrawSea();
     renderHorizon();
     redrawIsland();

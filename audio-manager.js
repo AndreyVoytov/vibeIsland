@@ -90,19 +90,24 @@
     'music.main': 0.18,
     'music.island2': 0.18,
     'music.boat': 0.28,
-    'ambience.ocean': 0.13,
+    'ambience.ocean': 0.026,
     'ambience.island': 0.08,
-    'ambience.island2': 0.1,
+    'ambience.island2': 0.025,
     'ambience.campfire': 0.22,
-    'ambience.lighthouse': 0.12,
+    'ambience.lighthouse': 0.03,
     'player.footstep': 0.2,
     'player.pickup': 0.24,
+    'water.ripple': 0.06,
+    'water.sharkPass': 0.05,
+    'water.burst': 0.026,
     'ui.tap': 0.16,
   };
 
   const loops = new Map();
   const effects = new Set();
   const lastPlayedAt = new Map();
+  let audioContext = null;
+  let pickupNoteIndex = 0;
   let unlocked = false;
   let muted = localStorage.getItem('audioMuted') === '1';
   let activeMusicKey = '';
@@ -118,11 +123,45 @@
     return defaultVolumes[key] ?? 0.32;
   }
 
+  function ensureAudioContext() {
+    const AudioContextClass = global.AudioContext || global.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!audioContext) audioContext = new AudioContextClass();
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+    return audioContext;
+  }
+
+  function playSoftPickup(options = {}) {
+    if (!ensureAudioContext()) return null;
+    const now = audioContext.currentTime;
+    const noteSteps = [0, 2, 4, 7, 9, 7, 4, 2];
+    const step = noteSteps[pickupNoteIndex % noteSteps.length];
+    pickupNoteIndex += 1;
+    const baseFrequency = 255 * (2 ** (step / 12));
+    const gain = audioContext.createGain();
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(baseFrequency * 0.72, now);
+    oscillator.frequency.exponentialRampToValueAtTime(baseFrequency, now + 0.11);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volumeFor('player.pickup', options.volume) * 0.16), now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.15);
+    return oscillator;
+  }
+
   function play(key, options = {}) {
     if (!unlocked || muted) return null;
     const now = performance.now();
     const cooldownMs = Number.isFinite(options.cooldownMs) ? options.cooldownMs : 0;
     if (cooldownMs && now - (lastPlayedAt.get(key) || 0) < cooldownMs) return null;
+    if (key === 'player.pickup') {
+      lastPlayedAt.set(key, now);
+      return playSoftPickup(options);
+    }
     const src = choose(key);
     if (!src) return null;
     const audio = new Audio(src);
@@ -189,6 +228,7 @@
   function unlock() {
     if (unlocked) return;
     unlocked = true;
+    ensureAudioContext();
     syncIslandAudio();
   }
 
