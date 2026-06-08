@@ -647,12 +647,16 @@
       box-sizing:border-box;
       transition:filter 0.16s ease, opacity 0.16s ease, background 0.16s ease;
     }
-    .farm-resource-card.active{background:linear-gradient(180deg,#55c953,#279238);}
+    .farm-resource-card.can-upgrade{
+      border-color:#176f31;
+      background:linear-gradient(180deg,#55c953,#279238);
+      box-shadow:0 3px 0 #176f31,0 5px 8px rgba(0,0,0,0.18);
+    }
     .farm-resource-card.cannot-upgrade{
-      border-color:#536b7a;
-      background:linear-gradient(180deg,#7f9eac,#607d8b);
-      box-shadow:0 3px 0 #435966,0 5px 8px rgba(0,0,0,0.18);
-      filter:grayscale(0.38);
+      border-color:#0c4d7e;
+      background:linear-gradient(180deg,#2aaee2,#1577b5);
+      box-shadow:0 3px 0 #0c4d7e,0 5px 8px rgba(0,0,0,0.18);
+      filter:none;
       opacity:1;
     }
     .farm-resource-card.can-upgrade::after{
@@ -728,8 +732,6 @@
       background:#67e5ff;
       display:block;
     }
-    .farm-resource-card.cannot-upgrade .farm-resource-stars .filled{color:#e0be4d;}
-    .farm-resource-card.cannot-upgrade .farm-resource-progress-fill{background:#b8c8cc;}
     .upgrade-marker{
       position:absolute;
       top:-6px;
@@ -1507,7 +1509,6 @@
       box-shadow:0 6px 0 #0aa72a, inset 0 2px 0 rgba(255,255,255,0.42);
       flex-shrink:0;
     }
-    @media (max-width:600px){
       .wallet-row{
         top:10px;
         right:10px;
@@ -1549,7 +1550,6 @@
       }
       .quest-toggle{top:106px;}
       .quest-card.finished{width:calc(100% - 20px);}
-    }
     .resource-card.available .unlock-button::after{
       content:"";
       position:absolute;
@@ -1698,7 +1698,7 @@
       </div>
       <div class="quest-strip" data-ui-control>
         <div class="quest-stage-column">
-          <div id="questStage" class="quest-level-pill">1-1</div>
+          <div id="questStage" class="quest-level-pill">day 1</div>
           <div id="islandSizeMeters" class="island-size-pill">⌀ 18 м</div>
         </div>
         <div class="quest-track">
@@ -1808,7 +1808,7 @@
   <script src="./scenario-objects-config.js?v=20260608-survivor-dialogue"></script>
   <script src="./ui-config.js?v=20260605-player-xp"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./pixi-game.js?v=20260608-turn-position-fix"></script>
-  <script src="./pixi-ui.js?v=20260608-star-pricing"></script>
+  <script src="./pixi-game.js?v=20260608-full-desktop-width"></script>
+  <script src="./pixi-ui.js?v=20260608-island-day-label"></script>
 </body>
 </html>

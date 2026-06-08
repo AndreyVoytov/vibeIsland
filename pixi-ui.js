@@ -1155,10 +1155,6 @@
       const canUpgrade = level < RESOURCE_UPGRADE_MAX_LEVEL && user.money >= getResourceUpgradeCost(resource, user);
       entry.card.classList.toggle('can-upgrade', canUpgrade);
       entry.card.classList.toggle('cannot-upgrade', !canUpgrade);
-      entry.card.classList.toggle(
-        'active',
-        Boolean(resourceUpgradePanel && resourceUpgradePanel.classList.contains('open') && activeResourceUpgradeId === resource.id)
-      );
     });
   }
 
@@ -1366,7 +1362,10 @@
     const claimReady = !done && progress >= 1 && !repairLocked;
     const totalProgress = QUESTS.length ? ((Math.min(index, QUESTS.length) + progress) / QUESTS.length) * 100 : 100;
 
-    if (questStage) questStage.textContent = `1-${Math.min(index + 1, QUESTS.length)}`;
+    if (questStage) {
+      const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1));
+      questStage.textContent = `day ${islandRun}`;
+    }
     if (questTrackFill) questTrackFill.style.width = `${Math.min(100, Math.max(0, totalProgress))}%`;
     if (questMilestones) {
       Array.from(questMilestones.children).forEach((dot, dotIndex) => {

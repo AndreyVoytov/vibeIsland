@@ -50,7 +50,6 @@
   const LEAF_SIZE_SCALE = 1.5;
   const DROP_RESOURCE_DISPLAY_SCALE = 1.2;
   const RESOURCE_BURST_COUNT = 34;
-  const CENTERED_RESOURCE_BURST_COUNT = 58;
   const WOOD_CHIP_COUNT = 9;
   const WOOD_CHIP_LIFE_MS = 560;
   const WOOD_CHIP_SPD_MIN = 7;
@@ -496,12 +495,11 @@
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const portraitRatio = 9 / 16;
-    const gameW = (vw > vh) ? Math.floor(vh * portraitRatio) : vw;
-    const gameH = (vw > vh) ? vh : Math.floor(gameW / portraitRatio);
-    document.documentElement.style.setProperty('--game-width', `${gameW}px`);
-    localStorage.setItem('gameWidth', String(gameW));
-    localStorage.setItem('gameHeight', String(gameH));
-    return { gameW, gameH };
+    const worldReferenceW = (vw > vh) ? Math.floor(vh * portraitRatio) : vw;
+    document.documentElement.style.setProperty('--game-width', `${vw}px`);
+    localStorage.setItem('gameWidth', String(worldReferenceW));
+    localStorage.setItem('gameHeight', String(vh));
+    return { gameW: vw, gameH: vh };
   }
 
   function initDefaultMap() {
@@ -3501,24 +3499,22 @@
     if (!b || b.resourceBurstSpawned) return;
     b.resourceBurstSpawned = true;
     const visual = getBushVisualDef(b);
-    const centered = visual.type === 'centered';
     const colors = getResourceBurstColors(b, visual);
-    const count = centered ? CENTERED_RESOURCE_BURST_COUNT : RESOURCE_BURST_COUNT;
-    for (let i = 0; i < count; i += 1) {
+    for (let i = 0; i < RESOURCE_BURST_COUNT; i += 1) {
       const start = getResourceBurstStart(b, visual, now);
       b.leafs.push(mkLeaf(start.xPct, start.yPct, {
         t0: now,
         color: colors[rndi(0, colors.length - 1)],
-        sizePct: centered ? rnd(0.72, 1.55) : rnd(0.66, 1.22) / 1.5,
-        spdMin: centered ? LEAF_SPD_MIN * 0.42 : LEAF_SPD_MIN * 0.34,
-        spdMax: centered ? LEAF_SPD_MAX * 0.62 : LEAF_SPD_MAX * 0.48,
-        horizontalScale: centered ? 1.28 : 1.34,
-        angVelMaxDeg: centered ? 18 : 6,
-        upMin: centered ? 5.5 : 4.2,
-        upMax: centered ? 8.4 : 6.8,
-        gravityPct: centered ? 22 : 20,
+        sizePct: rnd(0.66, 1.22) / 1.5,
+        spdMin: LEAF_SPD_MIN * 0.34,
+        spdMax: LEAF_SPD_MAX * 0.48,
+        horizontalScale: 1.34,
+        angVelMaxDeg: 6,
+        upMin: 4.2,
+        upMax: 6.8,
+        gravityPct: 20,
         arc: true,
-        lifeMs: centered ? rnd(840, 1060) : rnd(760 / 1.4, 940 / 1.4),
+        lifeMs: rnd(760 / 1.4, 940 / 1.4),
       }));
     }
   }
