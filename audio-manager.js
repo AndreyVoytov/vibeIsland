@@ -4,7 +4,6 @@
     'music.island2': ['./audio/music/island-2-theme.mp3'],
     'music.boat': ['./audio/music/boat-cutscene.ogg'],
     'music.discovery': ['./audio/music/discovery-sting.ogg'],
-    'music.intro': ['./audio/music/intro-epic.wav'],
     'ambience.ocean': ['./audio/ambience/ocean-loop.mp3'],
     'ambience.island': ['./audio/ambience/island-loop.ogg'],
     'ambience.island2': ['./audio/ambience/island-2-night-loop.ogg'],
@@ -89,14 +88,12 @@
     'ui.starEarned': ['./audio/ui/star-earned.ogg'],
     'ui.questComplete': ['./audio/ui/quest-complete.ogg'],
     'ui.questReward': ['./audio/ui/quest-reward.ogg'],
-    'ui.introSlide': ['./audio/ui/intro-slide.ogg'],
   };
 
   const defaultVolumes = {
     'music.main': 0.18,
     'music.island2': 0.18,
     'music.boat': 0.28,
-    'music.intro': 0.22,
     'ambience.ocean': 0.026,
     'ambience.island': 0.08,
     'ambience.island2': 0.025,

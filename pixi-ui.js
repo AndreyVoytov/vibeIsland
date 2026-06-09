@@ -16,7 +16,7 @@
   const QUEST_PANEL_HINT_SEEN_KEY = 'questPanelHintSeen';
   const DAY_ONE_DIALOGUE_SEEN_KEY = 'dayOneFoodDialogueSeen';
   const DAY_TWO_DIALOGUE_SEEN_KEY = 'dayTwoDebrisDialogueSeen';
-  const FIRST_DAY_ALLOWED_UPGRADES = new Set(['upgrade-strawberry-fertilizer', 'upgrade-sharp-sight', 'expand-1']);
+  const FIRST_DAY_ALLOWED_UPGRADES = new Set(['upgrade-strawberry-fertilizer', 'upgrade-sharp-sight', 'expand-1', 'campfire-upgrade-1']);
   const LATER_DAY_RESOURCE_UNLOCK_COSTS = new Map([
     ['blueberry', 3000],
     ['raspberry', 40000],
@@ -149,6 +149,9 @@
     './img/rare/pine-cone.png',
     './img/rare/colorado-beetle.png',
     './img/ui/inventory-bag.png',
+    './img/ui/coin.png',
+    './img/ui/settings-gear.png',
+    './img/ui/upgrade-arrow.png',
     './img/ui/shine.png',
     './img/ui/rainbow-stone.png',
     './img/ui/hero-portrait.png',
@@ -178,24 +181,16 @@
 
   const DAY_ONE_QUESTS = [
     {
-      id: 'day-1-collect-10000',
-      type: 'moneyEarned',
-      title: 'Собрать 10k монет',
+      id: 'day-1-build-campfire',
+      type: 'unlockResource',
+      progressType: 'dayOneCampfireSavings',
+      resourceId: 'campfire-upgrade-1',
+      title: 'Сложить костёр',
       target: 10000,
       reward: { type: 'dayTransition', amount: 0 },
     },
   ];
-  const DAY_TWO_QUESTS = [
-    {
-      id: 'day-2-build-campfire',
-      type: 'unlockResource',
-      progressType: 'moneyEarnedSinceStart',
-      resourceId: 'campfire-upgrade-1',
-      title: 'Сложить костёр',
-      target: 10000,
-      reward: { type: 'story', amount: 0 },
-    },
-  ];
+  const DAY_TWO_QUESTS = [];
   const QUESTS = [
     {
       id: 'earn-25',
@@ -806,8 +801,8 @@
   function getEffectiveUnlockCost(resource) {
     if (!resource) return 0;
     const baseCost = Math.max(0, Math.floor(Number(resource.unlockCost) || 0));
-    if (getGameDay() < 2) return baseCost;
     if (resource.id === 'campfire-upgrade-1') return 10000;
+    if (getGameDay() < 2) return baseCost;
     if (resource.category === 'resource' && LATER_DAY_RESOURCE_UNLOCK_COSTS.has(resource.id)) {
       return LATER_DAY_RESOURCE_UNLOCK_COSTS.get(resource.id);
     }
@@ -915,12 +910,19 @@
   setImageWithFallback(heroPortrait, 'heroPortrait');
   if (inventoryIcon) inventoryIcon.src = knownAssetUrl('./img/ui/inventory-bag.png') || './img/ui/inventory-bag.png';
 
+  let cachedUserState = null;
+  let cachedUserRaw = '';
+  let lastUserStateReadAt = 0;
   function getUserState() {
-    let user = {};
-    try {
-      user = JSON.parse(localStorage.getItem('user') || '{}');
-    } catch (err) {
-      user = {};
+    const now = performance.now();
+    const storedUser = localStorage.getItem('user') || '{}';
+    let user = cachedUserState;
+    if (!user || storedUser !== cachedUserRaw) {
+      try {
+        user = JSON.parse(storedUser);
+      } catch (err) {
+        user = {};
+      }
     }
     if (typeof user.money !== 'number' || Number.isNaN(user.money)) user.money = 0;
     if (typeof user.rainbowStones !== 'number' || Number.isNaN(user.rainbowStones)) user.rainbowStones = 0;
@@ -935,12 +937,20 @@
     if (campfire) defaultUnlocks.push(campfire.id);
     if (berryResources[0]) defaultUnlocks.push(berryResources[0].id);
     defaultUnlocks.forEach((id) => { user.unlockedResources[id] = true; });
-    localStorage.setItem('user', JSON.stringify(user));
+    const normalizedUser = JSON.stringify(user);
+    if (normalizedUser !== storedUser) localStorage.setItem('user', normalizedUser);
+    cachedUserState = user;
+    cachedUserRaw = normalizedUser;
+    lastUserStateReadAt = now;
     return user;
   }
 
   function setUserState(user) {
-    localStorage.setItem('user', JSON.stringify(user));
+    const serialized = JSON.stringify(user);
+    cachedUserState = user;
+    cachedUserRaw = serialized;
+    lastUserStateReadAt = performance.now();
+    localStorage.setItem('user', serialized);
   }
 
   function ensureUserStats(user) {
@@ -1168,10 +1178,20 @@
     }
     latest.money -= lockInfo.cost;
     latest.unlockedResources[res.id] = true;
+    const builtDayOneCampfire = isFirstGameDay() && res.id === 'campfire-upgrade-1';
+    if (builtDayOneCampfire) {
+      const questState = ensureQuestState(latest);
+      questState.index = DAY_ONE_QUESTS.length;
+      questState.virtualProgress = DAY_ONE_QUESTS[0].target;
+      questState.lastWallet = latest.money;
+      questState.updatedAt = Date.now();
+      localStorage.setItem('dayOneCampfireBuiltAt', String(Date.now()));
+    }
     setUserState(latest);
     const isBoatRepair = res.category === 'boatRepair';
     const isExpansion = res.category === 'expansion';
-    if (isExpansion || isBoatRepair) togglePanel(false);
+    if (isExpansion || isBoatRepair || builtDayOneCampfire) togglePanel(false);
+    if (builtDayOneCampfire) toggleResourceUpgrade(false);
     maybeTeleportHeroFromBuilding(res);
     if (typeof res.onUnlock === 'function') {
       if (isExpansion) setTimeout(() => res.onUnlock(), EXPANSION_DELAY_MS);
@@ -1179,6 +1199,8 @@
     }
     playSound('ui.questReward', { volume: 0.3 });
     renderResources();
+    renderQuestLine();
+    if (builtDayOneCampfire) window.dispatchEvent(new CustomEvent('vibe-day-one-campfire-built'));
     return true;
   }
 
@@ -1470,8 +1492,55 @@
     return String(number);
   }
 
+  function getDayOneCampfireProgress(user, target) {
+    const questState = ensureQuestState(user);
+    const wallet = Math.max(0, Math.floor(Number(user.money) || 0));
+    let progress = Math.max(0, Math.floor(Number(questState.virtualProgress) || 0));
+    let lastWallet = Math.max(0, Math.floor(Number(questState.lastWallet) || 0));
+    let anchorWallet = Math.max(0, Math.floor(Number(questState.anchorWallet) || 0));
+    let anchorProgress = Math.max(0, Math.floor(Number(questState.anchorProgress) || 0));
+    let changed = false;
+
+    if (!Number.isFinite(Number(questState.lastWallet))) {
+      lastWallet = wallet;
+      anchorWallet = wallet;
+      anchorProgress = progress;
+      changed = true;
+    }
+    if (wallet < lastWallet) {
+      anchorWallet = wallet;
+      anchorProgress = progress;
+      changed = true;
+    } else if (wallet > lastWallet) {
+      const remainingWallet = Math.max(1, target - anchorWallet);
+      const remainingProgress = Math.max(0, target - anchorProgress);
+      const mapped = anchorProgress + ((wallet - anchorWallet) / remainingWallet) * remainingProgress;
+      progress = Math.max(progress, Math.floor(mapped));
+      changed = true;
+    }
+
+    progress = wallet >= target ? target : Math.min(target - 1, progress);
+    if (user.unlockedResources['campfire-upgrade-1']) progress = target;
+    if (questState.virtualProgress !== progress
+      || questState.lastWallet !== wallet
+      || questState.anchorWallet !== anchorWallet
+      || questState.anchorProgress !== anchorProgress) {
+      questState.virtualProgress = progress;
+      questState.lastWallet = wallet;
+      questState.anchorWallet = anchorWallet;
+      questState.anchorProgress = anchorProgress;
+      questState.updatedAt = Date.now();
+      changed = true;
+    }
+    if (changed) setUserState(user);
+    return progress;
+  }
+
   function getQuestCurrent(quest, user) {
     const stats = ensureUserStats(user);
+    if (quest.progressType === 'dayOneCampfireSavings') {
+      return getDayOneCampfireProgress(user, Math.max(1, Math.floor(Number(quest.target) || 1)));
+    }
     if (quest.progressType === 'moneyEarnedSinceStart') {
       const questState = ensureQuestState(user);
       return Math.max(0, Math.floor(Number(stats.moneyEarned) || 0) - Math.floor(Number(questState.earnedBaseline) || 0));
@@ -1621,6 +1690,7 @@
     const user = getUserState();
     const questState = ensureQuestState(user);
     const activeQuests = getActiveQuests();
+    if (gameShell) gameShell.classList.toggle('no-active-quests', activeQuests.length === 0);
     const index = questState.index;
     const quest = activeQuests[index];
     const done = !quest;
@@ -1651,7 +1721,7 @@
     questCard.classList.toggle('finished', done);
     questCard.classList.toggle('complete', claimReady);
     questCard.hidden = done;
-    if (gameShell) gameShell.classList.toggle('first-day-quest-ready', isFirstGameDay() && claimReady);
+    if (gameShell) gameShell.classList.remove('first-day-quest-ready');
 
     if (done) {
       setUiAssetImage(questIcon, uiConfig.uiAssets.rainbowStone || {});
@@ -1663,12 +1733,11 @@
     }
 
     questCard.hidden = false;
-    if (isFirstGameDay() && claimReady) questCard.classList.add('open');
     setUiAssetImage(questIcon, getQuestIconUrl(quest));
     if (quest.type === 'repairBoat') {
       questTitle.textContent = repairLocked ? `расширьте остров до ⌀ ${LIGHTHOUSE_REQUIRED_METERS} м` : 'починить катер';
     } else {
-      questTitle.textContent = claimReady ? (isFirstGameDay() ? 'Начать День 2' : 'Награда') : quest.title;
+      questTitle.textContent = claimReady ? 'Награда' : quest.title;
     }
     if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
     if (questProgressText) {
@@ -1851,40 +1920,20 @@
   let introFinished = false;
   let introCanContinue = false;
   let introFinishTimer = 0;
-  let introMusicAudio = null;
-  let introMusicStartedAt = 0;
-
-  function startIntroMusic() {
-    if (introMusicAudio) return introMusicAudio;
-    introMusicAudio = playSound('music.intro', { volume: 0.22 });
-    if (introMusicAudio) introMusicStartedAt = performance.now();
-    return introMusicAudio;
-  }
-
-  function stopIntroMusic(minimumPlayMs = 0) {
-    if (!introMusicAudio) return;
-    const audio = introMusicAudio;
-    const delay = Math.max(0, minimumPlayMs - (performance.now() - introMusicStartedAt));
-    introMusicAudio = null;
-    introMusicStartedAt = 0;
-    window.setTimeout(() => {
-      audio.pause();
-      audio.currentTime = 0;
-    }, delay);
-  }
-
   function finishIntroComic() {
     if (introFinished || !introCanContinue || !introComic || introComic.hidden) return;
     introFinished = true;
+    introCanContinue = false;
     window.clearTimeout(introFinishTimer);
-    stopIntroMusic(2200);
-    introComic.classList.add('finishing');
-    localStorage.setItem('dayOneIntroSeen', '1');
-    showDayTitle(1);
-    window.setTimeout(() => {
-      introComic.hidden = true;
-      introComic.classList.remove('finishing');
-    }, 720);
+    introFinishTimer = window.setTimeout(() => {
+      introComic.classList.add('finishing');
+      localStorage.setItem('dayOneIntroSeen', '1');
+      showDayTitle(1);
+      window.setTimeout(() => {
+        introComic.hidden = true;
+        introComic.classList.remove('finishing');
+      }, 720);
+    }, 3000);
   }
 
   function startIntroComic() {
@@ -1894,11 +1943,9 @@
     introComic.hidden = false;
     introComic.classList.remove('ready');
     Array.from(introComic.querySelectorAll('.intro-comic-panel')).forEach((panel) => panel.classList.remove('visible'));
-    startIntroMusic();
     Array.from(introComic.querySelectorAll('.intro-comic-panel')).forEach((panel, index) => {
       window.setTimeout(() => {
         panel.classList.add('visible');
-        playSound('ui.introSlide', { volume: 0.22, playbackRate: 0.96 + index * 0.04 });
       }, index * 1100);
     });
     window.setTimeout(() => {
@@ -1910,12 +1957,7 @@
   }
 
   function handleIntroClick() {
-    if (!introCanContinue) {
-      startIntroMusic();
-      playSound('ui.introSlide', { volume: 0.18 });
-      return;
-    }
-    startIntroMusic();
+    if (!introCanContinue) return;
     finishIntroComic();
   }
 
@@ -1928,6 +1970,27 @@
     }
   }
 
+  let dayOneCampfireTransitionTimer = 0;
+  function handleDayOneCampfireBuilt() {
+    window.clearTimeout(dayOneCampfireTransitionTimer);
+    togglePanel(false);
+    toggleInventory(false);
+    toggleResourceUpgrade(false);
+    dayOneCampfireTransitionTimer = window.setTimeout(() => {
+      if (!isFirstGameDay()) return;
+      const user = getUserState();
+      localStorage.setItem(GAME_DAY_KEY, '2');
+      user.questLine = {
+        index: 0,
+        mode: 'day-2',
+        earnedBaseline: ensureUserStats(user).moneyEarned,
+        updatedAt: Date.now(),
+      };
+      setUserState(user);
+      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
+    }, 1000);
+  }
+
   function renderResources() {
     const preserveScroll = Boolean(shopPanel && shopPanel.classList.contains('open'));
     const previousScrollTop = preserveScroll && resourceList ? resourceList.scrollTop : 0;
@@ -1937,7 +2000,6 @@
     moneyValue.textContent = user.money;
     if (gemValue) gemValue.textContent = formatCompactNumber(user.rainbowStones);
     const islandMeters = getIslandSizeMeters();
-    let canUpgrade = false;
     const pendingResources = resources
       .filter((res) => isResourceVisibleForCurrentDay(res) && !user.unlockedResources[res.id])
       .map((res) => ({ res, lockInfo: getResourceLockInfo(res, user, islandMeters) }))
@@ -1953,50 +2015,52 @@
         if (costDiff !== 0) return costDiff;
         return String(a.res.title).localeCompare(String(b.res.title));
       });
+    const canUpgrade = pendingResources.some(({ lockInfo }) => lockInfo.canBuy);
 
-    resources.forEach((res) => {
-      const hidden = !isResourceVisibleForCurrentDay(res);
-      const unlocked = !!user.unlockedResources[res.id];
-      if (unlocked || hidden) {
-        const existing = resourceCards.get(res.id);
-        if (existing && existing.lockDivider && existing.lockDivider.parentNode) existing.lockDivider.parentNode.removeChild(existing.lockDivider);
-        if (existing && existing.card && existing.card.parentNode) existing.card.parentNode.removeChild(existing.card);
-        resourceCards.delete(res.id);
-      }
-    });
-
-    let lastExpansionRequirement = 0;
-    pendingResources.forEach(({ res, lockInfo }) => {
-      if (lockInfo.canBuy) canUpgrade = true;
-      let entry = resourceCards.get(res.id);
-      if (!entry) {
-        entry = createResourceCard(res);
-        resourceCards.set(res.id, entry);
-      }
-      const className = lockInfo.canBuy
-        ? 'resource-card available clickable'
-        : (lockInfo.expansionLocked ? 'resource-card expansion-locked' : 'resource-card locked');
-      entry.card.className = className;
-      if (entry.detail && res.category === 'boatRepair') {
-        entry.detail.textContent = lockInfo.expansionLocked ? 'И уплыть с острова' : 'Отправиться к новому острову';
-      }
-      entry.label.textContent = formatCompactNumber(lockInfo.cost);
-      entry.button.className = 'unlock-button' + (lockInfo.canBuy ? '' : (lockInfo.expansionLocked ? ' expansion-locked' : ' locked'));
-      entry.button.disabled = !lockInfo.canBuy;
-      entry.button.style.display = 'flex';
-      entry.check.style.display = 'none';
-      const showDivider = lockInfo.expansionLocked && lockInfo.expansionRequiredMeters !== lastExpansionRequirement;
-      if (entry.lockDivider) {
-        if (showDivider) {
-          entry.lockLabel.textContent = `Расширьте остров до ⌀ ${lockInfo.expansionRequiredMeters} м`;
-          resourceList.appendChild(entry.lockDivider);
-          lastExpansionRequirement = lockInfo.expansionRequiredMeters;
-        } else if (entry.lockDivider.parentNode) {
-          entry.lockDivider.parentNode.removeChild(entry.lockDivider);
+    if (preserveScroll) {
+      resources.forEach((res) => {
+        const hidden = !isResourceVisibleForCurrentDay(res);
+        const unlocked = !!user.unlockedResources[res.id];
+        if (unlocked || hidden) {
+          const existing = resourceCards.get(res.id);
+          if (existing && existing.lockDivider && existing.lockDivider.parentNode) existing.lockDivider.parentNode.removeChild(existing.lockDivider);
+          if (existing && existing.card && existing.card.parentNode) existing.card.parentNode.removeChild(existing.card);
+          resourceCards.delete(res.id);
         }
-      }
-      resourceList.appendChild(entry.card);
-    });
+      });
+
+      let lastExpansionRequirement = 0;
+      pendingResources.forEach(({ res, lockInfo }) => {
+        let entry = resourceCards.get(res.id);
+        if (!entry) {
+          entry = createResourceCard(res);
+          resourceCards.set(res.id, entry);
+        }
+        const className = lockInfo.canBuy
+          ? 'resource-card available clickable'
+          : (lockInfo.expansionLocked ? 'resource-card expansion-locked' : 'resource-card locked');
+        entry.card.className = className;
+        if (entry.detail && res.category === 'boatRepair') {
+          entry.detail.textContent = lockInfo.expansionLocked ? 'И уплыть с острова' : 'Отправиться к новому острову';
+        }
+        entry.label.textContent = formatCompactNumber(lockInfo.cost);
+        entry.button.className = 'unlock-button' + (lockInfo.canBuy ? '' : (lockInfo.expansionLocked ? ' expansion-locked' : ' locked'));
+        entry.button.disabled = !lockInfo.canBuy;
+        entry.button.style.display = 'flex';
+        entry.check.style.display = 'none';
+        const showDivider = lockInfo.expansionLocked && lockInfo.expansionRequiredMeters !== lastExpansionRequirement;
+        if (entry.lockDivider) {
+          if (showDivider) {
+            entry.lockLabel.textContent = `Расширьте остров до ⌀ ${lockInfo.expansionRequiredMeters} м`;
+            resourceList.appendChild(entry.lockDivider);
+            lastExpansionRequirement = lockInfo.expansionRequiredMeters;
+          } else if (entry.lockDivider.parentNode) {
+            entry.lockDivider.parentNode.removeChild(entry.lockDivider);
+          }
+        }
+        resourceList.appendChild(entry.card);
+      });
+    }
     upgradeMarker.classList.toggle('hidden', !canUpgrade);
     if (preserveScroll && resourceList) resourceList.scrollTop = previousScrollTop;
     renderFarmResourceStrip(user);
@@ -2079,6 +2143,7 @@
       inventoryBadge.classList.toggle('hidden', total <= 0);
     }
     if (!inventoryList) return;
+    if (!inventoryPanel || !inventoryPanel.classList.contains('open')) return;
 
     inventoryList.innerHTML = '';
     const gear = document.createElement('div');
@@ -2408,6 +2473,7 @@
   }
   if (introComic) introComic.addEventListener('click', handleIntroClick);
   window.addEventListener('vibe-game-ready', handleGameReady);
+  window.addEventListener('vibe-day-one-campfire-built', handleDayOneCampfireBuilt);
   window.addEventListener('vibe-day-changed', (event) => {
     const day = Math.max(1, Math.floor(Number(event.detail && event.detail.day) || getGameDay()));
     togglePanel(false);
@@ -2459,9 +2525,9 @@
   setInterval(() => {
     renderResources();
     renderPlayerProgress();
-    renderInventory();
+    if (inventoryPanel && inventoryPanel.classList.contains('open')) renderInventory();
     renderQuestLine();
-  }, 400);
+  }, 650);
   window.addEventListener('storage', () => {
     renderResources();
     renderPlayerProgress();

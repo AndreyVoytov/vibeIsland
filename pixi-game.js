@@ -13,6 +13,8 @@
 
   const PIXI = window.PIXI;
   PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.LINEAR;
+  const IS_MOBILE_DEVICE = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 768;
+  const getRendererResolution = () => Math.min(window.devicePixelRatio || 1, IS_MOBILE_DEVICE ? 1.5 : 2);
 
   const mount = document.getElementById('pixiMount');
   const shell = document.getElementById('gameShell');
@@ -176,8 +178,9 @@
   const HORIZON_TOP_OVERSCAN_PX = 2;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
   const SECOND_ISLAND_CAMPFIRE_RAISE_CELLS = 0.32;
+  let dayOneCampfireBuiltAt = Math.max(0, Number(localStorage.getItem('dayOneCampfireBuiltAt') || 0));
   const RESOURCE_AURA_PERIOD_MS = 1900;
-  const RESOURCE_AURA_PARTICLES = 4;
+  const RESOURCE_AURA_PARTICLES = IS_MOBILE_DEVICE ? 2 : 4;
 
   const SHARK_N = 5;
   const SHARK_WANDER_R = 7;
@@ -549,7 +552,7 @@
     height: Math.max(1, mount.clientHeight || window.innerHeight),
     backgroundColor: SEA_COLOR,
     antialias: false,
-    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    resolution: getRendererResolution(),
     autoDensity: true,
     powerPreference: 'high-performance',
   });
@@ -612,10 +615,6 @@
   heroLayer.zIndex = 7;
   const foregroundCloudShadowGraphics = new PIXI.Graphics();
   foregroundCloudShadowGraphics.zIndex = 7.8;
-  if (PIXI.BlurFilter) {
-    cloudShadowGraphics.filters = [new PIXI.BlurFilter(6, 2)];
-    foregroundCloudShadowGraphics.filters = [new PIXI.BlurFilter(6, 2)];
-  }
   const foregroundCloudLayer = new PIXI.Container();
   foregroundCloudLayer.zIndex = 8.2;
   foregroundCloudLayer.eventMode = 'none';
@@ -982,14 +981,25 @@
     clouds.forEach((cloud) => resetCloud(cloud, true));
   }
 
-  function renderCloudShadows() {
+  let lastCloudShadowRenderAt = 0;
+  function renderCloudShadows(now = performance.now()) {
+    if (now - lastCloudShadowRenderAt < (IS_MOBILE_DEVICE ? 50 : 32)) return;
+    lastCloudShadowRenderAt = now;
     cloudShadowGraphics.clear();
     foregroundCloudShadowGraphics.clear();
     clouds.forEach((cloud) => {
       const target = cloud.foreground ? foregroundCloudShadowGraphics : cloudShadowGraphics;
       const alphaBase = cloud.foreground ? CLOUD_FOREGROUND_SHADOW_ALPHA : CLOUD_SHADOW_ALPHA;
       const alpha = alphaBase * (cloud.alpha || 1);
-      beginFill(target, `rgba(18,36,62,${alpha})`, '#12243e');
+      beginFill(target, `rgba(18,36,62,${alpha * 0.35})`, '#12243e');
+      target.drawEllipse(
+        cloud.x,
+        cloud.groundY,
+        cloud.visualWidth * 0.5,
+        Math.max(10, cloud.visualHeight * 0.23)
+      );
+      target.endFill();
+      beginFill(target, `rgba(18,36,62,${alpha * 0.65})`, '#12243e');
       target.drawEllipse(
         cloud.x,
         cloud.groundY,
@@ -1010,7 +1020,7 @@
       const leftEdge = travel.left - CLOUD_WRAP_PAD - cloud.visualWidth * 2;
       if (cloud.x - cloud.visualWidth > rightEdge || cloud.x < leftEdge) resetCloud(cloud, false);
     });
-    renderCloudShadows();
+    renderCloudShadows(now);
   }
 
   function cellKey(x, y) {
@@ -1475,8 +1485,22 @@
     islandRenderVisibility = null;
   }
 
+  let cachedUserState = null;
+  let cachedUserRaw = '';
+  let lastUserStateReadAt = 0;
   function getUserState() {
-    let user = safeJson('user', {});
+    const now = performance.now();
+    const raw = localStorage.getItem('user') || '{}';
+    if (cachedUserState && raw === cachedUserRaw) {
+      lastUserStateReadAt = now;
+      return cachedUserState;
+    }
+    let user;
+    try {
+      user = JSON.parse(raw);
+    } catch (err) {
+      user = {};
+    }
     if (typeof user.money !== 'number' || Number.isNaN(user.money)) user.money = 0;
     if (typeof user.rainbowStones !== 'number' || Number.isNaN(user.rainbowStones)) user.rainbowStones = 0;
     if (!user.unlockedResources || typeof user.unlockedResources !== 'object') user.unlockedResources = {};
@@ -1487,12 +1511,18 @@
     if (BERRIES_LIST[0]) user.unlockedResources[BERRIES_LIST[0].id] = true;
     const campfire = buildingDefs.find((item) => item.id === 'campfire');
     if (campfire) user.unlockedResources[campfire.id] = true;
-    localStorage.setItem('user', JSON.stringify(user));
+    cachedUserState = user;
+    cachedUserRaw = raw;
+    lastUserStateReadAt = now;
     return user;
   }
 
   function setUserState(user) {
-    localStorage.setItem('user', JSON.stringify(user));
+    const serialized = JSON.stringify(user);
+    cachedUserState = user;
+    cachedUserRaw = serialized;
+    lastUserStateReadAt = performance.now();
+    localStorage.setItem('user', serialized);
   }
 
   function getInventoryTotal(user) {
@@ -1715,8 +1745,7 @@
     return Number.isFinite(cell) ? cell : 0;
   }
 
-  function getActiveBuildingCells(padding = 0, collidersOnly = false) {
-    const user = getUserState();
+  function getActiveBuildingCells(padding = 0, collidersOnly = false, user = getUserState()) {
     const cells = new Set();
     if (!Array.isArray(buildingLayout) || !GRID_W) return cells;
     buildingLayout.forEach((spot) => {
@@ -2377,17 +2406,29 @@
     });
     localStorage.setItem(SCENARIO_COLLIDER_CELLS_KEY, JSON.stringify([...cells]));
     localStorage.setItem(SCENARIO_COLLIDER_UPDATED_KEY, String(Date.now()));
+    scenarioBlockersCache = cells;
+    scenarioBlockersCacheVersion = localStorage.getItem(SCENARIO_COLLIDER_UPDATED_KEY) || '';
   }
 
+  let scenarioBlockersCache = new Set();
+  let scenarioBlockersCacheVersion = '';
   function getScenarioBlockers() {
+    const version = localStorage.getItem(SCENARIO_COLLIDER_UPDATED_KEY) || '';
+    if (version === scenarioBlockersCacheVersion) return scenarioBlockersCache;
     const raw = localStorage.getItem(SCENARIO_COLLIDER_CELLS_KEY);
-    if (!raw) return new Set();
+    if (!raw) {
+      scenarioBlockersCache = new Set();
+      scenarioBlockersCacheVersion = version;
+      return scenarioBlockersCache;
+    }
     try {
       const parsed = JSON.parse(raw);
-      return new Set(Array.isArray(parsed) ? parsed : []);
+      scenarioBlockersCache = new Set(Array.isArray(parsed) ? parsed : []);
     } catch (err) {
-      return new Set();
+      scenarioBlockersCache = new Set();
     }
+    scenarioBlockersCacheVersion = version;
+    return scenarioBlockersCache;
   }
 
   function startDialogue(lines, speakerId = '') {
@@ -2704,7 +2745,10 @@
     return baseY + floatOffset + height * factor;
   }
 
+  let lastScenarioRenderAt = 0;
   function renderScenarioObjects(now) {
+    if (IS_MOBILE_DEVICE && now - lastScenarioRenderAt < 1000 / 30) return;
+    lastScenarioRenderAt = now;
     scenarioGraphics.clear();
     scenarioFxGraphics.clear();
     const activeIds = new Set();
@@ -4399,7 +4443,10 @@
     }
   }
 
+  let lastResourceRenderAt = 0;
   function renderResources(now) {
+    if (IS_MOBILE_DEVICE && now - lastResourceRenderAt < 1000 / 30) return;
+    lastResourceRenderAt = now;
     resourceGraphics.clear();
     resourceShadowGraphics.clear();
     const activeSpriteIds = new Set();
@@ -4453,6 +4500,21 @@
       if (user.unlockedResources[id]) return buildingById.get(id) || buildingById.get('campfire');
     }
     return buildingById.get('campfire');
+  }
+
+  function shouldShowCampfire(user) {
+    return !isFirstGameDay() || Boolean(user && user.unlockedResources && user.unlockedResources['campfire-upgrade-1']);
+  }
+
+  function drawCampfirePatch(g, centerX, centerY, size) {
+    const width = size * 0.72;
+    const height = size * 0.34;
+    beginFill(g, 'rgba(129,88,40,0.22)', '#815828');
+    drawRoundedRect(g, centerX - width / 2, centerY - height / 2 + size * 0.08, width, height, height * 0.42);
+    g.endFill();
+    beginFill(g, '#e4bb63');
+    drawRoundedRect(g, centerX - width * 0.47, centerY - height * 0.52, width * 0.94, height * 0.86, height * 0.36);
+    g.endFill();
   }
 
   function drawBuildingPrimitive(g, def, centerX, centerY, size) {
@@ -4531,6 +4593,13 @@
     if (isCampfireBuilding(def)) {
       width *= getCampfireDisplayScale();
       height *= getCampfireDisplayScale();
+      const age = Date.now() - dayOneCampfireBuiltAt;
+      if (dayOneCampfireBuiltAt > 0 && age >= 0 && age < 1000) {
+        const t = clamp(age / 1000, 0, 1);
+        const spring = Math.max(0.04, 1 - Math.cos(t * Math.PI * 3.4) * Math.exp(-t * 5.2));
+        width *= spring;
+        height *= spring;
+      }
     }
     sprite.visible = true;
     sprite.anchor.set(0.5, Number.isFinite(def.assetAnchorY) ? def.assetAnchorY : 0.76);
@@ -4580,7 +4649,10 @@
     buildingGlowGraphics.endFill();
   }
 
-  function renderBuildings(now = performance.now()) {
+  let lastBuildingsRenderAt = 0;
+  function renderBuildings(now = performance.now(), user = getUserState()) {
+    if (now - lastBuildingsRenderAt < (IS_MOBILE_DEVICE ? 100 : 50)) return;
+    lastBuildingsRenderAt = now;
     buildingsGraphics.clear();
     buildingGlowGraphics.clear();
     const cell = getWorldCellPx();
@@ -4597,7 +4669,6 @@
     }
     const buildingCellPx = getBuildingCellPx();
     const virtualCellPx = getVirtualCellPx();
-    const user = getUserState();
     const anchorSpot = getBuildingAnchorSpot(buildingLayout);
     if (!anchorSpot) {
       clearBuildingSprites();
@@ -4619,6 +4690,10 @@
       const renderCenterY = centerY - (isCampfireBuilding(def) && isSecondIsland() ? getFixedWorldCellPx() * SECOND_ISLAND_CAMPFIRE_RAISE_CELLS : 0);
       const fixedRatio = getWorldCellPx() > 0 ? getFixedWorldCellPx() / getWorldCellPx() : 1;
       const visualSize = isCampfireBuilding(def) ? size * fixedRatio * getCampfireDisplayScale() : size;
+      if (spot.id === 'campfire' && !shouldShowCampfire(user)) {
+        drawCampfirePatch(buildingsGraphics, centerX, renderCenterY, visualSize);
+        return;
+      }
       if (isCampfireBuilding(def)) drawCampfireGlow(centerX, renderCenterY, visualSize, now, def);
       if (!renderBuildingSprite(def, centerX, renderCenterY, size, activeBuildingIds)) {
         drawBuildingPrimitive(buildingsGraphics, def, centerX, renderCenterY, visualSize);
@@ -4727,8 +4802,8 @@
     joystickGraphics.endFill();
   }
 
-  function getBuildingBlockers() {
-    return getActiveBuildingCells(0, true);
+  function getBuildingBlockers(user) {
+    return getActiveBuildingCells(0, true, user);
   }
 
   function isCellFree(gx, gy, blockers, resourceBlockers, scenarioBlockers) {
@@ -4819,14 +4894,24 @@
     const heroX = (charXPct * worldW) / 100;
     const heroY = (charYPct * worldW) / 100;
     camera = { x: heroX - gameWidth / 2, y: heroY - gameHeight / 2 };
+  }
+
+  let lastRuntimeStatePersistAt = 0;
+  let lastPersistedMoving = null;
+  function persistRuntimeState(now = performance.now(), force = false) {
+    const movingChanged = lastPersistedMoving !== controllerState.isMoving;
+    if (!force && !movingChanged && now - lastRuntimeStatePersistAt < 250) return;
+    lastRuntimeStatePersistAt = now;
+    lastPersistedMoving = controllerState.isMoving;
+    localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving: controllerState.isMoving }));
     localStorage.setItem('camera', JSON.stringify(camera));
   }
 
-  function updateHeroLogic(dtMs) {
+  function updateHeroLogic(dtMs, user) {
     if (boatCutscene) {
       controllerState.isMoving = false;
-      localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving: false }));
       updateCameraToHero();
+      persistRuntimeState(performance.now());
       return;
     }
     applyHeroTeleport();
@@ -4836,7 +4921,7 @@
     const vy = (controllerState.vyPct || 0) * SPEED_SCALE * mapSpeedScale * frameScale;
     const isMoving = Math.abs(vx) + Math.abs(vy) > 0.001;
     controllerState.isMoving = isMoving;
-    const blockers = getBuildingBlockers();
+    const blockers = getBuildingBlockers(user);
     const resourceBlockers = resourceColliderCells;
     const scenarioBlockers = getScenarioBlockers();
     let blockedX = false;
@@ -4881,8 +4966,8 @@
       lastFootstepAt = now;
       playSound('player.footstep', { volume: 0.03 });
     }
-    localStorage.setItem('heroState', JSON.stringify({ charXPct, charYPct, facing, isMoving }));
     updateCameraToHero();
+    persistRuntimeState(now);
   }
 
   const heroParts = {};
@@ -4896,7 +4981,12 @@
   let chopActive = false;
   let chopT0 = 0;
   let lastChopAt = 0;
+  let lastHeroActionRaw = '';
+  let cachedHeroAction = null;
   let dialogueBubble = null;
+  let renderedDialogueText = '';
+  let renderedDialogueSpeakerId = '';
+  let lastDialoguePruneAt = 0;
 
   function makeHeroSprite(name, flipped = false) {
     const sprite = new PIXI.Sprite(getTexture(`./img/hero/${name}.png`) || PIXI.Texture.WHITE);
@@ -4908,7 +4998,11 @@
 
   function initHeroSprites() {
     heroParts.armBack = makeHeroSprite('arm1');
+    heroParts.shadowSoft = makeHeroSprite('shadow');
+    heroParts.shadowSoft.alpha = 0.2;
+    heroParts.shadowSoft.scale.set(1.12, 1.18);
     heroParts.shadow = makeHeroSprite('shadow');
+    heroParts.shadow.alpha = 0.72;
     heroParts.legBack = makeHeroSprite('leg1');
     heroParts.backpack = makeHeroSprite('backpack', true);
     heroParts.legFront = makeHeroSprite('leg2');
@@ -4962,7 +5056,16 @@
       }
     }
 
-    const action = safeJson('heroAction', null);
+    const heroActionRaw = localStorage.getItem('heroAction') || '';
+    if (heroActionRaw !== lastHeroActionRaw) {
+      lastHeroActionRaw = heroActionRaw;
+      try {
+        cachedHeroAction = heroActionRaw ? JSON.parse(heroActionRaw) : null;
+      } catch (err) {
+        cachedHeroAction = null;
+      }
+    }
+    const action = cachedHeroAction;
     if (action && action.chopAt && action.chopAt !== lastChopAt) {
       lastChopAt = action.chopAt;
       if (!chopActive) {
@@ -4990,6 +5093,7 @@
     heroContainer.scale.set(facing * S, S);
 
     updateSprite(heroParts.armBack, HERO_OFFSETS.armBack.x * charR, HERO_OFFSETS.armBack.y * charR - bounce, ((-20 + armSwing * 45 / charR) * Math.PI / 180) / 2);
+    updateSprite(heroParts.shadowSoft, HERO_OFFSETS.shadow.x * charR, HERO_OFFSETS.shadow.y * charR + charR * 0.01);
     updateSprite(heroParts.shadow, HERO_OFFSETS.shadow.x * charR, HERO_OFFSETS.shadow.y * charR);
     updateSprite(heroParts.legBack, HERO_OFFSETS.legBack.x * charR - legSwing / 2, HERO_OFFSETS.legBack.y * charR);
     updateSprite(heroParts.backpack, HERO_OFFSETS.backpack.x * charR, HERO_OFFSETS.backpack.y * charR - bounce * 1.3);
@@ -5017,51 +5121,66 @@
   }
 
   function renderDialogueBubble(cell) {
-    pruneDialogueText();
-    const text = localStorage.getItem(DIALOGUE_TEXT_KEY) || '';
-    if (dialogueBubble) {
-      heroLayer.removeChild(dialogueBubble);
-      dialogueBubble.destroy({ children: true });
-      dialogueBubble = null;
+    const now = performance.now();
+    if (now - lastDialoguePruneAt >= 500) {
+      lastDialoguePruneAt = now;
+      pruneDialogueText();
     }
-    if (!text) return;
-    const container = new PIXI.Container();
-    const g = new PIXI.Graphics();
-    const maxWidth = Math.min(gameWidth * 0.7, 280);
-    const words = text.split(' ');
-    const style = new PIXI.TextStyle({
-      fontFamily: 'Segoe UI, system-ui, sans-serif',
-      fontSize: 14,
-      fill: 0x1f1f1f,
-      align: 'center',
-      wordWrap: true,
-      wordWrapWidth: maxWidth - 24,
-    });
-    const label = new PIXI.Text(words.join(' '), style);
-    label.anchor.set(0.5);
-    const bubbleWidth = Math.min(maxWidth, Math.max(80, label.width + 24));
-    const bubbleHeight = Math.max(42, label.height + 24);
-    g.beginFill(0xffffff, 0.95);
-    g.lineStyle(1, 0x000000, 0.2);
-    g.drawRoundedRect(-bubbleWidth / 2, -bubbleHeight, bubbleWidth, bubbleHeight, 12);
-    g.drawPolygon([-8, 0, 8, 0, 0, 10]);
-    g.endFill();
-    label.x = 0;
-    label.y = -bubbleHeight / 2;
-    container.addChild(g, label);
+    const text = localStorage.getItem(DIALOGUE_TEXT_KEY) || '';
     const speakerId = localStorage.getItem(DIALOGUE_SPEAKER_KEY) || '';
+    if (!text) {
+      if (dialogueBubble) {
+        heroLayer.removeChild(dialogueBubble);
+        dialogueBubble.destroy({ children: true });
+        dialogueBubble = null;
+      }
+      renderedDialogueText = '';
+      renderedDialogueSpeakerId = '';
+      return;
+    }
+    if (!dialogueBubble || text !== renderedDialogueText || speakerId !== renderedDialogueSpeakerId) {
+      if (dialogueBubble) {
+        heroLayer.removeChild(dialogueBubble);
+        dialogueBubble.destroy({ children: true });
+      }
+      const container = new PIXI.Container();
+      const g = new PIXI.Graphics();
+      const maxWidth = Math.min(gameWidth * 0.7, 280);
+      const style = new PIXI.TextStyle({
+        fontFamily: 'Segoe UI, system-ui, sans-serif',
+        fontSize: 14,
+        fill: 0x1f1f1f,
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: maxWidth - 24,
+      });
+      const label = new PIXI.Text(text, style);
+      label.anchor.set(0.5);
+      const bubbleWidth = Math.min(maxWidth, Math.max(80, label.width + 24));
+      const bubbleHeight = Math.max(42, label.height + 24);
+      g.beginFill(0xffffff, 0.95);
+      g.lineStyle(1, 0x000000, 0.2);
+      g.drawRoundedRect(-bubbleWidth / 2, -bubbleHeight, bubbleWidth, bubbleHeight, 12);
+      g.drawPolygon([-8, 0, 8, 0, 0, 10]);
+      g.endFill();
+      label.x = 0;
+      label.y = -bubbleHeight / 2;
+      container.addChild(g, label);
+      dialogueBubble = container;
+      renderedDialogueText = text;
+      renderedDialogueSpeakerId = speakerId;
+      heroLayer.addChild(dialogueBubble);
+    }
     const speakerState = speakerId ? scenarioState.find((state) => state.id === speakerId) : null;
     const speakerDef = speakerState ? scenarioById.get(speakerId) : null;
     if (speakerState && speakerDef) {
       const metrics = getScenarioRenderMetrics(speakerState, speakerDef);
-      container.x = metrics.baseX;
-      container.y = metrics.baseY + metrics.floatOffset - metrics.height * 0.72;
+      dialogueBubble.x = metrics.baseX;
+      dialogueBubble.y = metrics.baseY + metrics.floatOffset - metrics.height * 0.72;
     } else {
-      container.x = pct2px(charXPct);
-      container.y = pct2px(charYPct) - cell * 3.2;
+      dialogueBubble.x = pct2px(charXPct);
+      dialogueBubble.y = pct2px(charYPct) - cell * 3.2;
     }
-    dialogueBubble = container;
-    heroLayer.addChild(dialogueBubble);
   }
 
   const sharks = [];
@@ -5412,7 +5531,7 @@
     setGameSize();
     gameWidth = mount.clientWidth || window.innerWidth;
     gameHeight = mount.clientHeight || window.innerHeight;
-    app.renderer.resolution = Math.min(window.devicePixelRatio || 1, 2);
+    app.renderer.resolution = getRendererResolution();
     app.renderer.resize(gameWidth, gameHeight);
     const desktopJoystickScale = window.matchMedia('(hover: hover) and (pointer: fine)').matches ? 1 / 2.4 : 1;
     joyR = JOY_R_PCT * gameWidth / 100 * desktopJoystickScale;
@@ -5454,6 +5573,7 @@
   let spawnAccumulator = 0;
   let fpsElapsed = 0;
   let fpsFrames = 0;
+  let lastSlowLogicAt = 0;
   function frame(deltaMS) {
     const now = performance.now();
     fpsElapsed += deltaMS;
@@ -5463,15 +5583,19 @@
       fpsElapsed = 0;
       fpsFrames = 0;
     }
-    updateSpatialAudio(now);
     updateExpansionAnimation(now);
-    consumeBoatRepairRequest();
     updateBoatCutscene(now);
-    updateHeroLogic(deltaMS);
+    const frameUser = getUserState();
+    updateHeroLogic(deltaMS, frameUser);
     if (!boatCutscene) updateDialogue(now);
-    if (!boatCutscene && !isFirstGameDay()) {
-      spawnScenarioLand();
-      checkScenarioTriggers();
+    if (now - lastSlowLogicAt >= 100) {
+      lastSlowLogicAt = now;
+      updateSpatialAudio(now);
+      consumeBoatRepairRequest();
+      if (!boatCutscene && !isFirstGameDay()) {
+        spawnScenarioLand();
+        checkScenarioTriggers();
+      }
     }
     syncDialogueText(getActiveDialogueText(), getActiveDialogueSpeakerId());
 
@@ -5479,13 +5603,15 @@
       spawnAccumulator += deltaMS;
       if (spawnAccumulator >= SPAWN_MS / getTerritorySpawnMultiplier()) {
         spawnAccumulator = 0;
-        const unpicked = bushes.filter((b) => b.stage === 'growing' || b.stage === 'ripe').length;
+        let unpicked = 0;
+        for (let i = 0; i < bushes.length; i += 1) {
+          if (bushes[i].stage === 'growing' || bushes[i].stage === 'ripe') unpicked += 1;
+        }
         if (land.length && unpicked < MAX_UNPICKED_BUSHES) spawnBush(pickBerryDef());
       }
     }
 
     if (!boatCutscene) {
-      const frameUser = getUserState();
       bushes.forEach((b) => {
         if (b.stage !== 'dead') updateBush(b, frameUser);
       });
@@ -5505,7 +5631,7 @@
     updateWaterBursts(now, deltaMS);
     updateAndRenderSharks(deltaMS);
     renderScenarioObjects(now);
-    renderBuildings(now);
+    renderBuildings(now, frameUser);
     renderResources(now);
     renderHero(now, deltaMS || (now - lastHeroAnimT));
     lastHeroAnimT = now;
@@ -5520,12 +5646,22 @@
   window.addEventListener('vibe-found-item-complete', (event) => completeScenarioFoundItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', onMapChanged);
   window.addEventListener('vibe-boat-repair', consumeBoatRepairRequest);
+  window.addEventListener('vibe-day-one-campfire-built', () => {
+    dayOneCampfireBuiltAt = Date.now();
+    startDialogue(['теперь я не замерзну ночью']);
+  });
   window.addEventListener('vibe-dialogue', (event) => {
     const detail = event.detail || {};
     startDialogue(Array.isArray(detail.lines) ? detail.lines : [], detail.speakerId || '');
   });
-  window.addEventListener('beforeunload', markResourceSeen);
-  window.addEventListener('pagehide', markResourceSeen);
+  window.addEventListener('beforeunload', () => {
+    markResourceSeen();
+    persistRuntimeState(performance.now(), true);
+  });
+  window.addEventListener('pagehide', () => {
+    markResourceSeen();
+    persistRuntimeState(performance.now(), true);
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') markResourceSeen();
   });

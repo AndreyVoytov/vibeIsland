@@ -17,7 +17,7 @@
       ),
     },
     cart: {
-      url: './img/ui/cart.png',
+      url: './img/ui/upgrade-arrow.png',
       fallback: svgDataUri(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
           "<rect x='8' y='18' width='40' height='24' rx='6' fill='#ffffff' stroke='#222' stroke-width='4'/>" +
@@ -28,7 +28,7 @@
       ),
     },
     check: {
-      url: './img/ui/check.png',
+      url: '',
       fallback: svgDataUri(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
           "<circle cx='32' cy='32' r='30' fill='#28b463'/>" +
@@ -65,7 +65,7 @@
       ),
     },
     arrowUp: {
-      url: './img/ui/arrow-up.png',
+      url: './img/ui/upgrade-arrow.png',
       fallback: svgDataUri(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>" +
           "<path d='M32 14l16 18h-10v18h-12V32H16z' fill='#ffffff'/>" +

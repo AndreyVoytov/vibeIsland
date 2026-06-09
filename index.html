@@ -77,8 +77,8 @@
       align-self:flex-start;
       display:grid;
       grid-template-rows:repeat(3,minmax(0,1fr));
-      gap:0;
-      background:#fff;
+      gap:5px;
+      background:#000;
       transition:opacity 0.45s ease;
     }
     .intro-comic-panel{
@@ -418,21 +418,27 @@
     .xp-text{display:none;}
     .settings-button{
       position:absolute;
-      top:20px;
+      top:16px;
       left:3px;
-      width:30px;
-      height:30px;
+      width:36px;
+      height:36px;
       padding:0;
       border:2px solid #0c3c70;
-      border-radius:50%;
+      border-radius:10px;
       background:linear-gradient(180deg,#48bce9,#187dbb);
       box-shadow:0 3px 0 #0c3c70,0 5px 8px rgba(0,0,0,0.3);
-      color:#fff;
-      font-size:19px;
-      line-height:1;
+      display:flex;
+      align-items:center;
+      justify-content:center;
       cursor:pointer;
       pointer-events:auto;
       z-index:9;
+    }
+    .settings-button img{
+      width:27px;
+      height:27px;
+      object-fit:contain;
+      filter:drop-shadow(0 2px 1px rgba(0,0,0,0.28));
     }
     .settings-panel{
       position:absolute;
@@ -859,14 +865,14 @@
       position:absolute;
       left:50%;
       width:var(--farm-resource-strip-width,calc(100% - 12px));
-      bottom:4px;
-      height:86px;
+      bottom:12px;
+      height:104px;
       display:grid;
       grid-template-columns:repeat(var(--farm-resource-columns, 8), minmax(0, 1fr));
       align-items:end;
       gap:3px;
       overflow:visible;
-      padding:8px 0 5px;
+      padding:8px 0 18px;
       box-sizing:border-box;
       pointer-events:none;
       z-index:6;
@@ -884,7 +890,7 @@
       box-shadow:0 3px 0 #0c4d7e,0 5px 8px rgba(0,0,0,0.22);
       color:#fff;
       display:grid;
-      grid-template-rows:43px 14px 12px;
+      grid-template-rows:45px 16px;
       place-items:center;
       cursor:pointer;
       pointer-events:auto;
@@ -924,39 +930,45 @@
     }
     .farm-resource-price::before{
       content:"";
-      width:14px;
-      height:14px;
-      border-radius:50%;
-      background:linear-gradient(135deg,#fff074,#e1a916);
-      box-shadow:inset 0 0 0 1px #bd7e0e;
+      width:16px;
+      height:16px;
+      background:url("./img/ui/coin.png") center/contain no-repeat;
       flex-shrink:0;
     }
     .farm-resource-stars{
-      width:100%;
+      position:absolute;
+      left:50%;
+      top:calc(100% + 8px);
+      width:max-content;
+      max-width:130%;
       display:flex;
       align-items:center;
       justify-content:center;
       color:#ffd642;
-      font-size:clamp(12px, 3.6vw, 16px);
+      font-size:clamp(15px, 4.5vw, 20px);
       line-height:1;
       letter-spacing:-0.5px;
-      overflow:hidden;
       white-space:nowrap;
       text-shadow:0 1px 1px rgba(91,57,0,0.72);
+      transform:translateX(-50%);
+      pointer-events:none;
     }
     .farm-resource-stars span:not(.filled){display:none;}
     .farm-resource-stars .filled{color:#ffd642;}
     .farm-resource-progress{
       position:absolute;
-      left:0;
-      right:0;
-      bottom:0;
-      width:100%;
-      height:4px;
-      border-radius:0 0 7px 7px;
-      background:rgba(12,54,78,0.55);
+      left:-2px;
+      right:-2px;
+      bottom:-5px;
+      width:auto;
+      height:10px;
+      border:2px solid #0c4d7e;
+      border-top:0;
+      border-radius:0 0 9px 9px;
+      background:#0c4d7e;
       overflow:hidden;
       display:block;
+      box-sizing:border-box;
     }
     .farm-resource-progress-fill{
       width:0%;
@@ -964,6 +976,10 @@
       border-radius:0 0 7px 7px;
       background:#67e5ff;
       display:block;
+    }
+    .farm-resource-card.can-upgrade .farm-resource-progress{
+      border-color:#176f31;
+      background:#176f31;
     }
     .upgrade-marker{
       position:absolute;
@@ -976,17 +992,18 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      box-shadow:0 2px 0 #ac1420,0 0 0 2px rgba(0,0,0,0.52);
+      box-shadow:0 2px 0 #ac1420;
       z-index:3;
       pointer-events:none;
       animation:upgrade-attention 4.2s ease-in-out infinite;
     }
     .upgrade-marker::before{
       content:"";
-      width:13px;
+      width:15px;
       height:15px;
       background:#fff;
-      clip-path:polygon(50% 0,100% 42%,70% 42%,70% 100%,30% 100%,30% 42%,0 42%);
+      -webkit-mask:url("./img/ui/upgrade-arrow.png") center/contain no-repeat;
+      mask:url("./img/ui/upgrade-arrow.png") center/contain no-repeat;
     }
     .upgrade-marker.hidden{display:none;}
     @keyframes upgrade-attention{
@@ -1086,8 +1103,8 @@
       position:absolute;
       left:var(--resource-panel-left,50%);
       top:var(--resource-panel-top,18%);
-      width:min(154px, calc(100% - 30px));
-      padding:9px 8px 9px;
+      width:min(185px, calc(100% - 30px));
+      padding:11px 10px 11px;
       border:2px solid #c5965f;
       border-radius:13px;
       background:#fff1df;
@@ -1148,8 +1165,8 @@
     }
     .resource-upgrade-close::after{transform:translate(-50%, -50%) rotate(-45deg);}
     .resource-upgrade-icon{
-      width:38px;
-      height:38px;
+      width:46px;
+      height:46px;
       margin:-2px auto 0;
       object-fit:contain;
       filter:drop-shadow(0 3px 2px rgba(0,0,0,0.25));
@@ -1889,16 +1906,31 @@
     .first-day .quest-toggle,
     .first-day .inventory-button,
     .first-day .quest-collapse{display:none!important;}
-    .first-day:not(.first-day-quest-ready) .quest-card{display:none!important;}
-    .first-day.first-day-quest-ready .quest-card{display:grid!important;}
+    .first-day .quest-card{display:none!important;}
     .first-day .settings-button{left:10px;}
     .first-day .settings-panel{left:10px;}
-    .first-day .quest-strip{top:58px;left:10px;right:10px;height:30px;}
-    .first-day .quest-track{margin-top:4px;}
+    .first-day .quest-strip{top:12px;left:54px;right:112px;height:34px;}
+    .first-day .quest-track{margin-top:9px;}
+    .first-day .quest-milestones{display:none;}
+    .first-day .quest-track::after{
+      content:"";
+      position:absolute;
+      top:50%;
+      right:-13px;
+      width:27px;
+      height:27px;
+      background:url("./img/ui/coin.png") center/contain no-repeat;
+      filter:drop-shadow(0 2px 2px rgba(0,0,0,0.32));
+      transform:translateY(-50%);
+      z-index:3;
+    }
     .first-day .quest-reward{display:none;}
     .first-day .farm-resource-card img{width:48px;height:48px;}
     .first-day .farm-resource-price{font-size:14px;gap:5px;}
     .first-day .farm-resource-price::before{width:17px;height:17px;}
+    .no-active-quests .quest-strip,
+    .no-active-quests .quest-card,
+    .no-active-quests .quest-toggle{display:none!important;}
     #uiRoot::after{
       content:"";
       position:absolute;
@@ -2054,7 +2086,9 @@
     </div>
     <div id="pixiMount"></div>
     <div id="uiRoot">
-      <button id="settingsButton" class="settings-button" type="button" aria-label="Настройки" data-ui-control>⚙</button>
+      <button id="settingsButton" class="settings-button" type="button" aria-label="Настройки" data-ui-control>
+        <img src="./img/ui/settings-gear.png" alt="" />
+      </button>
       <div class="profile-panel" data-ui-control>
         <div class="profile-avatar">
           <img id="heroPortrait" alt="hero" />
@@ -2193,10 +2227,10 @@
   <script src="./berries-config.js?v=20260605-strawberry-outline4"></script>
   <script src="./buildings-config.js"></script>
   <script src="./scenario-objects-config.js?v=20260608-day-one-scenery"></script>
-  <script src="./ui-config.js?v=20260608-ui-audio"></script>
+  <script src="./ui-config.js?v=20260609-day-one-campfire"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
-  <script src="./audio-manager.js?v=20260608-intro-audio"></script>
-  <script src="./pixi-game.js?v=20260609-day-progression"></script>
-  <script src="./pixi-ui.js?v=20260609-day-progression"></script>
+  <script src="./audio-manager.js?v=20260609-no-intro-audio"></script>
+  <script src="./pixi-game.js?v=20260609-day-one-campfire"></script>
+  <script src="./pixi-ui.js?v=20260609-day-one-campfire"></script>
 </body>
 </html>
