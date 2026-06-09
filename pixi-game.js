@@ -611,6 +611,8 @@
   resourceSpriteLayer.zIndex = 6;
   const resourceGraphics = new PIXI.Graphics();
   resourceGraphics.zIndex = 6.5;
+  const resourceMotionGraphics = new PIXI.Graphics();
+  resourceMotionGraphics.zIndex = 6.6;
   const heroLayer = new PIXI.Container();
   heroLayer.zIndex = 7;
   const foregroundCloudShadowGraphics = new PIXI.Graphics();
@@ -637,6 +639,7 @@
     resourceShadowGraphics,
     resourceSpriteLayer,
     resourceGraphics,
+    resourceMotionGraphics,
     heroLayer,
     foregroundCloudShadowGraphics,
     foregroundCloudLayer
@@ -3079,6 +3082,7 @@
   const resourceSprites = new Map();
   const berrySprites = new Map();
   const leafSprites = new Map();
+  const activeMotionLeafSpriteIds = new Set();
   const buildingSprites = new Map();
   const sharkSprites = [];
   let pendingResourceColliderSync = false;
@@ -4333,9 +4337,9 @@
       [w / 2, 0],
       [0, h / 2],
     ].map(([px, py]) => [x + px * c - py * s, y + px * s + py * c]).flat();
-    resourceGraphics.beginFill(leaf.color || 0x1d8f46, alpha);
-    resourceGraphics.drawPolygon(points);
-    resourceGraphics.endFill();
+    g.beginFill(leaf.color || 0x1d8f46, alpha);
+    g.drawPolygon(points);
+    g.endFill();
   }
 
   function drawWoodChip(g, chip, now) {
@@ -4451,7 +4455,6 @@
     resourceShadowGraphics.clear();
     const activeSpriteIds = new Set();
     const activeBerrySpriteIds = new Set();
-    const activeLeafSpriteIds = new Set();
     bushes.forEach((b) => {
       const visual = getBushVisualDef(b);
       let bushSpriteRendered = false;
@@ -4464,8 +4467,6 @@
         bushSpriteRendered = renderBushSprite(b, now, visual, activeSpriteIds);
         if (!bushSpriteRendered) drawBushBottom(resourceGraphics, b, now);
       }
-      b.leafs.forEach((leaf) => drawLeaf(resourceGraphics, leaf, now, activeLeafSpriteIds));
-      if (b.woodChips && b.woodChips.length) b.woodChips.forEach((chip) => drawWoodChip(resourceGraphics, chip, now));
       b.berries.forEach((be) => drawBerry(resourceGraphics, be, activeBerrySpriteIds));
       if (visual.type !== 'centered' && !bushSpriteRendered) drawBushTop(resourceGraphics, b, now);
       drawResourceAuraParticles(resourceGraphics, b, visual, now);
@@ -4487,8 +4488,30 @@
       resourceSpriteLayer.removeChild(sprite);
       berrySprites.delete(id);
     });
+  }
+
+  function updateAnimatedBerrySprite(be) {
+    if (!be || (!be.flying && be.stage !== 'collectOut' && be.stage !== 'collectIn')) return;
+    const sprite = berrySprites.get(be.uid);
+    if (!sprite) return;
+    sprite.x = pct2px(be.xPct);
+    sprite.y = pct2px(be.yPct);
+    sprite.zIndex = sprite.y + 1;
+  }
+
+  function renderResourceMotion(now) {
+    resourceMotionGraphics.clear();
+    activeMotionLeafSpriteIds.clear();
+    bushes.forEach((b) => {
+      b.leafs.forEach((leaf) => drawLeaf(resourceMotionGraphics, leaf, now, activeMotionLeafSpriteIds));
+      if (b.woodChips && b.woodChips.length) {
+        b.woodChips.forEach((chip) => drawWoodChip(resourceMotionGraphics, chip, now));
+      }
+      b.berries.forEach(updateAnimatedBerrySprite);
+    });
+    scenarioDrops.forEach(updateAnimatedBerrySprite);
     leafSprites.forEach((sprite, id) => {
-      if (activeLeafSpriteIds.has(id)) return;
+      if (activeMotionLeafSpriteIds.has(id)) return;
       resourceSpriteLayer.removeChild(sprite);
       leafSprites.delete(id);
     });
@@ -5633,6 +5656,7 @@
     renderScenarioObjects(now);
     renderBuildings(now, frameUser);
     renderResources(now);
+    renderResourceMotion(now);
     renderHero(now, deltaMS || (now - lastHeroAnimT));
     lastHeroAnimT = now;
     renderTransition(now);
