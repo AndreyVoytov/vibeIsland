@@ -211,58 +211,66 @@
     {
       id: 'day-2-earn-25',
       type: 'moneyEarned',
-      title: 'Заработай 25',
-      target: 25,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 250',
+      target: 250,
       reward: { type: 'rainbowStones', amount: 1 },
     },
     {
       id: 'day-2-collect-8',
       type: 'itemsCollected',
-      title: 'Собери 8 предметов',
-      target: 8,
-      reward: { type: 'money', amount: 30 },
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 15 предметов',
+      target: 15,
+      reward: { type: 'money', amount: 300 },
     },
     {
       id: 'day-2-earn-150',
       type: 'moneyEarned',
-      title: 'Заработай 150',
-      target: 150,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 1.5k',
+      target: 1500,
       reward: { type: 'rainbowStones', amount: 2 },
     },
     {
       id: 'day-2-collect-25',
       type: 'itemsCollected',
-      title: 'Собери 25 предметов',
-      target: 25,
-      reward: { type: 'money', amount: 120 },
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 50 предметов',
+      target: 50,
+      reward: { type: 'money', amount: 1500 },
     },
     {
       id: 'day-2-earn-500',
       type: 'moneyEarned',
-      title: 'Заработай 500',
-      target: 500,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 5k',
+      target: 5000,
       reward: { type: 'rainbowStones', amount: 3 },
     },
     {
       id: 'day-2-collect-60',
       type: 'itemsCollected',
-      title: 'Собери 60 предметов',
-      target: 60,
-      reward: { type: 'money', amount: 320 },
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 130 предметов',
+      target: 130,
+      reward: { type: 'money', amount: 5000 },
     },
     {
       id: 'day-2-earn-1500',
       type: 'moneyEarned',
-      title: 'Заработай 1.5k',
-      target: 1500,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 15k',
+      target: 15000,
       reward: { type: 'rainbowStones', amount: 5 },
     },
     {
       id: 'day-2-collect-150',
       type: 'itemsCollected',
-      title: 'Собери 150 предметов',
-      target: 150,
-      reward: { type: 'money', amount: 900 },
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 300 предметов',
+      target: 300,
+      reward: { type: 'money', amount: 12000 },
     },
     {
       id: 'day-2-repair-boat',
@@ -786,6 +794,10 @@
     return Math.min(getResourceMaxStars(resourceId), Math.floor(getResourceUpgradeLevel(user, resourceId) / RESOURCE_UPGRADE_LEVELS_PER_STAR));
   }
 
+  function hasReachedFinalResourceStar(user, resourceId) {
+    return getResourceUpgradeStars(user, resourceId) >= getResourceMaxStars(resourceId);
+  }
+
   function getResourceGrowthSpeedMultiplier(user, resourceId) {
     if (resourceId === 'strawberry' && user?.unlockedResources?.['upgrade-strawberry-fertilizer']) return 1.5;
     return 1;
@@ -816,7 +828,7 @@
 
   function getResourceUpgradeCost(resource, user) {
     const level = getResourceUpgradeLevel(user, resource.id);
-    if (level >= getResourceMaxLevel(resource.id)) return 0;
+    if (hasReachedFinalResourceStar(user, resource.id)) return 0;
     if (resource.id !== 'strawberry' && LATER_DAY_RESOURCE_UPGRADE_BASE_COSTS.has(resource.id)) {
       return Math.ceil(LATER_DAY_RESOURCE_UPGRADE_BASE_COSTS.get(resource.id) * (1.45 ** level));
     }
@@ -1069,7 +1081,7 @@
       return LATER_DAY_RESOURCE_UNLOCK_COSTS.get(resource.id);
     }
     if (resource.category === 'boatRepair') return getDepartureConfig().moneyCost;
-    return baseCost * 50;
+    return Math.ceil(baseCost * (isSecondGameDay() ? 12.5 : 50));
   }
 
   const moneyValue = document.getElementById('moneyValue');
@@ -1260,11 +1272,15 @@
         index: 0,
         mode,
         earnedBaseline: ensureUserStats(user).moneyEarned,
+        itemsBaseline: ensureUserStats(user).itemsCollected,
         updatedAt: Date.now(),
       };
     }
     if (mode === 'day-2' && !Number.isFinite(Number(user.questLine.earnedBaseline))) {
       user.questLine.earnedBaseline = ensureUserStats(user).moneyEarned;
+    }
+    if (mode === 'day-2' && !Number.isFinite(Number(user.questLine.itemsBaseline))) {
+      user.questLine.itemsBaseline = ensureUserStats(user).itemsCollected;
     }
     const activeQuests = getActiveQuests();
     const index = Math.floor(Number(user.questLine.index) || 0);
@@ -1277,6 +1293,7 @@
       index: 0,
       mode: `day-${Math.max(1, Math.floor(Number(day) || 1))}`,
       earnedBaseline: ensureUserStats(user).moneyEarned,
+      itemsBaseline: ensureUserStats(user).itemsCollected,
       updatedAt: Date.now(),
     };
     return user.questLine;
@@ -1636,11 +1653,12 @@
         star.hidden = index >= maxStars;
         star.classList.toggle('filled', index < stars);
       });
+      entry.stars.classList.toggle('compact', stars >= 4);
       const maxLevel = getResourceMaxLevel(resource.id);
       entry.progressFill.style.width = level >= maxLevel
         ? '100%'
         : `${((level % RESOURCE_UPGRADE_LEVELS_PER_STAR) / RESOURCE_UPGRADE_LEVELS_PER_STAR) * 100}%`;
-      const canUpgrade = level < maxLevel && user.money >= getResourceUpgradeCost(resource, user);
+      const canUpgrade = !hasReachedFinalResourceStar(user, resource.id) && user.money >= getResourceUpgradeCost(resource, user);
       entry.card.classList.toggle('can-upgrade', canUpgrade);
       entry.card.classList.toggle('cannot-upgrade', !canUpgrade);
       entry.marker.classList.toggle('hidden', !canUpgrade);
@@ -1658,11 +1676,10 @@
     const level = getResourceUpgradeLevel(user, resource.id);
     const stars = getResourceUpgradeStars(user, resource.id);
     const maxStars = getResourceMaxStars(resource.id);
-    const maxLevel = getResourceMaxLevel(resource.id);
     const starMultiplier = 2 ** stars;
-    const atMax = level >= maxLevel;
+    const atMax = hasReachedFinalResourceStar(user, resource.id);
     setResourceImage(resourceUpgradeIcon, resource);
-    resourceUpgradeLevel.textContent = `Уровень ${level + 1}`;
+    resourceUpgradeLevel.textContent = atMax ? 'MAX' : `Уровень ${level + 1}`;
     resourceUpgradeName.textContent = resource.title;
     resourceUpgradeStars.replaceChildren();
     for (let index = 0; index < maxStars; index += 1) {
@@ -1748,7 +1765,7 @@
     if (!resource || !user.unlockedResources[resource.id]) return;
     const level = getResourceUpgradeLevel(user, resource.id);
     const cost = getResourceUpgradeCost(resource, user);
-    if (level >= getResourceMaxLevel(resource.id) || user.money < cost) return;
+    if (hasReachedFinalResourceStar(user, resource.id) || user.money < cost) return;
     dismissResourceUpgradeActionHint();
     user.money -= cost;
     ensureResourceUpgrades(user)[resource.id] = level + 1;
@@ -1825,6 +1842,10 @@
       const questState = ensureQuestState(user);
       return Math.max(0, Math.floor(Number(stats.moneyEarned) || 0) - Math.floor(Number(questState.earnedBaseline) || 0));
     }
+    if (quest.progressType === 'itemsCollectedSinceStart') {
+      const questState = ensureQuestState(user);
+      return Math.max(0, Math.floor(Number(stats.itemsCollected) || 0) - Math.floor(Number(questState.itemsBaseline) || 0));
+    }
     if (quest.type === 'moneyOwned') return Math.floor(Number(user.money) || 0);
     if (quest.type === 'moneyEarned') return Math.floor(Number(stats.moneyEarned) || 0);
     if (quest.type === 'itemsCollected') return Math.floor(Number(stats.itemsCollected) || 0);
@@ -1855,6 +1876,7 @@
 
   function isQuestRequirementComplete(quest, user, current, target) {
     if (!quest || current < target) return false;
+    if (quest.id === 'day-1-build-campfire') return true;
     if (quest.type === 'unlockResource') return Boolean(user.unlockedResources[quest.resourceId]);
     return true;
   }
@@ -1864,7 +1886,7 @@
     if (quest && quest.type === 'repairBoat') return { url: getDepartureConfig().assetUrl, fallback: buildBoatRepairFallback() };
     if (quest && quest.type === 'killEnemy') return { url: './img/ui/inventory-bag.png' };
     if (quest && quest.type === 'storyAction' && quest.storyAction === 'receiveValve') return { url: './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory' };
-    if (quest && quest.resourceId === 'campfire-upgrade-1') return { url: './img/building/campfire2.png' };
+    if (quest && quest.resourceId === 'campfire-upgrade-1') return { url: './img/building/campfire.png' };
     return { url: './img/ui/inventory-bag.png' };
   }
 
@@ -2000,14 +2022,8 @@
     if (!isQuestRequirementComplete(quest, user, current, target)) return;
     dismissQuestPanelHint();
     if (isFirstGameDay()) {
-      localStorage.setItem(GAME_DAY_KEY, '2');
-      resetQuestLineForDay(user, 2);
-      setUserState(user);
-      playSound('ui.questReward', { volume: 0.32 });
-      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
-      renderResources();
-      renderInventory();
-      renderQuestLine();
+      const campfireResource = resources.find((resource) => resource.id === 'campfire-upgrade-1');
+      if (campfireResource) attemptUnlock(campfireResource);
       return;
     }
     if (quest.type === 'repairBoat') {
@@ -2059,6 +2075,7 @@
     const current = quest ? getQuestCurrent(quest, user) : target;
     const progress = done ? 1 : Math.min(1, current / target);
     const claimReady = !done && !repairLocked && isQuestRequirementComplete(quest, user, current, target);
+    const firstDayCampfireReady = isFirstGameDay() && quest?.id === 'day-1-build-campfire' && claimReady;
     const totalProgress = activeQuests.length ? ((Math.min(index, activeQuests.length) + progress) / activeQuests.length) * 100 : 100;
 
     if (questStage) {
@@ -2080,8 +2097,9 @@
     }
     questCard.classList.toggle('finished', done);
     questCard.classList.toggle('complete', claimReady);
+    if (isFirstGameDay()) questCard.classList.toggle('open', firstDayCampfireReady);
     questCard.hidden = done;
-    if (gameShell) gameShell.classList.remove('first-day-quest-ready');
+    if (gameShell) gameShell.classList.toggle('first-day-quest-ready', firstDayCampfireReady);
 
     if (done) {
       setUiAssetImage(questIcon, uiConfig.uiAssets.rainbowStone || {});
@@ -2097,7 +2115,7 @@
     if (quest.type === 'repairBoat') {
       questTitle.textContent = repairLocked ? `расширьте остров до ⌀ ${LIGHTHOUSE_REQUIRED_METERS} м` : getDepartureConfig().title;
     } else {
-      questTitle.textContent = claimReady ? 'Награда' : quest.title;
+      questTitle.textContent = claimReady && !isFirstGameDay() ? 'Награда' : quest.title;
     }
     if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
     if (questProgressText) {
@@ -2121,10 +2139,7 @@
   function applyDayUiState() {
     const firstDay = isFirstGameDay();
     if (gameShell) gameShell.classList.toggle('first-day', firstDay);
-    if (firstDay && questCard) {
-      questCard.classList.remove('open');
-      if (questToggle) questToggle.classList.remove('visible');
-    }
+    if (firstDay && questToggle) questToggle.classList.remove('visible');
   }
 
   let dayTitleTimer = 0;
@@ -2301,15 +2316,13 @@
     introFinished = true;
     introCanContinue = false;
     window.clearTimeout(introFinishTimer);
-    introFinishTimer = window.setTimeout(() => {
-      introComic.classList.add('finishing');
-      localStorage.setItem('dayOneIntroSeen', '1');
-      showDayTitle(1);
-      window.setTimeout(() => {
-        introComic.hidden = true;
-        introComic.classList.remove('finishing');
-      }, 720);
-    }, 3000);
+    introComic.classList.add('finishing');
+    localStorage.setItem('dayOneIntroSeen', '1');
+    showDayTitle(1);
+    window.setTimeout(() => {
+      introComic.hidden = true;
+      introComic.classList.remove('finishing');
+    }, 720);
   }
 
   function startIntroComic() {
@@ -2332,7 +2345,11 @@
     return true;
   }
 
-  function handleIntroClick() {
+  function handleIntroClick(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     if (!introCanContinue) return;
     finishIntroComic();
   }
@@ -2357,7 +2374,7 @@
       resetQuestLineForDay(user, 2);
       setUserState(user);
       window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
-    }, 1000);
+    }, 6700);
   }
 
   function renderResources() {
@@ -2385,6 +2402,12 @@
         if (costDiff !== 0) return costDiff;
         return String(a.res.title).localeCompare(String(b.res.title));
       });
+    const champignonIndex = pendingResources.findIndex(({ res }) => res.id === 'champignon');
+    const mushroomSenseIndex = pendingResources.findIndex(({ res }) => res.id === 'upgrade-mushroom-sense');
+    if (champignonIndex >= 0 && mushroomSenseIndex >= 0 && champignonIndex > mushroomSenseIndex) {
+      [pendingResources[champignonIndex], pendingResources[mushroomSenseIndex]] =
+        [pendingResources[mushroomSenseIndex], pendingResources[champignonIndex]];
+    }
     const canUpgrade = pendingResources.some(({ lockInfo }) => lockInfo.canBuy);
 
     if (preserveScroll) {

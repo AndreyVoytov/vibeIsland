@@ -69,6 +69,8 @@
       background:#000;
       cursor:pointer;
       overflow:hidden;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
     }
     .intro-comic[hidden]{display:none;}
     .intro-comic-panels{
@@ -88,6 +90,9 @@
       opacity:0;
       transform:scale(1.045);
       transition:opacity 0.42s ease,transform 0.7s ease;
+      pointer-events:none;
+      -webkit-user-drag:none;
+      -webkit-tap-highlight-color:transparent;
     }
     .intro-comic-panel:nth-child(1){clip-path:polygon(0 0,100% 0,100% 94%,0 100%);}
     .intro-comic-panel:nth-child(2){clip-path:polygon(0 6%,100% 0,100% 94%,0 100%);}
@@ -112,6 +117,8 @@
       opacity:0;
       transform:translateY(8px);
       transition:opacity 0.35s ease,transform 0.35s ease;
+      pointer-events:none;
+      user-select:none;
     }
     .intro-comic.ready .intro-comic-continue{opacity:1;transform:none;}
     .intro-comic.finishing .intro-comic-continue{opacity:0;}
@@ -955,6 +962,16 @@
     }
     .farm-resource-stars span:not(.filled){display:none;}
     .farm-resource-stars .filled{color:#ffd642;}
+    .farm-resource-stars.compact{
+      letter-spacing:0;
+    }
+    .farm-resource-stars.compact span{
+      paint-order:stroke fill;
+      -webkit-text-stroke:1px rgba(12,77,126,0.95);
+    }
+    .farm-resource-stars.compact span + span{
+      margin-left:-3px;
+    }
     .farm-resource-progress{
       position:absolute;
       left:-2px;
@@ -1907,6 +1924,11 @@
     .first-day .inventory-button,
     .first-day .quest-collapse{display:none!important;}
     .first-day .quest-card{display:none!important;}
+    .first-day.first-day-quest-ready .quest-card.open{
+      top:56px;
+      width:min(330px, calc(100% - 20px));
+      display:grid!important;
+    }
     .first-day .settings-button{left:10px;}
     .first-day .settings-panel{left:10px;}
     .first-day .quest-strip{top:12px;left:54px;right:112px;height:34px;}
@@ -2225,12 +2247,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
   <script src="./berries-config.js?v=20260605-strawberry-outline4"></script>
-  <script src="./buildings-config.js"></script>
+  <script src="./buildings-config.js?v=20260614-day-balance"></script>
   <script src="./scenario-objects-config.js?v=20260608-day-one-scenery"></script>
   <script src="./ui-config.js?v=20260609-day-one-campfire"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
   <script src="./audio-manager.js?v=20260609-no-intro-audio"></script>
-  <script src="./pixi-game.js?v=20260609-resource-motion-90fps"></script>
-  <script src="./pixi-ui.js?v=20260609-day-one-campfire"></script>
+  <script src="./pixi-game.js?v=20260614-day-balance"></script>
+  <script src="./pixi-ui.js?v=20260614-day-balance"></script>
 </body>
 </html>

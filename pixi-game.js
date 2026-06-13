@@ -463,10 +463,10 @@
 
   function hideLoadingScreen() {
     if (!loadingScreen) return;
+    window.dispatchEvent(new CustomEvent('vibe-game-ready'));
     loadingScreen.classList.add('done');
     window.setTimeout(() => {
       loadingScreen.hidden = true;
-      window.dispatchEvent(new CustomEvent('vibe-game-ready'));
     }, 380);
   }
 
@@ -4711,6 +4711,7 @@
       sprite.y = y;
       sprite.rotation = leaf.rot;
       sprite.alpha = alpha;
+      sprite.tint = Number.isFinite(leaf.color) ? leaf.color : 0x3f7f35;
       sprite.scale.set(targetWidth / Math.max(1, texture.width));
       sprite.zIndex = y + 2;
       activeLeafSpriteIds.add(leaf.uid);
@@ -6379,7 +6380,7 @@
   window.addEventListener('vibe-story-action', (event) => handleStoryAction(event.detail || {}));
   window.addEventListener('vibe-day-one-campfire-built', () => {
     dayOneCampfireBuiltAt = Date.now();
-    startDialogue(['теперь я не замерзну ночью']);
+    startDialogue(['Отличный получился костёр', 'Теперь я не замерзну ночью']);
   });
   window.addEventListener('vibe-dialogue', (event) => {
     const detail = event.detail || {};
