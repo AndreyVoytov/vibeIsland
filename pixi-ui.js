@@ -16,6 +16,12 @@
   const QUEST_PANEL_HINT_SEEN_KEY = 'questPanelHintSeen';
   const DAY_ONE_DIALOGUE_SEEN_KEY = 'dayOneFoodDialogueSeen';
   const DAY_TWO_DIALOGUE_SEEN_KEY = 'dayTwoDebrisDialogueSeen';
+  const DAY_THREE_DIALOGUE_SEEN_KEY = 'dayThreeRaftDialogueSeen';
+  const DAY_FOUR_DIALOGUE_SEEN_KEY = 'dayFourWolfDialogueSeen';
+  const DAY_FIVE_DIALOGUE_SEEN_KEY = 'dayFiveHatchDialogueSeen';
+  const DAY_SIX_DIALOGUE_SEEN_KEY = 'daySixOutpostDialogueSeen';
+  const DAY_SEVEN_DIALOGUE_SEEN_KEY = 'daySevenBunkerDialogueSeen';
+  const ISLAND_RUN_KEY = 'islandRun';
   const FIRST_DAY_ALLOWED_UPGRADES = new Set(['upgrade-strawberry-fertilizer', 'upgrade-sharp-sight', 'expand-1', 'campfire-upgrade-1']);
   const LATER_DAY_RESOURCE_UNLOCK_COSTS = new Map([
     ['blueberry', 3000],
@@ -38,18 +44,25 @@
   function getGameDay() {
     const stored = Math.floor(Number(localStorage.getItem(GAME_DAY_KEY) || 0));
     if (stored > 0) return stored;
-    return Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1));
+    return getIslandRun();
+  }
+  function getIslandRun() {
+    return Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
   }
   function isFirstGameDay() {
-    return getGameDay() === 1 && Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1)) === 1;
+    return getGameDay() === 1 && getIslandRun() === 1;
   }
   function isSecondGameDay() {
-    return getGameDay() === 2 && Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1)) === 1;
+    return getGameDay() === 2 && getIslandRun() === 1;
   }
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
   const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
   const DEFAULT_ISLAND_METERS = 18;
   const BOAT_REPAIR_COST = 20000;
+  const RAFT_REPAIR_COST = 400000;
+  const RAFT_WOOD_COST = 5000;
+  const FISHING_BOAT_REPAIR_COST = 250000;
+  const FISHING_BOAT_WOOD_COST = 3000;
   const LIGHTHOUSE_REQUIRED_METERS = getScenarioRequiredMeters('lighthouse');
   const CROPS_PER_TWO_EXPANSIONS = 5;
   const METERS_PER_TWO_EXPANSIONS = 4;
@@ -120,6 +133,9 @@
     },
   ];
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
+  const STORY_FLAGS_KEY = 'storyFlags';
+  const STORY_ACTION_REQUEST_KEY = 'storyActionRequestedAt';
+  const COMBAT_STATS_KEY = 'combatStats';
   const SCENARIO_OPENED_KEY = 'scenarioObjectsOpened';
   const SCENARIO_STATE_KEY = 'scenarioObjectsState';
   const KNOWN_LOCAL_ASSETS = new Set([
@@ -156,6 +172,7 @@
     './img/ui/rainbow-stone.png',
     './img/ui/hero-portrait.png',
     './images/scenario/boat-repaired.png',
+    './images/scenario/raft.png',
     './img/upgrade/sharp-sight.png',
     './img/upgrade/digging-technique.png',
     './img/upgrade/mushroom-sense.png',
@@ -190,76 +207,192 @@
       reward: { type: 'dayTransition', amount: 0 },
     },
   ];
-  const DAY_TWO_QUESTS = [];
-  const QUESTS = [
+  const DAY_TWO_QUESTS = [
     {
-      id: 'earn-25',
+      id: 'day-2-earn-25',
       type: 'moneyEarned',
       title: 'Заработай 25',
       target: 25,
       reward: { type: 'rainbowStones', amount: 1 },
     },
     {
-      id: 'collect-8',
+      id: 'day-2-collect-8',
       type: 'itemsCollected',
       title: 'Собери 8 предметов',
       target: 8,
       reward: { type: 'money', amount: 30 },
     },
     {
-      id: 'earn-150',
+      id: 'day-2-earn-150',
       type: 'moneyEarned',
       title: 'Заработай 150',
       target: 150,
       reward: { type: 'rainbowStones', amount: 2 },
     },
     {
-      id: 'collect-25',
+      id: 'day-2-collect-25',
       type: 'itemsCollected',
       title: 'Собери 25 предметов',
       target: 25,
       reward: { type: 'money', amount: 120 },
     },
     {
-      id: 'earn-500',
+      id: 'day-2-earn-500',
       type: 'moneyEarned',
       title: 'Заработай 500',
       target: 500,
       reward: { type: 'rainbowStones', amount: 3 },
     },
     {
-      id: 'collect-60',
+      id: 'day-2-collect-60',
       type: 'itemsCollected',
       title: 'Собери 60 предметов',
       target: 60,
       reward: { type: 'money', amount: 320 },
     },
     {
-      id: 'earn-1500',
+      id: 'day-2-earn-1500',
       type: 'moneyEarned',
       title: 'Заработай 1.5k',
       target: 1500,
       reward: { type: 'rainbowStones', amount: 5 },
     },
     {
-      id: 'collect-150',
+      id: 'day-2-collect-150',
       type: 'itemsCollected',
       title: 'Собери 150 предметов',
       target: 150,
       reward: { type: 'money', amount: 900 },
     },
     {
-      id: 'repair-boat',
+      id: 'day-2-repair-boat',
       type: 'repairBoat',
       title: 'починить катер',
-      target: BOAT_REPAIR_COST,
+      target: 1,
+      reward: { type: 'story', amount: 1 },
+    },
+  ];
+  const DAY_THREE_QUESTS = [
+    {
+      id: 'day-3-earn-60k',
+      type: 'moneyEarned',
+      title: 'Собрать припасы для плота',
+      target: 60000,
+      reward: { type: 'rainbowStones', amount: 8 },
+    },
+    {
+      id: 'day-3-collect-500',
+      type: 'itemsCollected',
+      title: 'Собери 500 предметов',
+      target: 500,
+      reward: { type: 'money', amount: 25000 },
+    },
+    {
+      id: 'day-3-build-raft',
+      type: 'repairBoat',
+      title: 'Построить плот',
+      target: 1,
+      reward: { type: 'story', amount: 1 },
+    },
+  ];
+  const DAY_FOUR_QUESTS = [
+    {
+      id: 'day-4-kill-wolves',
+      type: 'killEnemy',
+      enemyStat: 'wolf',
+      title: 'Одолеть 50 волков',
+      target: 50,
+      reward: { type: 'rainbowStones', amount: 12 },
+    },
+    {
+      id: 'day-4-kill-wolf-boss',
+      type: 'killEnemy',
+      enemyStat: 'wolfBoss',
+      title: 'Победить белого вожака',
+      target: 1,
+      reward: { type: 'rainbowStones', amount: 15 },
+    },
+    {
+      id: 'day-4-kill-snow-zombie',
+      type: 'killEnemy',
+      enemyStat: 'snowZombie',
+      title: 'Одолеть первого зомби',
+      target: 1,
+      reward: { type: 'money', amount: 50000 },
+    },
+    {
+      id: 'day-4-reveal-hatch',
+      type: 'storyAction',
+      storyAction: 'revealSnowHatch',
+      title: 'Выслушать секрет выживших',
+      target: 1,
+      reward: { type: 'story', amount: 1 },
+    },
+  ];
+  const DAY_FIVE_QUESTS = [
+    {
+      id: 'day-5-repair-fishing-boat',
+      type: 'repairBoat',
+      title: 'Починить рыбацкую лодку',
+      target: 1,
+      reward: { type: 'story', amount: 1 },
+    },
+  ];
+  const DAY_SIX_QUESTS = [
+    {
+      id: 'day-6-kill-zombies',
+      type: 'killEnemy',
+      enemyStat: 'zombie',
+      title: 'Убить 40 зомби',
+      target: 40,
+      reward: { type: 'rainbowStones', amount: 12 },
+    },
+    {
+      id: 'day-6-kill-scout',
+      type: 'killEnemy',
+      enemyStat: 'zombieScoutBoss',
+      title: 'Убить разведчика с топором',
+      target: 1,
+      reward: { type: 'money', amount: 80000 },
+    },
+    {
+      id: 'day-6-open-outpost',
+      type: 'storyAction',
+      storyAction: 'openOutpost',
+      title: 'Открыть ворота форпоста',
+      target: 1,
+      reward: { type: 'story', amount: 1 },
+    },
+  ];
+  const DAY_SEVEN_QUESTS = [
+    {
+      id: 'day-7-kill-zombies',
+      type: 'killEnemy',
+      enemyStat: 'day7Zombies',
+      title: 'Очистить двор от 50 зомби',
+      target: 50,
+      reward: { type: 'rainbowStones', amount: 18 },
+    },
+    {
+      id: 'day-7-get-valve',
+      type: 'storyAction',
+      storyAction: 'receiveValve',
+      title: 'Получить особый вентиль',
+      target: 1,
       reward: { type: 'story', amount: 1 },
     },
   ];
   function getActiveQuests() {
-    if (isFirstGameDay()) return DAY_ONE_QUESTS;
-    if (isSecondGameDay()) return DAY_TWO_QUESTS;
-    return QUESTS;
+    switch (getGameDay()) {
+      case 1: return DAY_ONE_QUESTS;
+      case 2: return DAY_TWO_QUESTS;
+      case 3: return DAY_THREE_QUESTS;
+      case 4: return DAY_FOUR_QUESTS;
+      case 5: return DAY_FIVE_QUESTS;
+      case 6: return DAY_SIX_QUESTS;
+      case 7: return DAY_SEVEN_QUESTS;
+      default: return [];
+    }
   }
 
   function getScenarioRequiredMeters(id) {
@@ -464,13 +597,132 @@
     return isScenarioOpened('lighthouse');
   }
 
+  function safeJson(key, fallback) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+      return parsed == null ? fallback : parsed;
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function getStoryFlags() {
+    const flags = safeJson(STORY_FLAGS_KEY, {});
+    return flags && typeof flags === 'object' && !Array.isArray(flags) ? flags : {};
+  }
+
+  function hasStoryFlag(flag) {
+    return Boolean(flag && getStoryFlags()[flag]);
+  }
+
+  function setStoryFlag(flag) {
+    if (!flag) return;
+    const flags = getStoryFlags();
+    flags[flag] = true;
+    localStorage.setItem(STORY_FLAGS_KEY, JSON.stringify(flags));
+  }
+
+  function getCombatStats() {
+    const stats = safeJson(COMBAT_STATS_KEY, {});
+    return stats && typeof stats === 'object' && !Array.isArray(stats) ? stats : {};
+  }
+
+  function getCombatCount(key) {
+    return Math.max(0, Math.floor(Number(getCombatStats()[key]) || 0));
+  }
+
+  function getDaySevenZombieTotal() {
+    return getCombatCount('day7Zombies') + getCombatCount('day7Scouts');
+  }
+
+  function getWoodCount(user) {
+    const inventory = user && user.inventory ? user.inventory : {};
+    return inventoryItems.reduce((sum, item) => {
+      if (!item || item.resourceCategory !== 'wood') return sum;
+      return sum + Math.max(0, Math.floor(Number(inventory[item.id]) || 0));
+    }, 0);
+  }
+
+  function spendWood(user, amount) {
+    let remaining = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!remaining) return true;
+    if (!user.inventory || typeof user.inventory !== 'object') user.inventory = {};
+    for (const item of inventoryItems) {
+      if (!item || item.resourceCategory !== 'wood') continue;
+      const available = Math.max(0, Math.floor(Number(user.inventory[item.id]) || 0));
+      if (!available) continue;
+      const used = Math.min(available, remaining);
+      user.inventory[item.id] = available - used;
+      remaining -= used;
+      if (remaining <= 0) return true;
+    }
+    return false;
+  }
+
+  function getDepartureConfig() {
+    const islandRun = getIslandRun();
+    if (islandRun === 2) {
+      return {
+        title: 'Построить плот',
+        assetUrl: './images/scenario/raft.png',
+        moneyCost: RAFT_REPAIR_COST,
+        woodCost: RAFT_WOOD_COST,
+        detail: '400k монет и 5k дерева',
+      };
+    }
+    if (islandRun === 3) {
+      return {
+        title: 'Починить рыбацкую лодку',
+        assetUrl: './images/scenario/boat-repaired.png',
+        moneyCost: FISHING_BOAT_REPAIR_COST,
+        woodCost: FISHING_BOAT_WOOD_COST,
+        detail: 'Починить корпус и уплыть всем лагерем',
+      };
+    }
+    return {
+      title: 'Починить катер',
+      assetUrl: './images/scenario/boat-repaired.png',
+      moneyCost: BOAT_REPAIR_COST,
+      woodCost: 0,
+      detail: 'И уплыть с острова',
+      requiresLighthouse: true,
+    };
+  }
+
+  function isDepartureStoryLocked() {
+    const config = getDepartureConfig();
+    return Boolean(config.requiresLighthouse && !isLighthouseOpened());
+  }
+
   function getRepairBoatTarget() {
-    return isLighthouseOpened() ? BOAT_REPAIR_COST : LIGHTHOUSE_REQUIRED_METERS;
+    if (isDepartureStoryLocked()) return LIGHTHOUSE_REQUIRED_METERS;
+    const config = getDepartureConfig();
+    return config.woodCost > 0 ? 1000 : config.moneyCost;
   }
 
   function getRepairBoatCurrent(user) {
-    if (!isLighthouseOpened()) return getIslandSizeMeters();
-    return Math.max(0, Math.floor(Number(user && user.money) || 0));
+    if (isDepartureStoryLocked()) return getIslandSizeMeters();
+    const config = getDepartureConfig();
+    const money = Math.max(0, Math.floor(Number(user && user.money) || 0));
+    if (config.woodCost > 0) {
+      const moneyRatio = config.moneyCost > 0 ? money / config.moneyCost : 1;
+      const woodRatio = getWoodCount(user) / config.woodCost;
+      return Math.floor(Math.min(1, moneyRatio, woodRatio) * 1000);
+    }
+    return money;
+  }
+
+  function getRepairBoatProgressText(user) {
+    if (isDepartureStoryLocked()) {
+      const current = Math.min(getIslandSizeMeters(), LIGHTHOUSE_REQUIRED_METERS);
+      return `⌀ ${formatCompactNumber(current)}/${formatCompactNumber(LIGHTHOUSE_REQUIRED_METERS)} м`;
+    }
+    const config = getDepartureConfig();
+    const money = Math.max(0, Math.floor(Number(user && user.money) || 0));
+    if (config.woodCost > 0) {
+      return `${formatCompactNumber(Math.min(money, config.moneyCost))}/${formatCompactNumber(config.moneyCost)} + ${formatCompactNumber(Math.min(getWoodCount(user), config.woodCost))}/${formatCompactNumber(config.woodCost)} дерева`;
+    }
+    return `${formatCompactNumber(Math.min(money, config.moneyCost))}/${formatCompactNumber(config.moneyCost)}`;
   }
 
   function isCropResource(def) {
@@ -776,9 +1028,10 @@
     onUnlock: () => {
       const user = getUserState();
       const questState = ensureQuestState(user);
-      const repairQuestIndex = QUESTS.findIndex((quest) => quest.type === 'repairBoat');
+      const activeQuests = getActiveQuests();
+      const repairQuestIndex = activeQuests.findIndex((quest) => quest.type === 'repairBoat');
       if (repairQuestIndex >= 0 && questState.index <= repairQuestIndex) {
-        questState.index = Math.min(repairQuestIndex + 1, QUESTS.length);
+        questState.index = Math.min(repairQuestIndex + 1, activeQuests.length);
         questState.updatedAt = Date.now();
       }
       setUserState(user);
@@ -787,6 +1040,14 @@
     },
   };
 
+  function syncBoatRepairResource() {
+    const config = getDepartureConfig();
+    boatRepairResource.title = config.title;
+    boatRepairResource.assetUrl = knownAssetUrl(config.assetUrl) || config.assetUrl;
+    boatRepairResource.unlockCost = config.moneyCost;
+    boatRepairResource.detail = config.detail;
+  }
+
   const tentUpgradeResources = buildingResources.filter((res) => res.tentUpgrade);
   const resources = [...berryResources, ...specialUpgradeResources, ...tentUpgradeResources, ...expansionResources, boatRepairResource].sort((a, b) => {
     const diff = a.unlockCost - b.unlockCost;
@@ -794,6 +1055,7 @@
     return String(a.title).localeCompare(String(b.title));
   });
   function isResourceVisibleForCurrentDay(resource) {
+    if (resource && resource.category === 'boatRepair' && getIslandRun() >= 4) return false;
     if (!isFirstGameDay()) return true;
     return Boolean(resource && FIRST_DAY_ALLOWED_UPGRADES.has(resource.id));
   }
@@ -806,7 +1068,7 @@
     if (resource.category === 'resource' && LATER_DAY_RESOURCE_UNLOCK_COSTS.has(resource.id)) {
       return LATER_DAY_RESOURCE_UNLOCK_COSTS.get(resource.id);
     }
-    if (resource.category === 'boatRepair') return baseCost;
+    if (resource.category === 'boatRepair') return getDepartureConfig().moneyCost;
     return baseCost * 50;
   }
 
@@ -992,12 +1254,12 @@
 
   function ensureQuestState(user) {
     if (!user.questLine || typeof user.questLine !== 'object' || Array.isArray(user.questLine)) user.questLine = {};
-    const mode = isFirstGameDay() ? 'day-1' : (isSecondGameDay() ? 'day-2' : 'normal');
+    const mode = `day-${getGameDay()}`;
     if (user.questLine.mode !== mode) {
       user.questLine = {
         index: 0,
         mode,
-        earnedBaseline: mode === 'day-2' ? ensureUserStats(user).moneyEarned : 0,
+        earnedBaseline: ensureUserStats(user).moneyEarned,
         updatedAt: Date.now(),
       };
     }
@@ -1007,6 +1269,16 @@
     const activeQuests = getActiveQuests();
     const index = Math.floor(Number(user.questLine.index) || 0);
     user.questLine.index = Math.min(Math.max(0, index), activeQuests.length);
+    return user.questLine;
+  }
+
+  function resetQuestLineForDay(user, day) {
+    user.questLine = {
+      index: 0,
+      mode: `day-${Math.max(1, Math.floor(Number(day) || 1))}`,
+      earnedBaseline: ensureUserStats(user).moneyEarned,
+      updatedAt: Date.now(),
+    };
     return user.questLine;
   }
 
@@ -1151,7 +1423,7 @@
 
   function getResourceExpansionRequirement(res, islandMeters = getIslandSizeMeters()) {
     if (!res) return 0;
-    if (res.category === 'boatRepair' && !isLighthouseOpened()) return LIGHTHOUSE_REQUIRED_METERS;
+    if (res.category === 'boatRepair' && isDepartureStoryLocked()) return LIGHTHOUSE_REQUIRED_METERS;
     const requiredMeters = Math.max(DEFAULT_ISLAND_METERS, Math.floor(Number(res.requiredMeters) || 0));
     if (requiredMeters > islandMeters) return requiredMeters;
     return 0;
@@ -1159,11 +1431,14 @@
 
   function getResourceLockInfo(res, user, islandMeters = getIslandSizeMeters()) {
     const expansionRequiredMeters = getResourceExpansionRequirement(res, islandMeters);
-    const storyLocked = res && res.category === 'boatRepair' && !isLighthouseOpened();
+    const storyLocked = res && res.category === 'boatRepair' && isDepartureStoryLocked();
     const expansionLocked = expansionRequiredMeters > islandMeters || storyLocked;
     const cost = getEffectiveUnlockCost(res);
-    const canBuy = !expansionLocked && Math.max(0, Math.floor(Number(user.money) || 0)) >= cost;
-    return { expansionLocked, expansionRequiredMeters, canBuy, cost };
+    const woodCost = res && res.category === 'boatRepair' ? Math.max(0, Math.floor(Number(getDepartureConfig().woodCost) || 0)) : 0;
+    const canBuy = !expansionLocked
+      && Math.max(0, Math.floor(Number(user.money) || 0)) >= cost
+      && getWoodCount(user) >= woodCost;
+    return { expansionLocked, expansionRequiredMeters, canBuy, cost, woodCost };
   }
 
   function attemptUnlock(res) {
@@ -1176,7 +1451,12 @@
       playSound('ui.notEnoughMoney', { volume: 0.28, cooldownMs: 250 });
       return false;
     }
+    if (lockInfo.woodCost > 0 && getWoodCount(latest) < lockInfo.woodCost) {
+      playSound('ui.notEnoughMoney', { volume: 0.28, cooldownMs: 250 });
+      return false;
+    }
     latest.money -= lockInfo.cost;
+    if (lockInfo.woodCost > 0) spendWood(latest, lockInfo.woodCost);
     latest.unlockedResources[res.id] = true;
     const builtDayOneCampfire = isFirstGameDay() && res.id === 'campfire-upgrade-1';
     if (builtDayOneCampfire) {
@@ -1269,7 +1549,7 @@
     card.appendChild(button);
     card.appendChild(check);
     resourceList.appendChild(card);
-    return { card, button, label, detail: profit, check, lockDivider, lockLabel };
+    return { card, button, label, detail: profit, title, img, check, lockDivider, lockLabel };
   }
 
   function setResourceImage(img, resource) {
@@ -1549,8 +1829,28 @@
     if (quest.type === 'moneyEarned') return Math.floor(Number(stats.moneyEarned) || 0);
     if (quest.type === 'itemsCollected') return Math.floor(Number(stats.itemsCollected) || 0);
     if (quest.type === 'repairBoat') return getRepairBoatCurrent(user);
+    if (quest.type === 'killEnemy') {
+      if (quest.enemyStat === 'day7Zombies') return getDaySevenZombieTotal();
+      return getCombatCount(quest.enemyStat);
+    }
+    if (quest.type === 'storyAction') return isStoryActionComplete(quest.storyAction, user) ? 1 : 0;
     if (quest.type === 'unlockResource') return user.unlockedResources[quest.resourceId] ? Math.max(1, Number(quest.target) || 1) : 0;
     return 0;
+  }
+
+  function getQuestTarget(quest) {
+    if (!quest) return 1;
+    if (quest.type === 'repairBoat') return getRepairBoatTarget();
+    return Math.max(1, Math.floor(Number(quest.target) || 1));
+  }
+
+  function isStoryActionComplete(action, user) {
+    if (action === 'revealSnowHatch') return hasStoryFlag('snowHatchRevealed');
+    if (action === 'openOutpost') return hasStoryFlag('outpostOpen');
+    if (action === 'receiveValve') {
+      return hasStoryFlag('valveReceived') || Math.max(0, Math.floor(Number(user && user.inventory && user.inventory['bunker-valve']) || 0)) > 0;
+    }
+    return false;
   }
 
   function isQuestRequirementComplete(quest, user, current, target) {
@@ -1561,7 +1861,9 @@
 
   function getQuestIconUrl(quest) {
     if (quest && (quest.type === 'moneyEarned' || quest.type === 'moneyOwned')) return uiConfig.uiAssets.coin || {};
-    if (quest && quest.type === 'repairBoat') return uiConfig.uiAssets.coin || {};
+    if (quest && quest.type === 'repairBoat') return { url: getDepartureConfig().assetUrl, fallback: buildBoatRepairFallback() };
+    if (quest && quest.type === 'killEnemy') return { url: './img/ui/inventory-bag.png' };
+    if (quest && quest.type === 'storyAction' && quest.storyAction === 'receiveValve') return { url: './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory' };
     if (quest && quest.resourceId === 'campfire-upgrade-1') return { url: './img/building/campfire2.png' };
     return { url: './img/ui/inventory-bag.png' };
   }
@@ -1633,6 +1935,59 @@
     addMoneyEarnedStat(user, amount);
   }
 
+  function addInventoryItemToUser(user, id, count = 1) {
+    if (!id) return;
+    if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
+    user.inventory[id] = Math.max(0, Math.floor(Number(user.inventory[id]) || 0)) + Math.max(1, Math.floor(Number(count) || 1));
+  }
+
+  function dispatchStoryAction(action, lines) {
+    localStorage.setItem(STORY_ACTION_REQUEST_KEY, String(Date.now()));
+    window.dispatchEvent(new CustomEvent('vibe-story-action', { detail: { action, lines } }));
+  }
+
+  function finishStoryQuest(user, quest, index, activeQuests) {
+    const action = quest.storyAction;
+    if (action === 'revealSnowHatch') {
+      setStoryFlag('snowHatchRevealed');
+      resetQuestLineForDay(user, 5);
+      localStorage.setItem(GAME_DAY_KEY, '5');
+      setUserState(user);
+      dispatchStoryAction(action, [
+        'Ты достойные человек, ты помог нам',
+        'Я открою тебе секрет',
+        'Это то, о чем я думаю?...',
+      ]);
+      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 5, subtitle: 'Люк найден. Нужно понять, как его открыть.' } }));
+      return;
+    }
+    if (action === 'openOutpost') {
+      setStoryFlag('outpostOpen');
+      resetQuestLineForDay(user, 7);
+      localStorage.setItem(GAME_DAY_KEY, '7');
+      setUserState(user);
+      dispatchStoryAction(action, [
+        'Разведчик пришел не один.',
+        'У зомби есть лидер.',
+        'Ворота форпоста открываются.',
+      ]);
+      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 7, subtitle: 'Форпост впустил вас внутрь.' } }));
+      return;
+    }
+    if (action === 'receiveValve') {
+      setStoryFlag('valveReceived');
+      addInventoryItemToUser(user, 'bunker-valve', 1);
+      const questState = ensureQuestState(user);
+      questState.index = Math.min(index + 1, activeQuests.length);
+      questState.updatedAt = Date.now();
+      setUserState(user);
+      dispatchStoryAction(action, [
+        'Старейшина выходит из бункера.',
+        'Возьми этот вентиль. Он откроет люк на снежном острове.',
+      ]);
+    }
+  }
+
   function claimQuestReward() {
     const user = getUserState();
     const questState = ensureQuestState(user);
@@ -1641,17 +1996,12 @@
     const quest = activeQuests[index];
     if (!quest) return;
     const current = getQuestCurrent(quest, user);
-    const target = quest.type === 'repairBoat' ? getRepairBoatTarget() : Math.max(1, Math.floor(Number(quest.target) || 1));
+    const target = getQuestTarget(quest);
     if (!isQuestRequirementComplete(quest, user, current, target)) return;
     dismissQuestPanelHint();
     if (isFirstGameDay()) {
       localStorage.setItem(GAME_DAY_KEY, '2');
-      user.questLine = {
-        index: 0,
-        mode: 'day-2',
-        earnedBaseline: ensureUserStats(user).moneyEarned,
-        updatedAt: Date.now(),
-      };
+      resetQuestLineForDay(user, 2);
       setUserState(user);
       playSound('ui.questReward', { volume: 0.32 });
       window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
@@ -1661,14 +2011,24 @@
       return;
     }
     if (quest.type === 'repairBoat') {
-      if (!isLighthouseOpened() || user.money < BOAT_REPAIR_COST) return;
-      user.money = Math.max(0, Math.floor(Number(user.money) || 0) - BOAT_REPAIR_COST);
+      const config = getDepartureConfig();
+      if (isDepartureStoryLocked() || user.money < config.moneyCost || getWoodCount(user) < config.woodCost) return;
+      user.money = Math.max(0, Math.floor(Number(user.money) || 0) - config.moneyCost);
+      if (config.woodCost > 0) spendWood(user, config.woodCost);
       user.unlockedResources['repair-boat-upgrade'] = true;
-      questState.index = Math.min(index + 1, QUESTS.length);
+      questState.index = Math.min(index + 1, activeQuests.length);
       questState.updatedAt = Date.now();
       setUserState(user);
       localStorage.setItem(BOAT_REPAIR_REQUEST_KEY, String(Date.now()));
       window.dispatchEvent(new CustomEvent('vibe-boat-repair'));
+      renderResources();
+      renderInventory();
+      renderQuestLine();
+      playSound('ui.questReward', { volume: 0.32 });
+      return;
+    }
+    if (quest.type === 'storyAction') {
+      finishStoryQuest(user, quest, index, activeQuests);
       renderResources();
       renderInventory();
       renderQuestLine();
@@ -1694,8 +2054,8 @@
     const index = questState.index;
     const quest = activeQuests[index];
     const done = !quest;
-    const repairLocked = Boolean(quest && quest.type === 'repairBoat' && !isLighthouseOpened());
-    const target = quest ? (quest.type === 'repairBoat' ? getRepairBoatTarget() : Math.max(1, Math.floor(Number(quest.target) || 1))) : 1;
+    const repairLocked = Boolean(quest && quest.type === 'repairBoat' && isDepartureStoryLocked());
+    const target = quest ? getQuestTarget(quest) : 1;
     const current = quest ? getQuestCurrent(quest, user) : target;
     const progress = done ? 1 : Math.min(1, current / target);
     const claimReady = !done && !repairLocked && isQuestRequirementComplete(quest, user, current, target);
@@ -1735,17 +2095,19 @@
     questCard.hidden = false;
     setUiAssetImage(questIcon, getQuestIconUrl(quest));
     if (quest.type === 'repairBoat') {
-      questTitle.textContent = repairLocked ? `расширьте остров до ⌀ ${LIGHTHOUSE_REQUIRED_METERS} м` : 'починить катер';
+      questTitle.textContent = repairLocked ? `расширьте остров до ⌀ ${LIGHTHOUSE_REQUIRED_METERS} м` : getDepartureConfig().title;
     } else {
       questTitle.textContent = claimReady ? 'Награда' : quest.title;
     }
     if (questProgressFill) questProgressFill.style.width = `${Math.round(progress * 100)}%`;
     if (questProgressText) {
-      questProgressText.textContent = repairLocked
-        ? `⌀ ${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)} м`
+      questProgressText.textContent = quest.type === 'repairBoat'
+        ? getRepairBoatProgressText(user)
         : `${formatCompactNumber(Math.min(current, target))}/${formatCompactNumber(target)}`;
     }
     const showReward = quest.type !== 'repairBoat'
+      && quest.type !== 'storyAction'
+      && quest.reward && quest.reward.type !== 'story'
       && !isFirstGameDay()
       && Math.max(0, Math.floor(Number(quest.reward && quest.reward.amount) || 0)) > 0;
     if (questReward) questReward.style.display = showReward ? '' : 'none';
@@ -1901,6 +2263,22 @@
     }, delay);
   }
 
+  function dispatchOpeningDialogueForDay(day, delay = 250) {
+    if (day === 2) {
+      dispatchDialogueOnce(DAY_TWO_DIALOGUE_SEEN_KEY, ['Обломки прибило к берегу', 'Может в них есть что-то полезное'], delay);
+    } else if (day === 3) {
+      dispatchDialogueOnce(DAY_THREE_DIALOGUE_SEEN_KEY, ['кажется, топливо закончилось', 'надо исследовать этот остров'], delay);
+    } else if (day === 4) {
+      dispatchDialogueOnce(DAY_FOUR_DIALOGUE_SEEN_KEY, ['У лагеря следы волков.', 'Выжившие говорят: сначала стая, потом белый вожак.'], delay);
+    } else if (day === 5) {
+      dispatchDialogueOnce(DAY_FIVE_DIALOGUE_SEEN_KEY, ['Люк есть, но открыть его нечем.', 'Говорят, восточнее есть остров, где выживших больше.'], delay);
+    } else if (day === 6) {
+      dispatchDialogueOnce(DAY_SIX_DIALOGUE_SEEN_KEY, ['Пустыня и форпост.', 'Нас не пустят внутрь, пока вокруг зомби.'], delay);
+    } else if (day === 7) {
+      dispatchDialogueOnce(DAY_SEVEN_DIALOGUE_SEEN_KEY, ['Во дворе форпоста вход в мощный бункер.', 'На панели всё время горит: доступ запрещен.'], delay);
+    }
+  }
+
   function showDayTitle(day, subtitle = '') {
     if (!dayTitleOverlay || !dayTitleText || !dayTitleSubtitle) return;
     window.clearTimeout(dayTitleTimer);
@@ -1911,9 +2289,7 @@
       dayTitleOverlay.classList.remove('open');
       scheduleMovementHint();
       renderStrawberryUpgradeHint();
-      if (day === 2) {
-        dispatchDialogueOnce(DAY_TWO_DIALOGUE_SEEN_KEY, ['Обломки прибило к берегу', 'Может в них есть что-то полезное'], 250);
-      }
+      dispatchOpeningDialogueForDay(day, 250);
     }, 1850);
   }
 
@@ -1964,9 +2340,7 @@
   function handleGameReady() {
     if (!startIntroComic()) {
       scheduleMovementHint();
-      if (isSecondGameDay()) {
-        dispatchDialogueOnce(DAY_TWO_DIALOGUE_SEEN_KEY, ['Обломки прибило к берегу', 'Может в них есть что-то полезное'], 500);
-      }
+      dispatchOpeningDialogueForDay(getGameDay(), 500);
     }
   }
 
@@ -1980,12 +2354,7 @@
       if (!isFirstGameDay()) return;
       const user = getUserState();
       localStorage.setItem(GAME_DAY_KEY, '2');
-      user.questLine = {
-        index: 0,
-        mode: 'day-2',
-        earnedBaseline: ensureUserStats(user).moneyEarned,
-        updatedAt: Date.now(),
-      };
+      resetQuestLineForDay(user, 2);
       setUserState(user);
       window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
     }, 1000);
@@ -1995,6 +2364,7 @@
     const preserveScroll = Boolean(shopPanel && shopPanel.classList.contains('open'));
     const previousScrollTop = preserveScroll && resourceList ? resourceList.scrollTop : 0;
     const user = getUserState();
+    syncBoatRepairResource();
     applyDayUiState();
     renderIslandSizeMeters();
     moneyValue.textContent = user.money;
@@ -2036,14 +2406,18 @@
           entry = createResourceCard(res);
           resourceCards.set(res.id, entry);
         }
+        if (entry.title) entry.title.textContent = res.title;
+        if (entry.img) setResourceImage(entry.img, res);
         const className = lockInfo.canBuy
           ? 'resource-card available clickable'
           : (lockInfo.expansionLocked ? 'resource-card expansion-locked' : 'resource-card locked');
         entry.card.className = className;
         if (entry.detail && res.category === 'boatRepair') {
-          entry.detail.textContent = lockInfo.expansionLocked ? 'И уплыть с острова' : 'Отправиться к новому острову';
+          entry.detail.textContent = lockInfo.expansionLocked ? 'И уплыть с острова' : getDepartureConfig().detail;
         }
-        entry.label.textContent = formatCompactNumber(lockInfo.cost);
+        entry.label.textContent = lockInfo.woodCost > 0
+          ? `${formatCompactNumber(lockInfo.cost)} + ${formatCompactNumber(lockInfo.woodCost)} дерева`
+          : formatCompactNumber(lockInfo.cost);
         entry.button.className = 'unlock-button' + (lockInfo.canBuy ? '' : (lockInfo.expansionLocked ? ' expansion-locked' : ' locked'));
         entry.button.disabled = !lockInfo.canBuy;
         entry.button.style.display = 'flex';
@@ -2489,6 +2863,7 @@
     renderResources();
     renderQuestLine();
   });
+  window.addEventListener('vibe-combat-updated', renderQuestLine);
   panelOverlay.addEventListener('click', () => {
     togglePanel(false);
     toggleInventory(false);

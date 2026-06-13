@@ -33,6 +33,34 @@
   function isFirstGameDay() {
     return getGameDay() === 1 && Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1)) === 1;
   }
+  function getIslandRun() {
+    return Math.max(1, Math.floor(Number(localStorage.getItem('islandRun') || 1) || 1));
+  }
+
+  const ISLAND_PROFILES = {
+    1: { surfaceType: 'grass', arrival: ['Надо выбраться с этого острова.'] },
+    2: {
+      surfaceType: 'grass',
+      arrival: ['кажется, топливо закончилось', 'надо исследовать этот остров'],
+    },
+    3: {
+      surfaceType: 'snow',
+      arrival: ['Снег... и следы у лагеря.', 'Жители говорят, волки подходят всё ближе.'],
+    },
+    4: {
+      surfaceType: 'sand',
+      arrival: ['Пустынный остров. Форпост прямо впереди.', 'Ворота закрыты. Нас встречают оружием.'],
+    },
+  };
+
+  function getCurrentIslandProfile() {
+    return ISLAND_PROFILES[getIslandRun()] || ISLAND_PROFILES[2];
+  }
+
+  function getDefaultIslandSurfaceCell() {
+    const surfaceType = getCurrentIslandProfile().surfaceType;
+    return surfaceType && surfaceType !== 'grass' ? { surfaceType } : 1;
+  }
 
   const DEFAULT_MAP_WIDTH = 25;
   const DEFAULT_MAP_HEIGHT = 25;
@@ -128,6 +156,10 @@
   const DIALOGUE_TEXT_TTL_MS = 15000;
   const ISLAND_RUN_KEY = 'islandRun';
   const GAME_DAY_KEY = 'gameDay';
+  const STORY_FLAGS_KEY = 'storyFlags';
+  const STORY_ACTION_REQUEST_KEY = 'storyActionRequestedAt';
+  const STORY_DEPARTURE_KEY = 'storyDeparture';
+  const COMBAT_STATS_KEY = 'combatStats';
   const BASE_LAND_CELLS_KEY = 'baseLandCellCount';
   const BOAT_REPAIRED_KEY = 'boatRepaired';
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
@@ -272,6 +304,7 @@
     './images/scenario/boat-broken.png',
     './images/scenario/boat-repaired.png',
     './images/scenario/blanket-survivor.png',
+    './images/scenario/raft.png',
   ];
 
   const SCENARIO_DROP_IMAGE_ASSETS = [
@@ -513,6 +546,22 @@
     }
   }
 
+  function getStoryFlags() {
+    const flags = safeJson(STORY_FLAGS_KEY, {});
+    return flags && typeof flags === 'object' && !Array.isArray(flags) ? flags : {};
+  }
+
+  function hasStoryFlag(flag) {
+    return Boolean(flag && getStoryFlags()[flag]);
+  }
+
+  function setStoryFlag(flag) {
+    if (!flag) return;
+    const flags = getStoryFlags();
+    flags[flag] = true;
+    localStorage.setItem(STORY_FLAGS_KEY, JSON.stringify(flags));
+  }
+
   function setGameSize() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -613,6 +662,8 @@
   resourceGraphics.zIndex = 6.5;
   const resourceMotionGraphics = new PIXI.Graphics();
   resourceMotionGraphics.zIndex = 6.6;
+  const enemyGraphics = new PIXI.Graphics();
+  enemyGraphics.zIndex = 6.8;
   const heroLayer = new PIXI.Container();
   heroLayer.zIndex = 7;
   const foregroundCloudShadowGraphics = new PIXI.Graphics();
@@ -640,6 +691,7 @@
     resourceSpriteLayer,
     resourceGraphics,
     resourceMotionGraphics,
+    enemyGraphics,
     heroLayer,
     foregroundCloudShadowGraphics,
     foregroundCloudLayer
@@ -1854,6 +1906,7 @@
   let lastDialogueText = '';
   let lastDialogueSpeakerId = '';
   const scenarioSprites = new Map();
+  const scenarioTextLabels = new Map();
 
   function loadOpenedIds() {
     const stored = safeJson(SCENARIO_OPENED_KEY, []);
@@ -1911,7 +1964,7 @@
   function computeInitialScenarioPositions() {
     const bounds = getIslandBoundsGrid();
     if (!bounds) return [];
-    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
+    const islandRun = getIslandRun();
     const centerX = Math.round((bounds.minX + bounds.maxX) / 2);
     const centerY = Math.round((bounds.minY + bounds.maxY) / 2);
     const dirMap = {
@@ -1924,55 +1977,58 @@
       southEast: { x: 1, y: 1 },
       southWest: { x: -1, y: 1 },
     };
+    const makeState = (def, gridX, gridY, opened = true) => ({
+      id: def.id,
+      gridX,
+      gridY,
+      triggered: false,
+      transformed: false,
+      repaired: false,
+      opened,
+      positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
+    });
     return scenarioObjects.map((def) => {
-      if (def.newIslandOnly && islandRun < 2) return null;
-      if (!def.newIslandOnly && islandRun >= 2) return null;
-      if (def.position === 'center') {
-        return {
-          id: def.id,
-          gridX: centerX,
-          gridY: centerY,
-          triggered: false,
-          transformed: false,
-          repaired: false,
-          opened: true,
-          positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
-        };
-      }
-      if (def.position === 'westShore') {
-        const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 1;
-        return {
-          id: def.id,
-          gridX: bounds.minX - distance,
-          gridY: centerY,
-          triggered: false,
-          transformed: false,
-          repaired: false,
-          opened: true,
-          positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
-        };
-      }
-      const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 2;
-      const dir = dirMap[def.direction] || dirMap.east;
+      if (!scenarioAllowedForCurrentIsland(def)) return null;
       const offset = def.offsetCells || {};
       const offsetX = Number.isFinite(offset.x) ? offset.x : 0;
       const offsetY = Number.isFinite(offset.y) ? offset.y : 0;
-      return {
-        id: def.id,
-        gridX: (dir.x === 0 ? centerX : (dir.x > 0 ? bounds.maxX + distance : bounds.minX - distance)) + offsetX,
-        gridY: (dir.y === 0 ? centerY : (dir.y > 0 ? bounds.maxY + distance : bounds.minY - distance)) + offsetY,
-        triggered: false,
-        transformed: false,
-        repaired: false,
-        opened: openedIds.has(def.id),
-        positionVersion: Number.isFinite(def.positionVersion) ? def.positionVersion : 0,
-      };
+      if (def.position === 'center') {
+        return makeState(def, centerX + offsetX, centerY + offsetY, true);
+      }
+      if (def.position === 'relativeCenter') {
+        return makeState(def, centerX + offsetX, centerY + offsetY, true);
+      }
+      if (def.position === 'westShore') {
+        const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 1;
+        return makeState(def, bounds.minX - distance + offsetX, centerY + offsetY, true);
+      }
+      if (def.position === 'eastShore') {
+        const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 1;
+        return makeState(def, bounds.maxX + distance + offsetX, centerY + offsetY, true);
+      }
+      if (def.position === 'northShore') {
+        const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 1;
+        return makeState(def, centerX + offsetX, bounds.minY - distance + offsetY, true);
+      }
+      if (def.position === 'southShore') {
+        const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 1;
+        return makeState(def, centerX + offsetX, bounds.maxY + distance + offsetY, true);
+      }
+      const distance = Number.isFinite(def.distanceCells) ? def.distanceCells : 2;
+      const dir = dirMap[def.direction] || dirMap.east;
+      return makeState(
+        def,
+        (dir.x === 0 ? centerX : (dir.x > 0 ? bounds.maxX + distance : bounds.minX - distance)) + offsetX,
+        (dir.y === 0 ? centerY : (dir.y > 0 ? bounds.maxY + distance : bounds.minY - distance)) + offsetY,
+        openedIds.has(def.id)
+      );
     }).filter(Boolean);
   }
 
   function scenarioAllowedForCurrentIsland(def) {
-    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
-    if (def && def.newIslandOnly) return islandRun >= 2;
+    const islandRun = getIslandRun();
+    if (def && Array.isArray(def.islandRuns)) return def.islandRuns.includes(islandRun);
+    if (def && def.newIslandOnly) return islandRun === 2;
     return islandRun < 2;
   }
 
@@ -2116,14 +2172,17 @@
   }
 
   function scenarioRequirementMet(def) {
-    if (!def || !def.requiresOpenedId) return true;
-    return openedIds.has(def.requiresOpenedId);
+    if (!def) return false;
+    if (def.requiresOpenedId && !openedIds.has(def.requiresOpenedId)) return false;
+    if (def.requiresStoryFlag && !hasStoryFlag(def.requiresStoryFlag)) return false;
+    return true;
   }
 
   function shouldRenderScenarioState(state, def) {
     if (!state || !def) return false;
     if (isFirstGameDay() && state.id !== 'lighthouse' && state.id !== 'broken-boat') return false;
     if (!scenarioRequirementMet(def)) return false;
+    if (def.hideWhenStoryFlag && hasStoryFlag(def.hideWhenStoryFlag)) return false;
     if (state.hidden) return false;
     return !state.triggered || def.persistentAfterTrigger;
   }
@@ -2367,7 +2426,7 @@
           const xx = x + dx;
           if (!nextMap[yy] || typeof nextMap[yy][xx] === 'undefined') continue;
           if (nextMap[yy][xx]) continue;
-          nextMap[yy][xx] = 1;
+          nextMap[yy][xx] = getDefaultIslandSurfaceCell();
           changed = true;
           if (dx === 0 && dy === 0) centerBecameLand = true;
         }
@@ -2579,6 +2638,202 @@
     g.endFill();
   }
 
+  function drawScenarioTentPrimitive(g, x, y, width, height, primitive = {}) {
+    beginFill(g, 'rgba(0,0,0,0.22)');
+    g.drawEllipse(x, y + height * 0.28, width * 0.45, height * 0.12);
+    g.endFill();
+    beginFill(g, primitive.color || '#477fa8');
+    g.drawPolygon([
+      x - width * 0.48, y + height * 0.24,
+      x, y - height * 0.42,
+      x + width * 0.48, y + height * 0.24,
+    ]);
+    g.endFill();
+    beginFill(g, primitive.trim || '#e8f3ff');
+    g.drawPolygon([
+      x - width * 0.1, y + height * 0.22,
+      x, y - height * 0.26,
+      x + width * 0.12, y + height * 0.22,
+    ]);
+    g.endFill();
+    g.lineStyle(Math.max(2, width * 0.025), 0x3b2a1f, 0.85);
+    g.moveTo(x, y - height * 0.42);
+    g.lineTo(x, y + height * 0.24);
+    g.lineStyle(0, 0xffffff, 0);
+  }
+
+  function drawLargeCampfirePrimitive(g, x, y, width, height, now) {
+    const pulse = 0.82 + Math.sin(now / 220) * 0.08;
+    beginFill(g, 'rgba(255,150,40,0.24)');
+    g.drawEllipse(x, y + height * 0.15, width * 0.46 * pulse, height * 0.24 * pulse);
+    g.endFill();
+    beginFill(g, '#6f7780');
+    g.drawEllipse(x, y + height * 0.22, width * 0.42, height * 0.16);
+    g.endFill();
+    beginFill(g, '#59402f');
+    g.drawRect(x - width * 0.34, y + height * 0.11, width * 0.68, height * 0.08);
+    g.endFill();
+    beginFill(g, '#ff6b2c');
+    g.drawPolygon([x, y - height * 0.36, x - width * 0.13, y + height * 0.08, x + width * 0.14, y + height * 0.09]);
+    g.endFill();
+    beginFill(g, '#ffd35b');
+    g.drawPolygon([x + width * 0.03, y - height * 0.24, x - width * 0.05, y + height * 0.08, x + width * 0.1, y + height * 0.08]);
+    g.endFill();
+  }
+
+  function drawFencePrimitive(g, x, y, width, height) {
+    const postCount = 5;
+    g.lineStyle(Math.max(4, height * 0.08), 0x6b472b, 1);
+    g.moveTo(x - width * 0.45, y - height * 0.06);
+    g.lineTo(x + width * 0.45, y - height * 0.13);
+    g.moveTo(x - width * 0.42, y + height * 0.15);
+    g.lineTo(x + width * 0.42, y + height * 0.08);
+    g.lineStyle(0, 0xffffff, 0);
+    for (let i = 0; i < postCount; i += 1) {
+      const t = postCount === 1 ? 0.5 : i / (postCount - 1);
+      const px = lerp(x - width * 0.48, x + width * 0.48, t);
+      const py = y + Math.sin(t * Math.PI) * -height * 0.1;
+      beginFill(g, '#805533');
+      drawRoundedRect(g, px - width * 0.025, py - height * 0.26, width * 0.05, height * 0.52, width * 0.02);
+      g.endFill();
+    }
+  }
+
+  function drawSurvivorPrimitive(g, x, y, width, height, primitive = {}, now = 0) {
+    const wander = Number.isFinite(primitive.wander) ? primitive.wander : 0;
+    const wobbleX = Math.sin(now / 950 + x * 0.01) * width * wander;
+    const bob = Math.abs(Math.sin(now / 420 + x * 0.03)) * height * 0.035;
+    const sx = x + wobbleX;
+    const sy = y - bob;
+    beginFill(g, 'rgba(0,0,0,0.24)');
+    g.drawEllipse(sx, y + height * 0.34, width * 0.32, height * 0.08);
+    g.endFill();
+    beginFill(g, primitive.coat || '#315a7c');
+    drawRoundedRect(g, sx - width * 0.18, sy - height * 0.08, width * 0.36, height * 0.44, width * 0.1);
+    g.endFill();
+    beginFill(g, '#d9b18d');
+    g.drawCircle(sx, sy - height * 0.28, width * 0.16);
+    g.endFill();
+    beginFill(g, primitive.hat || '#e6f4ff');
+    g.drawEllipse(sx, sy - height * 0.39, width * 0.2, height * 0.08);
+    g.endFill();
+    g.lineStyle(Math.max(2, width * 0.045), 0x263238, 1);
+    g.moveTo(sx - width * 0.1, sy + height * 0.32);
+    g.lineTo(sx - width * 0.16, sy + height * 0.48);
+    g.moveTo(sx + width * 0.1, sy + height * 0.32);
+    g.lineTo(sx + width * 0.16, sy + height * 0.48);
+    g.lineStyle(0, 0xffffff, 0);
+  }
+
+  function drawSleepingBagPrimitive(g, x, y, width, height) {
+    beginFill(g, 'rgba(0,0,0,0.22)');
+    g.drawEllipse(x, y + height * 0.24, width * 0.42, height * 0.13);
+    g.endFill();
+    beginFill(g, '#6e83a5');
+    drawRoundedRect(g, x - width * 0.42, y - height * 0.1, width * 0.84, height * 0.36, height * 0.16);
+    g.endFill();
+    g.lineStyle(Math.max(2, height * 0.04), 0xd4e1f2, 0.8);
+    g.moveTo(x - width * 0.32, y - height * 0.02);
+    g.lineTo(x + width * 0.32, y + height * 0.14);
+    g.lineStyle(0, 0xffffff, 0);
+  }
+
+  function drawHatchPrimitive(g, x, y, width, height) {
+    beginFill(g, 'rgba(0,0,0,0.28)');
+    g.drawEllipse(x, y + height * 0.22, width * 0.44, height * 0.14);
+    g.endFill();
+    beginFill(g, '#2f3b42');
+    drawRoundedRect(g, x - width * 0.38, y - height * 0.22, width * 0.76, height * 0.48, height * 0.08);
+    g.endFill();
+    g.lineStyle(Math.max(3, height * 0.05), 0x93a4ad, 1);
+    g.drawRoundedRect(x - width * 0.31, y - height * 0.16, width * 0.62, height * 0.36, height * 0.06);
+    g.drawCircle(x + width * 0.2, y + height * 0.02, height * 0.08);
+    g.lineStyle(0, 0xffffff, 0);
+  }
+
+  function drawFishingBoatPrimitive(g, x, y, width, height, now) {
+    const yy = y + Math.sin(now / 560) * height * 0.025;
+    beginFill(g, 'rgba(0,82,120,0.22)');
+    g.drawEllipse(x, yy + height * 0.28, width * 0.44, height * 0.16);
+    g.endFill();
+    beginFill(g, '#7a4d2f');
+    g.drawPolygon([
+      x - width * 0.48, yy - height * 0.02,
+      x + width * 0.46, yy - height * 0.08,
+      x + width * 0.32, yy + height * 0.28,
+      x - width * 0.36, yy + height * 0.32,
+    ]);
+    g.endFill();
+    beginFill(g, '#c99a63');
+    g.drawPolygon([
+      x - width * 0.35, yy - height * 0.12,
+      x + width * 0.22, yy - height * 0.16,
+      x + width * 0.13, yy + height * 0.08,
+      x - width * 0.27, yy + height * 0.13,
+    ]);
+    g.endFill();
+    g.lineStyle(Math.max(2, width * 0.018), 0x2f2219, 1);
+    g.moveTo(x - width * 0.16, yy - height * 0.12);
+    g.lineTo(x - width * 0.1, yy + height * 0.2);
+    g.moveTo(x + width * 0.26, yy - height * 0.08);
+    g.lineTo(x + width * 0.36, yy + height * 0.18);
+    g.lineStyle(0, 0xffffff, 0);
+    beginFill(g, '#315a7c');
+    drawRoundedRect(g, x - width * 0.02, yy - height * 0.42, width * 0.22, height * 0.18, height * 0.04);
+    g.endFill();
+  }
+
+  function drawOutpostGatePrimitive(g, x, y, width, height, primitive = {}) {
+    const open = primitive.openFlag && hasStoryFlag(primitive.openFlag);
+    beginFill(g, 'rgba(0,0,0,0.24)');
+    g.drawEllipse(x, y + height * 0.34, width * 0.45, height * 0.13);
+    g.endFill();
+    beginFill(g, '#8a6841');
+    drawRoundedRect(g, x - width * 0.48, y - height * 0.2, width * 0.96, height * 0.4, height * 0.05);
+    g.endFill();
+    beginFill(g, '#5a3b28');
+    drawRoundedRect(g, x - width * 0.18, y - height * 0.18, width * 0.36, height * 0.44, height * 0.03);
+    g.endFill();
+    if (open) {
+      beginFill(g, '#241a14');
+      drawRoundedRect(g, x - width * 0.12, y - height * 0.13, width * 0.24, height * 0.38, height * 0.02);
+      g.endFill();
+      g.lineStyle(Math.max(3, width * 0.012), 0xd2b17c, 1);
+      g.moveTo(x - width * 0.2, y - height * 0.14);
+      g.lineTo(x - width * 0.34, y + height * 0.18);
+      g.moveTo(x + width * 0.2, y - height * 0.14);
+      g.lineTo(x + width * 0.34, y + height * 0.18);
+      g.lineStyle(0, 0xffffff, 0);
+    }
+    [-0.4, 0.4].forEach((offset) => {
+      beginFill(g, '#6b4a30');
+      drawRoundedRect(g, x + width * offset - width * 0.04, y - height * 0.42, width * 0.08, height * 0.7, height * 0.03);
+      g.endFill();
+      beginFill(g, '#c59b62');
+      g.drawPolygon([
+        x + width * offset - width * 0.07, y - height * 0.42,
+        x + width * offset, y - height * 0.56,
+        x + width * offset + width * 0.07, y - height * 0.42,
+      ]);
+      g.endFill();
+    });
+  }
+
+  function drawBunkerPrimitive(g, x, y, width, height) {
+    beginFill(g, 'rgba(0,0,0,0.28)');
+    g.drawEllipse(x, y + height * 0.28, width * 0.42, height * 0.13);
+    g.endFill();
+    beginFill(g, '#5e6b72');
+    drawRoundedRect(g, x - width * 0.42, y - height * 0.18, width * 0.84, height * 0.46, height * 0.08);
+    g.endFill();
+    beginFill(g, '#2e383e');
+    drawRoundedRect(g, x - width * 0.2, y - height * 0.08, width * 0.4, height * 0.32, height * 0.04);
+    g.endFill();
+    beginFill(g, '#a51f1f');
+    drawRoundedRect(g, x - width * 0.3, y - height * 0.34, width * 0.6, height * 0.16, height * 0.04);
+    g.endFill();
+  }
+
   function drawScenarioPrimitive(g, state, def, metrics, now) {
     const kind = def && def.primitive && def.primitive.kind;
     if (kind === 'brokenBoat') {
@@ -2587,6 +2842,42 @@
     }
     if (kind === 'blanketSurvivor') {
       drawBlanketSurvivorPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height);
+      return true;
+    }
+    if (kind === 'tent') {
+      drawScenarioTentPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height, def.primitive);
+      return true;
+    }
+    if (kind === 'campfireLarge') {
+      drawLargeCampfirePrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height, now);
+      return true;
+    }
+    if (kind === 'fence') {
+      drawFencePrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height);
+      return true;
+    }
+    if (kind === 'survivor') {
+      drawSurvivorPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height, def.primitive, now);
+      return true;
+    }
+    if (kind === 'sleepingBag') {
+      drawSleepingBagPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height);
+      return true;
+    }
+    if (kind === 'hatch') {
+      drawHatchPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height);
+      return true;
+    }
+    if (kind === 'fishingBoat') {
+      drawFishingBoatPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height, now);
+      return true;
+    }
+    if (kind === 'outpostGate') {
+      drawOutpostGatePrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height, def.primitive);
+      return true;
+    }
+    if (kind === 'bunker') {
+      drawBunkerPrimitive(g, metrics.baseX, metrics.baseY + metrics.floatOffset, metrics.width, metrics.height);
       return true;
     }
     return false;
@@ -2748,6 +3039,31 @@
     return baseY + floatOffset + height * factor;
   }
 
+  function renderScenarioTextLabel(id, text, x, y, maxWidth) {
+    if (!text) return;
+    let label = scenarioTextLabels.get(id);
+    if (!label) {
+      label = new PIXI.Text(text, new PIXI.TextStyle({
+        fontFamily: 'Segoe UI, system-ui, sans-serif',
+        fontSize: 12,
+        fontWeight: '900',
+        fill: 0xffffff,
+        align: 'center',
+        stroke: 0x5b1010,
+        strokeThickness: 4,
+      }));
+      label.anchor.set(0.5);
+      scenarioTextLabels.set(id, label);
+      foregroundScenarioSpriteLayer.addChild(label);
+    }
+    if (label.text !== text) label.text = text;
+    label.visible = true;
+    label.x = x;
+    label.y = y;
+    label.zIndex = y + 100;
+    label.scale.set(Math.max(0.75, Math.min(1.15, maxWidth / Math.max(1, label.width) * 0.82)));
+  }
+
   let lastScenarioRenderAt = 0;
   function renderScenarioObjects(now) {
     if (IS_MOBILE_DEVICE && now - lastScenarioRenderAt < 1000 / 30) return;
@@ -2755,6 +3071,7 @@
     scenarioGraphics.clear();
     scenarioFxGraphics.clear();
     const activeIds = new Set();
+    const activeLabelIds = new Set();
     scenarioState.forEach((state) => {
       const def = scenarioById.get(state.id);
       if (!shouldRenderScenarioState(state, def)) return;
@@ -2795,24 +3112,38 @@
           scenarioGraphics.endFill();
         }
       }
+      if (def.labelText) {
+        activeLabelIds.add(state.id);
+        renderScenarioTextLabel(state.id, def.labelText, baseX, baseY + floatOffset - height * 0.31, width * 0.72);
+      }
       if (!floating && state.opened && !state.triggered && !def.repairQuest) drawScenarioLandGlint(scenarioFxGraphics, baseX, baseY + floatOffset, width, height, now, state);
     });
     scenarioSprites.forEach((sprite, id) => {
       if (!activeIds.has(id)) sprite.visible = false;
     });
+    scenarioTextLabels.forEach((label, id) => {
+      if (!activeLabelIds.has(id)) label.visible = false;
+    });
   }
 
   function createSmallIslandMap() {
+    return createIslandMap(getIslandRun());
+  }
+
+  function createIslandMap(islandRun) {
     const center = Math.floor(NEW_ISLAND_MAP_SIZE / 2);
     const radius = (NEW_ISLAND_SIZE - 1) / 2;
     const beachWidth = 2.1;
+    const surfaceType = (ISLAND_PROFILES[islandRun] || ISLAND_PROFILES[2]).surfaceType;
     return Array.from({ length: NEW_ISLAND_MAP_SIZE }, (_, y) =>
       Array.from({ length: NEW_ISLAND_MAP_SIZE }, (_, x) => {
         const dx = x - center;
         const dy = y - center;
         const d = Math.hypot(dx, dy);
         if (d > radius) return 0;
-        if (d >= radius - beachWidth) return { surfaceType: 'sand' };
+        if (surfaceType !== 'sand' && d >= radius - beachWidth) return { surfaceType: 'sand' };
+        if (surfaceType === 'snow') return { surfaceType: 'snow' };
+        if (surfaceType === 'sand') return { surfaceType: 'sand' };
         return 1;
       })
     );
@@ -2846,10 +3177,12 @@
   }
 
   function seedNewIslandPines() {
-    const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
+    const islandRun = getIslandRun();
     if (islandRun < 2 || !campfireCenter) return;
-    if (bushes.some((b) => b && b.preseeded && b.berryDef && b.berryDef.id === 'pine')) return;
-    const pine = resourceById.get('pine');
+    const treeId = getCurrentIslandProfile().surfaceType === 'snow' ? 'snow-pine' : 'pine';
+    if (getCurrentIslandProfile().surfaceType === 'sand') return;
+    if (bushes.some((b) => b && b.preseeded && b.berryDef && b.berryDef.id === treeId)) return;
+    const pine = resourceById.get(treeId);
     if (!pine) return;
     const cx = Math.round(campfireCenter.x);
     const cy = Math.round(campfireCenter.y);
@@ -2882,9 +3215,10 @@
   }
 
   function resetProgressForNextIsland() {
-    localStorage.setItem(ISLAND_RUN_KEY, '2');
+    const nextIslandRun = getIslandRun() + 1;
+    localStorage.setItem(ISLAND_RUN_KEY, String(nextIslandRun));
     localStorage.setItem(GAME_DAY_KEY, String(getGameDay() + 1));
-    localStorage.setItem('map', JSON.stringify(createSmallIslandMap()));
+    localStorage.setItem('map', JSON.stringify(createIslandMap(nextIslandRun)));
     localStorage.setItem('baseGridW', String(DEFAULT_MAP_WIDTH));
     localStorage.setItem('islandExpansionLevel', '0');
     localStorage.removeItem(BASE_LAND_CELLS_KEY);
@@ -2899,6 +3233,9 @@
     localStorage.removeItem(SCENARIO_COLLIDER_CELLS_KEY);
     localStorage.removeItem(BOAT_REPAIRED_KEY);
     localStorage.removeItem(BOAT_REPAIR_REQUEST_KEY);
+    localStorage.removeItem(STORY_ACTION_REQUEST_KEY);
+    localStorage.removeItem(STORY_DEPARTURE_KEY);
+    localStorage.removeItem(COMBAT_STATS_KEY);
     const user = getUserState();
     user.money = 0;
     user.inventory = {};
@@ -2926,22 +3263,53 @@
     window.dispatchEvent(new CustomEvent('vibe-map-changed'));
   }
 
+  function getDepartureConfig() {
+    const islandRun = getIslandRun();
+    if (islandRun === 2) {
+      return {
+        stateId: 'second-raft',
+        assetUrl: './images/scenario/raft.png',
+        vehicle: 'raft',
+        flipX: false,
+        completeDialogue: ['Берег исчезает за спиной.', 'Впереди снежный остров.'],
+      };
+    }
+    if (islandRun === 3) {
+      return {
+        stateId: 'fishing-boat',
+        assetUrl: './images/scenario/boat-repaired.png',
+        vehicle: 'fishing-boat',
+        flipX: true,
+        completeDialogue: ['Все на борту.', 'На востоке виден пустынный форпост.'],
+      };
+    }
+    return {
+      stateId: 'broken-boat',
+      assetUrl: './images/scenario/boat-repaired.png',
+      vehicle: 'boat',
+      flipX: true,
+      completeDialogue: getCurrentIslandProfile().arrival,
+    };
+  }
+
   function getBoatScenarioState() {
-    return scenarioState.find((state) => state.id === 'broken-boat') || null;
+    const config = getDepartureConfig();
+    return scenarioState.find((state) => state.id === config.stateId) || null;
   }
 
   function startBoatCutscene() {
     if (boatCutscene) return;
+    const departureConfig = getDepartureConfig();
     const state = getBoatScenarioState();
-    const def = scenarioById.get('broken-boat');
+    const def = scenarioById.get(departureConfig.stateId);
     if (!state || !def) return;
     state.repaired = true;
     state.opened = true;
     updateCameraToHero();
     const now = performance.now();
     const metrics = getScenarioRenderMetrics(state, def, now);
-    const lighthouseState = scenarioState.find((item) => item.id === 'lighthouse');
-    const lighthouseDef = scenarioById.get('lighthouse');
+    const lighthouseState = departureConfig.stateId === 'broken-boat' ? scenarioState.find((item) => item.id === 'lighthouse') : null;
+    const lighthouseDef = lighthouseState ? scenarioById.get('lighthouse') : null;
     const lighthouseMetrics = lighthouseState && lighthouseDef ? getScenarioRenderMetrics(lighthouseState, lighthouseDef, now) : null;
     const startX = lighthouseMetrics ? (-camera.x + lighthouseMetrics.baseX) : (-camera.x + metrics.baseX);
     const startY = lighthouseMetrics ? (-camera.y + lighthouseMetrics.baseY - lighthouseMetrics.height * 0.72) : (-camera.y + metrics.baseY + metrics.floatOffset);
@@ -2956,6 +3324,10 @@
       startY,
       width: metrics.width,
       height: metrics.height,
+      assetUrl: departureConfig.assetUrl,
+      vehicle: departureConfig.vehicle,
+      flipX: departureConfig.flipX,
+      completeDialogue: departureConfig.completeDialogue,
     };
     facing = 1;
     controllerState.joyActive = false;
@@ -2998,24 +3370,40 @@
     ensureCutsceneHeroParts();
     const heroScale = (boatCutscene.height * 1.05) / 250;
     cutsceneHeroContainer.visible = true;
-    cutsceneHeroContainer.x = x + boatCutscene.width * 0.18;
-    cutsceneHeroContainer.y = y - boatCutscene.height * 0.12;
+    cutsceneHeroContainer.x = x + boatCutscene.width * (boatCutscene.vehicle === 'raft' ? -0.05 : 0.18);
+    cutsceneHeroContainer.y = y - boatCutscene.height * (boatCutscene.vehicle === 'raft' ? 0.22 : 0.12);
     cutsceneHeroContainer.rotation = rotation;
     cutsceneHeroContainer.scale.set(heroScale);
-    const texture = getTexture('./images/scenario/boat-repaired.png');
+    const texture = getTexture(boatCutscene.assetUrl || './images/scenario/boat-repaired.png');
     if (texture) {
       cutsceneBoatSprite.visible = true;
       cutsceneBoatSprite.texture = texture;
       cutsceneBoatSprite.x = x;
       cutsceneBoatSprite.y = y;
+      const flip = boatCutscene.flipX ? -1 : 1;
       cutsceneBoatSprite.scale.set(
-        -boatCutscene.width / Math.max(1, texture.width),
+        flip * boatCutscene.width / Math.max(1, texture.width),
         boatCutscene.height / Math.max(1, texture.height)
       );
       cutsceneBoatSprite.rotation = rotation;
     } else {
       cutsceneBoatSprite.visible = false;
       drawScenarioBoatPrimitive(cutsceneGraphics, x, y, boatCutscene.width, boatCutscene.height, true, now);
+    }
+    if (boatCutscene.vehicle === 'raft') {
+      drawBlanketSurvivorPrimitive(cutsceneGraphics, x + boatCutscene.width * 0.22, y + boatCutscene.height * 0.1, boatCutscene.width * 0.26, boatCutscene.height * 0.32);
+    }
+    if (boatCutscene.vehicle === 'fishing-boat') {
+      [-0.14, 0.02, 0.18].forEach((offset, index) => {
+        const px = x + boatCutscene.width * offset;
+        const py = y - boatCutscene.height * (0.18 + index * 0.02);
+        cutsceneGraphics.beginFill(0xd9b18d, 1);
+        cutsceneGraphics.drawCircle(px, py, Math.max(4, boatCutscene.height * 0.09));
+        cutsceneGraphics.endFill();
+        cutsceneGraphics.beginFill([0x315a7c, 0x6d4633, 0x394b2f][index], 1);
+        cutsceneGraphics.drawRoundedRect(px - boatCutscene.width * 0.045, py + boatCutscene.height * 0.08, boatCutscene.width * 0.09, boatCutscene.height * 0.18, 5);
+        cutsceneGraphics.endFill();
+      });
     }
   }
 
@@ -3042,8 +3430,9 @@
       return;
     }
     if (boatCutscene.phase === 'fadeIn' && elapsed >= 1200) {
+      const lines = boatCutscene.completeDialogue || getCurrentIslandProfile().arrival || [];
       boatCutscene = null;
-      startDialogue(['кажется, топливо закончилось', 'надо исследовать этот остров']);
+      startDialogue(lines);
     }
   }
 
@@ -5206,6 +5595,291 @@
     }
   }
 
+  const enemies = [];
+  let nextEnemyUid = 1;
+  let lastEnemySpawnAt = 0;
+  let lastHeroEnemyHitAt = 0;
+  let combatIntroShownFor = '';
+
+  function getCombatStats() {
+    const stats = safeJson(COMBAT_STATS_KEY, {});
+    return stats && typeof stats === 'object' && !Array.isArray(stats) ? stats : {};
+  }
+
+  function setCombatStats(stats) {
+    localStorage.setItem(COMBAT_STATS_KEY, JSON.stringify(stats || {}));
+    localStorage.setItem('combatStatsUpdatedAt', String(Date.now()));
+    window.dispatchEvent(new CustomEvent('vibe-combat-updated'));
+  }
+
+  function getCombatCount(key) {
+    return Math.max(0, Math.floor(Number(getCombatStats()[key]) || 0));
+  }
+
+  function addCombatCount(key, amount = 1) {
+    const stats = getCombatStats();
+    stats[key] = Math.max(0, Math.floor(Number(stats[key]) || 0)) + Math.max(1, Math.floor(Number(amount) || 1));
+    setCombatStats(stats);
+  }
+
+  function getDaySevenZombieTotal() {
+    const stats = getCombatStats();
+    return Math.max(0, Math.floor(Number(stats.day7Zombies) || 0)) + Math.max(0, Math.floor(Number(stats.day7Scouts) || 0));
+  }
+
+  function getActiveEnemyPlan() {
+    const day = getGameDay();
+    const islandRun = getIslandRun();
+    if (islandRun === 3 && day === 4) {
+      if (getCombatCount('wolf') < 50) {
+        return { type: 'wolf', maxActive: 7, spawnMs: 2600, hp: 2, speedCells: 0.48, radius: 0.85 };
+      }
+      if (getCombatCount('wolfBoss') < 1) {
+        return { type: 'wolfBoss', maxActive: 1, spawnMs: 900, hp: 18, speedCells: 0.34, radius: 1.55, boss: true };
+      }
+      if (getCombatCount('snowZombie') < 1) {
+        return { type: 'snowZombie', maxActive: 1, spawnMs: 1100, hp: 6, speedCells: 0.28, radius: 1.05 };
+      }
+      return null;
+    }
+    if (islandRun === 4 && day === 6) {
+      if (getCombatCount('zombie') < 40) {
+        return { type: 'zombie', maxActive: 8, spawnMs: 1800, hp: 3, speedCells: 0.34, radius: 0.95 };
+      }
+      if (getCombatCount('zombieScoutBoss') < 1) {
+        return { type: 'zombieScoutBoss', maxActive: 1, spawnMs: 900, hp: 16, speedCells: 0.36, radius: 1.25, boss: true };
+      }
+      return null;
+    }
+    if (islandRun === 4 && day === 7) {
+      if (getDaySevenZombieTotal() < 50) {
+        const scout = Math.random() < 0.24;
+        return {
+          type: scout ? 'zombieScout' : 'zombie',
+          maxActive: 9,
+          spawnMs: 1600,
+          hp: scout ? 4 : 3,
+          speedCells: scout ? 0.42 : 0.34,
+          radius: scout ? 1.02 : 0.95,
+        };
+      }
+    }
+    return null;
+  }
+
+  function getEnemySpawnCell() {
+    if (!land.length || !cellPct) return null;
+    const hero = getHeroGridPosition();
+    const bounds = getIslandBoundsGrid();
+    const candidates = land.filter((cell) => {
+      if (!bounds) return true;
+      const edge = cell.x <= bounds.minX + 2 || cell.x >= bounds.maxX - 2 || cell.y <= bounds.minY + 2 || cell.y >= bounds.maxY - 2;
+      if (!edge) return false;
+      if (hero && Math.hypot(cell.x - hero.gridX, cell.y - hero.gridY) < 8) return false;
+      return !getScenarioBlockers().has(cellKey(cell.x, cell.y));
+    });
+    const pool = candidates.length ? candidates : land;
+    return pool[Math.floor(Math.random() * pool.length)] || null;
+  }
+
+  function spawnEnemy(plan, now) {
+    if (!plan) return false;
+    if (plan.boss && enemies.some((enemy) => enemy.type === plan.type)) return false;
+    const cell = getEnemySpawnCell();
+    if (!cell) return false;
+    enemies.push({
+      uid: nextEnemyUid++,
+      type: plan.type,
+      xPct: (cell.x + 0.5) * cellPct,
+      yPct: (cell.y + 0.5) * cellPct,
+      hp: plan.hp,
+      maxHp: plan.hp,
+      radius: plan.radius,
+      speedCells: plan.speedCells,
+      boss: Boolean(plan.boss),
+      spawnedAt: now,
+      hitFlashAt: 0,
+      facing: 1,
+    });
+    return true;
+  }
+
+  function recordEnemyKill(enemy) {
+    if (!enemy) return;
+    if (enemy.type === 'wolf') addCombatCount('wolf');
+    else if (enemy.type === 'wolfBoss') addCombatCount('wolfBoss');
+    else if (enemy.type === 'snowZombie') addCombatCount('snowZombie');
+    else if (enemy.type === 'zombieScoutBoss') addCombatCount('zombieScoutBoss');
+    else if (enemy.type === 'zombieScout') {
+      addCombatCount('zombieScout');
+      if (getIslandRun() === 4 && getGameDay() === 7) addCombatCount('day7Scouts');
+    } else if (enemy.type === 'zombie') {
+      addCombatCount('zombie');
+      if (getIslandRun() === 4 && getGameDay() === 7) addCombatCount('day7Zombies');
+    }
+    addPlayerExperience(enemy.boss ? 12 : 2);
+    playSound(enemy.boss ? 'player.pickupRare' : 'player.axeHitTree', { volume: enemy.boss ? 0.16 : 0.07, cooldownMs: 80 });
+  }
+
+  function updateEnemyIntro(plan) {
+    if (!plan) return;
+    const key = `${getIslandRun()}-${getGameDay()}-${plan.type}`;
+    if (combatIntroShownFor === key || localStorage.getItem(`combatIntro:${key}`) === '1') return;
+    combatIntroShownFor = key;
+    localStorage.setItem(`combatIntro:${key}`, '1');
+    if (plan.type === 'wolf') {
+      startDialogue(['Слышишь вой?', 'Волки идут медленно, но их много. Держись рядом с лагерем.']);
+    } else if (plan.type === 'wolfBoss') {
+      startDialogue(['Это он. Белый вожак.', 'Красные глаза... лучше не подпускать его близко.']);
+    } else if (plan.type === 'snowZombie') {
+      startDialogue(['В конце тропы кто-то идет...', 'Это уже не волк.']);
+    } else if (plan.type === 'zombie') {
+      startDialogue(['Форпост не откроет ворота, пока вокруг зомби.', 'Придется расчистить двор.']);
+    } else if (plan.type === 'zombieScoutBoss') {
+      startDialogue(['Зомби в кастрюле на голове?', 'И у него топор. Значит, ими кто-то командует.']);
+    }
+  }
+
+  function updateEnemies(deltaMS, now) {
+    if (boatCutscene) {
+      enemies.splice(0);
+      enemyGraphics.clear();
+      return;
+    }
+    const plan = getActiveEnemyPlan();
+    updateEnemyIntro(plan);
+    const activeOfType = plan ? enemies.filter((enemy) => enemy.type === plan.type).length : 0;
+    if (plan && activeOfType < plan.maxActive && now - lastEnemySpawnAt >= plan.spawnMs) {
+      if (spawnEnemy(plan, now)) lastEnemySpawnAt = now;
+    }
+
+    const attackRangePx = pct2px(cellPct * 1.55);
+    const hitReady = now - lastHeroEnemyHitAt >= 430;
+    let closest = null;
+    let closestDistance = Infinity;
+    enemies.forEach((enemy) => {
+      const dxPct = charXPct - enemy.xPct;
+      const dyPct = charYPct - enemy.yPct;
+      const distPct = Math.hypot(dxPct, dyPct) || 1;
+      const speed = enemy.speedCells * cellPct * (deltaMS / 1000);
+      if (distPct > cellPct * 1.25) {
+        enemy.xPct += (dxPct / distPct) * speed;
+        enemy.yPct += (dyPct / distPct) * speed;
+        enemy.facing = dxPct >= 0 ? 1 : -1;
+      }
+      const distPx = Math.hypot(pct2px(charXPct - enemy.xPct), pct2px(charYPct - enemy.yPct));
+      if (distPx < closestDistance) {
+        closest = enemy;
+        closestDistance = distPx;
+      }
+    });
+
+    if (hitReady && closest && closestDistance <= attackRangePx + pct2px(cellPct * (closest.radius || 1))) {
+      closest.hp -= 1;
+      closest.hitFlashAt = now;
+      lastHeroEnemyHitAt = now;
+      facing = closest.xPct >= charXPct ? 1 : -1;
+      localStorage.setItem('heroAction', JSON.stringify({ chopAt: now, targetUid: closest.uid }));
+      playSound('player.axeSwing', { volume: 0.08, playbackRate: 1.1, cooldownMs: 120 });
+    }
+
+    for (let i = enemies.length - 1; i >= 0; i -= 1) {
+      if (enemies[i].hp > 0) continue;
+      recordEnemyKill(enemies[i]);
+      enemies.splice(i, 1);
+    }
+  }
+
+  function drawWolfEnemy(g, enemy, x, y, size, now) {
+    const boss = enemy.type === 'wolfBoss';
+    const body = boss ? 0xf4fbff : 0x5b6470;
+    const outline = boss ? 0xddeeff : 0x3a4148;
+    const flash = now - enemy.hitFlashAt < 120;
+    const flip = enemy.facing >= 0 ? 1 : -1;
+    g.beginFill(0x000000, 0.22);
+    g.drawEllipse(x, y + size * 0.42, size * 0.55, size * 0.16);
+    g.endFill();
+    g.beginFill(flash ? 0xffe0e0 : body, 1);
+    g.drawEllipse(x, y + size * 0.05, size * 0.48, size * 0.25);
+    g.drawEllipse(x + flip * size * 0.42, y - size * 0.08, size * 0.24, size * 0.2);
+    g.endFill();
+    g.beginFill(outline, 1);
+    g.drawPolygon([
+      x + flip * size * 0.34, y - size * 0.22,
+      x + flip * size * 0.44, y - size * 0.48,
+      x + flip * size * 0.53, y - size * 0.18,
+    ]);
+    g.drawPolygon([
+      x + flip * size * 0.5, y - size * 0.18,
+      x + flip * size * 0.65, y - size * 0.38,
+      x + flip * size * 0.64, y - size * 0.07,
+    ]);
+    g.endFill();
+    g.lineStyle(Math.max(2, size * 0.07), body, 1);
+    [-0.26, -0.06, 0.16, 0.34].forEach((offset) => {
+      g.moveTo(x + size * offset, y + size * 0.22);
+      g.lineTo(x + size * (offset + 0.02), y + size * 0.55);
+    });
+    g.lineStyle(0, 0xffffff, 0);
+    g.beginFill(boss ? 0xff1717 : 0xffd35b, 1);
+    g.drawCircle(x + flip * size * 0.5, y - size * 0.1, Math.max(2, size * 0.035));
+    g.endFill();
+    if (boss) {
+      g.lineStyle(Math.max(2, size * 0.025), 0xc8e7ff, 0.85);
+      g.drawEllipse(x, y + size * 0.05, size * 0.54, size * 0.3);
+      g.lineStyle(0, 0xffffff, 0);
+    }
+  }
+
+  function drawZombieEnemy(g, enemy, x, y, size, now) {
+    const scout = enemy.type === 'zombieScout' || enemy.type === 'zombieScoutBoss';
+    const boss = enemy.type === 'zombieScoutBoss';
+    const flash = now - enemy.hitFlashAt < 120;
+    const skin = flash ? 0xffdad8 : 0x92b06e;
+    g.beginFill(0x000000, 0.23);
+    g.drawEllipse(x, y + size * 0.52, size * 0.34, size * 0.11);
+    g.endFill();
+    g.beginFill(scout ? 0x5a4934 : 0x405c63, 1);
+    drawRoundedRect(g, x - size * 0.18, y - size * 0.08, size * 0.36, size * 0.5, size * 0.09);
+    g.endFill();
+    g.beginFill(skin, 1);
+    g.drawCircle(x, y - size * 0.28, size * 0.18);
+    g.endFill();
+    if (scout) {
+      g.beginFill(0xb8b8ac, 1);
+      g.drawRoundedRect(x - size * 0.22, y - size * 0.5, size * 0.44, size * 0.18, size * 0.04);
+      g.endFill();
+      g.beginFill(0x77776e, 1);
+      g.drawRect(x - size * 0.16, y - size * 0.61, size * 0.32, size * 0.12);
+      g.endFill();
+      g.lineStyle(Math.max(3, size * 0.055), 0x674325, 1);
+      g.moveTo(x + size * 0.2, y + size * 0.02);
+      g.lineTo(x + size * 0.46, y - size * 0.26);
+      g.lineStyle(Math.max(2, size * 0.045), 0xbcc5c8, 1);
+      g.moveTo(x + size * 0.46, y - size * 0.26);
+      g.lineTo(x + size * 0.58, y - size * 0.35);
+      g.lineStyle(0, 0xffffff, 0);
+    }
+    g.beginFill(boss ? 0xff2020 : 0xfff1a8, 1);
+    g.drawCircle(x - size * 0.06, y - size * 0.29, Math.max(2, size * 0.025));
+    g.drawCircle(x + size * 0.08, y - size * 0.29, Math.max(2, size * 0.025));
+    g.endFill();
+  }
+
+  function renderEnemies(now) {
+    enemyGraphics.clear();
+    enemies
+      .slice()
+      .sort((a, b) => a.yPct - b.yPct)
+      .forEach((enemy) => {
+        const x = pct2px(enemy.xPct);
+        const y = pct2px(enemy.yPct);
+        const size = Math.max(18, getWorldCellPx() * (enemy.radius || 1));
+        if (enemy.type === 'wolf' || enemy.type === 'wolfBoss') drawWolfEnemy(enemyGraphics, enemy, x, y, size, now);
+        else drawZombieEnemy(enemyGraphics, enemy, x, y, size, now);
+      });
+  }
+
   const sharks = [];
 
   function distPointRect(px, py, rx, ry, rw, rh) {
@@ -5568,6 +6242,36 @@
     loadMapData();
   }
 
+  function refreshScenarioAfterStoryChange() {
+    scenarioState = loadScenarioState();
+    persistScenarioState();
+    rebuildScenarioColliderCells();
+    renderScenarioObjects(performance.now());
+  }
+
+  function handleStoryAction(detail = {}) {
+    const action = detail.action;
+    if (action === 'revealSnowHatch') {
+      setStoryFlag('snowHatchRevealed');
+      refreshScenarioAfterStoryChange();
+      startDialogue(Array.isArray(detail.lines) && detail.lines.length
+        ? detail.lines
+        : ['Ты достойные человек, ты помог нам', 'Я открою тебе секрет', 'Это то, о чем я думаю?...']);
+    } else if (action === 'openOutpost') {
+      setStoryFlag('outpostOpen');
+      refreshScenarioAfterStoryChange();
+      startDialogue(Array.isArray(detail.lines) && detail.lines.length
+        ? detail.lines
+        : ['У зомби есть лидер.', 'Ворота форпоста открыты.']);
+    } else if (action === 'receiveValve') {
+      setStoryFlag('valveReceived');
+      refreshScenarioAfterStoryChange();
+      startDialogue(Array.isArray(detail.lines) && detail.lines.length
+        ? detail.lines
+        : ['Старейшина дает особый вентиль.', 'Теперь можно вернуться к люку.']);
+    }
+  }
+
   function init() {
     resize();
     nextWaterBurstDelay = randomWaterBurstDelay();
@@ -5610,6 +6314,7 @@
     updateBoatCutscene(now);
     const frameUser = getUserState();
     updateHeroLogic(deltaMS, frameUser);
+    updateEnemies(deltaMS, now);
     if (!boatCutscene) updateDialogue(now);
     if (now - lastSlowLogicAt >= 100) {
       lastSlowLogicAt = now;
@@ -5657,6 +6362,7 @@
     renderBuildings(now, frameUser);
     renderResources(now);
     renderResourceMotion(now);
+    renderEnemies(now);
     renderHero(now, deltaMS || (now - lastHeroAnimT));
     lastHeroAnimT = now;
     renderTransition(now);
@@ -5670,6 +6376,7 @@
   window.addEventListener('vibe-found-item-complete', (event) => completeScenarioFoundItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', onMapChanged);
   window.addEventListener('vibe-boat-repair', consumeBoatRepairRequest);
+  window.addEventListener('vibe-story-action', (event) => handleStoryAction(event.detail || {}));
   window.addEventListener('vibe-day-one-campfire-built', () => {
     dayOneCampfireBuiltAt = Date.now();
     startDialogue(['теперь я не замерзну ночью']);

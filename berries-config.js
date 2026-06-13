@@ -54,6 +54,15 @@
       resourceCategory: 'metal',
     },
     {
+      id: 'bunker-valve',
+      titleRu: 'Особый вентиль',
+      assetUrl: './img/scenario-drop/metal-scrap.png?v=20260605-material-inventory',
+      widthPx: 44,
+      heightPx: 44,
+      inventoryItem: true,
+      findingItem: true,
+    },
+    {
       id: 'pine-log',
       titleRu: 'Еловые брёвна',
       assetUrl: './img/mineable/log-pine.png',
