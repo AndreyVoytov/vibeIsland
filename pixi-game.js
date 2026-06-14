@@ -41,7 +41,12 @@
     1: { surfaceType: 'grass', arrival: ['Надо выбраться с этого острова.'] },
     2: {
       surfaceType: 'grass',
-      arrival: ['кажется, топливо закончилось', 'надо исследовать этот остров'],
+      arrival: [
+        { text: 'Ого, новые люди!', speakerId: 'blanket-survivor' },
+        { text: 'Я думал так и помру здесь', speakerId: 'blanket-survivor' },
+        { text: 'Я тебя не брошу' },
+        { text: 'Новый остров - новое начало' },
+      ],
     },
     3: {
       surfaceType: 'snow',
@@ -69,7 +74,7 @@
   const ISLAND_OUTLINE_COLOR = 0x0092dc;
   const WORLD_ZOOM = 1.15;
   const BASE_CELL_PX = 28;
-  const EXPANSION_ANIMATION_MS = 1900;
+  const EXPANSION_ANIMATION_MS = 3800;
   const LEAF_PARTICLE_ASSET = './img/fx/lime-leaf-particle.png';
   const RESOURCE_UPGRADE_LEVELS_PER_STAR = 4;
   const RESOURCE_UPGRADE_MAX_STARS = 5;
@@ -284,6 +289,25 @@
     ...Array.from({ length: 10 }, (_, index) => `./img/building/drill-${index + 1}.png`),
   ];
 
+  const UI_IMAGE_ASSETS = [
+    './img/ui/inventory-bag.png',
+    './img/ui/coin.png',
+    './img/ui/settings-gear.png',
+    './img/ui/upgrade-arrow.png',
+    './img/ui/shine.png',
+    './img/ui/rainbow-stone.png',
+    './img/ui/hero-portrait.png',
+    './img/ui/quest-journal.png',
+    './img/upgrade/sharp-sight.png',
+    './img/upgrade/digging-technique.png',
+    './img/upgrade/mushroom-sense.png',
+    './img/upgrade/root-care.png',
+    './img/upgrade/tomato-watering.png',
+    './img/intro/day-1-comic-plane.webp',
+    './img/intro/day-1-comic-exit.webp',
+    './img/intro/day-1-comic-parachute.webp',
+  ];
+
   const SEA_IMAGE_ASSETS = [
     './img/sea/shark-fin.png',
     WATER_BURST_ASSET,
@@ -303,7 +327,7 @@
     './images/scenario/lifebuoy.png',
     './images/scenario/boat-broken.png',
     './images/scenario/boat-repaired.png',
-    './images/scenario/blanket-survivor.png',
+    './images/scenario/blanket-survivor-beanie.png',
     './images/scenario/raft.png',
   ];
 
@@ -350,12 +374,18 @@
 
   const KNOWN_ASSETS = new Set([
     './img/berry/1.png',
+    './img/berry/strawberry.png',
+    './img/berry/strawberry-drop-outline.png',
     './img/building/campfire.png',
     './img/building/campfire2.png',
     './img/island_shadow.png',
     './img/tiles/1.png',
+    './img/tiles/11.png',
+    './img/tiles/1b.png',
+    './img/tiles/1_nirm.png',
     './img/tiles/dead.png',
     './img/tiles/snow.png',
+    './images/scenario/blanket-survivor.png',
     './images/scenario/wood-crate-fallback.svg',
     './images/scenario/suitcase-fallback.svg',
     './images/scenario/radio-buoy-fallback.svg',
@@ -368,6 +398,7 @@
   MINEABLE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   BERRY_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   BUILDING_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
+  UI_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SEA_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SCENARIO_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
   SCENARIO_DROP_IMAGE_ASSETS.forEach((url) => KNOWN_ASSETS.add(url));
@@ -378,6 +409,9 @@
   const loadingProgress = document.getElementById('loadingProgress');
   const loadingText = document.getElementById('loadingText');
   const LOADING_IMAGE_PATTERN = /\.(?:png|jpe?g|webp|svg)(?:\?.*)?$/i;
+  const ASSET_LOAD_ATTEMPTS = 3;
+  const ASSET_LOAD_BATCH_SIZE = 8;
+  window.VibeAssetsReady = false;
 
   function collectLoadingAssetUrls(value, urls, seen = new Set()) {
     if (typeof value === 'string') {
@@ -402,14 +436,6 @@
       window.EnlargeConfig || {},
       window.UIConfig || {},
     ].forEach((config) => collectLoadingAssetUrls(config, urls));
-    [
-      './img/ui/inventory-bag.png',
-      './img/ui/quest-journal.png',
-      './img/ui/shine.png',
-      './img/intro/day-1-comic-plane.webp',
-      './img/intro/day-1-comic-exit.webp',
-      './img/intro/day-1-comic-parachute.webp',
-    ].forEach((url) => urls.add(url));
     return Array.from(urls);
   }
 
@@ -420,13 +446,20 @@
   }
 
   function preloadImage(url) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const image = new Image();
-      const complete = () => resolve();
-      image.onload = complete;
-      image.onerror = complete;
+      image.decoding = 'async';
+      image.onload = async () => {
+        try {
+          if (typeof image.decode === 'function') await image.decode();
+          if (!image.naturalWidth || !image.naturalHeight) throw new Error(`Пустой ресурс: ${url}`);
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      };
+      image.onerror = () => reject(new Error(`Не удалось загрузить ресурс: ${url}`));
       image.src = url;
-      if (image.complete) complete();
     });
   }
 
@@ -434,31 +467,70 @@
     const texture = getTexture(url);
     const baseTexture = texture && texture.baseTexture;
     if (!baseTexture || baseTexture.valid) return Promise.resolve();
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let finished = false;
-      const finish = () => {
+      const cleanup = () => {
+        baseTexture.off('loaded', loaded);
+        baseTexture.off('error', failed);
+      };
+      const loaded = () => {
         if (finished) return;
         finished = true;
-        baseTexture.off('loaded', finish);
-        baseTexture.off('error', finish);
+        cleanup();
         resolve();
       };
-      baseTexture.once('loaded', finish);
-      baseTexture.once('error', finish);
-      window.setTimeout(finish, 5000);
+      const failed = () => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        reject(new Error(`PIXI не декодировал ресурс: ${url}`));
+      };
+      baseTexture.once('loaded', loaded);
+      baseTexture.once('error', failed);
+      window.setTimeout(failed, 15000);
     });
+  }
+
+  async function loadAssetWithRetries(loader, url) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= ASSET_LOAD_ATTEMPTS; attempt += 1) {
+      try {
+        await loader(url);
+        return;
+      } catch (err) {
+        lastError = err;
+        if (loadingText) loadingText.textContent = `Повторная загрузка ${attempt}/${ASSET_LOAD_ATTEMPTS}: ${url}`;
+        if (attempt < ASSET_LOAD_ATTEMPTS) await new Promise((resolve) => window.setTimeout(resolve, 350 * attempt));
+      }
+    }
+    throw lastError || new Error(`Не удалось загрузить ресурс: ${url}`);
+  }
+
+  async function loadAssetsInBatches(urls, loader, onLoaded) {
+    for (let index = 0; index < urls.length; index += ASSET_LOAD_BATCH_SIZE) {
+      const batch = urls.slice(index, index + ASSET_LOAD_BATCH_SIZE);
+      await Promise.all(batch.map(async (url) => {
+        await loadAssetWithRetries(loader, url);
+        if (onLoaded) onLoaded(url);
+      }));
+    }
   }
 
   async function preloadGameAssets() {
     const urls = getLoadingAssetUrls();
+    const pixiUrls = urls.filter((url) => KNOWN_ASSETS.has(url));
+    const total = urls.length + pixiUrls.length;
     let loaded = 0;
-    updateLoadingProgress(loaded, urls.length);
-    await Promise.all(urls.map(async (url) => {
-      await preloadImage(url);
+    updateLoadingProgress(loaded, total);
+    await loadAssetsInBatches(urls, preloadImage, () => {
       loaded += 1;
-      updateLoadingProgress(loaded, urls.length);
-    }));
-    await Promise.all(urls.filter((url) => KNOWN_ASSETS.has(url)).map(preloadPixiTexture));
+      updateLoadingProgress(loaded, total);
+    });
+    await loadAssetsInBatches(pixiUrls, preloadPixiTexture, () => {
+      loaded += 1;
+      updateLoadingProgress(loaded, total);
+    });
+    window.VibeAssetsReady = true;
   }
 
   function hideLoadingScreen() {
@@ -909,7 +981,8 @@
     const targetWidth = Math.max(gameWidth * 1.35, worldW * 1.18);
     const height = clamp(targetWidth * ratio, HORIZON_MIN_HEIGHT, Math.min(HORIZON_MAX_HEIGHT, gameHeight * 0.26));
     const topRef = getTopScenarioOrIslandWorldY();
-    const gap = Math.max(cell * HORIZON_WATER_GAP_CELLS, gameHeight * 0.055);
+    const islandGap = getIslandRun() === 2 ? Math.max(50, cell * 4) : 0;
+    const gap = Math.max(cell * HORIZON_WATER_GAP_CELLS, gameHeight * 0.055) + islandGap;
     const baseY = topRef - gap - height * HORIZON_LINE_Y_RATIO;
     const topY = Math.min(baseY, -HORIZON_TOP_OVERSCAN_PX);
     const displayHeight = height + (baseY - topY);
@@ -1566,6 +1639,7 @@
     if (BERRIES_LIST[0]) user.unlockedResources[BERRIES_LIST[0].id] = true;
     const campfire = buildingDefs.find((item) => item.id === 'campfire');
     if (campfire) user.unlockedResources[campfire.id] = true;
+    if (getIslandRun() >= 2) user.unlockedResources['campfire-upgrade-1'] = true;
     cachedUserState = user;
     cachedUserRaw = raw;
     lastUserStateReadAt = now;
@@ -1925,10 +1999,13 @@
     const islandRun = Math.max(1, Math.floor(Number(localStorage.getItem(ISLAND_RUN_KEY) || 1) || 1));
     if (islandRun < 2 || !GRID_W || !GRID_H || !map.length) return;
     const signature = `${GRID_W}x${GRID_H}`;
+    const layoutVersion = islandRun === 2 ? 'second-island-centered-v1' : 'later-island-offset-v1';
     const stored = safeJson('campfireCenter', null);
     const storedSig = localStorage.getItem('campfireCenterMapSig') || '';
+    const storedLayoutVersion = localStorage.getItem('campfireCenterLayoutVersion') || '';
     if (
       storedSig === signature
+      && storedLayoutVersion === layoutVersion
       && stored
       && Number.isFinite(stored.x)
       && Number.isFinite(stored.y)
@@ -1941,7 +2018,7 @@
     const centerX = Math.round((bounds.minX + bounds.maxX) / 2);
     const centerY = Math.round((bounds.minY + bounds.maxY) / 2);
     const target = {
-      x: clamp(centerX + 4, bounds.minX + 5, bounds.maxX - 5),
+      x: islandRun === 2 ? centerX : clamp(centerX + 4, bounds.minX + 5, bounds.maxX - 5),
       y: centerY,
     };
     let best = null;
@@ -1959,6 +2036,7 @@
     if (!best) return;
     localStorage.setItem('campfireCenter', JSON.stringify(best));
     localStorage.setItem('campfireCenterMapSig', signature);
+    localStorage.setItem('campfireCenterLayoutVersion', layoutVersion);
   }
 
   function computeInitialScenarioPositions() {
@@ -2518,12 +2596,14 @@
 
   function getActiveDialogueText() {
     if (!activeDialogue || activeDialogue.phase !== 'show') return null;
-    return activeDialogue.lines[activeDialogue.index];
+    const line = activeDialogue.lines[activeDialogue.index];
+    return line && typeof line === 'object' ? line.text : line;
   }
 
   function getActiveDialogueSpeakerId() {
     if (!activeDialogue || activeDialogue.phase !== 'show') return '';
-    return activeDialogue.speakerId || '';
+    const line = activeDialogue.lines[activeDialogue.index];
+    return (line && typeof line === 'object' && line.speakerId) || activeDialogue.speakerId || '';
   }
 
   function syncDialogueText(text, speakerId = '') {
@@ -2568,9 +2648,8 @@
     const visual = state.repaired && def.repairedAssetUrl
       ? { assetUrl: def.repairedAssetUrl, fallbackUrl: def.repairedFallbackUrl || def.repairedAssetUrl }
       : (state.transformed && def.transformOnApproach ? def.transformOnApproach : def);
-    const fallback = visual.fallbackUrl || def.fallbackUrl || '';
     const asset = visual.assetUrl || def.assetUrl || '';
-    return getTexture(asset) || getTexture(fallback);
+    return getTexture(asset);
   }
 
   function drawScenarioBoatPrimitive(g, x, y, width, height, repaired, now) {
@@ -2994,7 +3073,7 @@
   function getScenarioRenderMetrics(state, def, now = performance.now()) {
     const x = (state.gridX + 0.5) * cellPct;
     const y = (state.gridY + 0.5) * cellPct;
-    const sizeScale = def && def.fixedDisplayScale
+    const sizeScale = def && (def.fixedDisplayScale || def.scaleLikeHero)
       ? getAssetSizeScale()
       : (getWorldCellPx() > 0 ? getWorldCellPx() / BASE_CELL_PX : 1);
     const renderOffset = def && def.renderOffsetPx ? def.renderOffsetPx : {};
@@ -3186,13 +3265,20 @@
     if (!pine) return;
     const cx = Math.round(campfireCenter.x);
     const cy = Math.round(campfireCenter.y);
+    if (islandRun === 2) {
+      getSecondIslandPineClusterCenters().forEach((cluster) => {
+        [
+          { x: 0, y: 0 }, { x: -2, y: -1 }, { x: 2, y: -1 },
+          { x: -1, y: 2 }, { x: 2, y: 2 },
+        ].forEach((offset) => placePreseededResource(pine, cluster.x + offset.x, cluster.y + offset.y));
+      });
+      return;
+    }
     [
       { x: -2, y: -6 }, { x: 1, y: -6 }, { x: 4, y: -5 },
       { x: 6, y: -2 }, { x: 6, y: 2 }, { x: 4, y: 5 },
       { x: 1, y: 6 }, { x: -2, y: 6 },
-    ].forEach((offset) => {
-      placePreseededResource(pine, cx + offset.x, cy + offset.y);
-    });
+    ].forEach((offset) => placePreseededResource(pine, cx + offset.x, cy + offset.y));
   }
 
   function getNewIslandArrivalCell() {
@@ -3227,6 +3313,7 @@
     localStorage.removeItem('islandExpansionPreviousMap');
     localStorage.removeItem('campfireCenter');
     localStorage.removeItem('campfireCenterMapSig');
+    localStorage.removeItem('campfireCenterLayoutVersion');
     localStorage.removeItem(SCENARIO_OPENED_KEY);
     localStorage.removeItem(SCENARIO_STATE_KEY);
     localStorage.removeItem(SCENARIO_DROPS_KEY);
@@ -3240,6 +3327,7 @@
     user.money = 0;
     user.inventory = {};
     user.unlockedResources = {};
+    if (nextIslandRun >= 2) user.unlockedResources['campfire-upgrade-1'] = true;
     user.resourceUpgrades = {};
     user.questLine = { index: 0, updatedAt: Date.now() };
     user.stats = { moneyEarned: 0, itemsCollected: 0, itemsCollectedById: {} };
@@ -3288,7 +3376,7 @@
       assetUrl: './images/scenario/boat-repaired.png',
       vehicle: 'boat',
       flipX: true,
-      completeDialogue: getCurrentIslandProfile().arrival,
+      completeDialogue: (ISLAND_PROFILES[islandRun + 1] || ISLAND_PROFILES[2]).arrival,
     };
   }
 
@@ -3308,11 +3396,8 @@
     updateCameraToHero();
     const now = performance.now();
     const metrics = getScenarioRenderMetrics(state, def, now);
-    const lighthouseState = departureConfig.stateId === 'broken-boat' ? scenarioState.find((item) => item.id === 'lighthouse') : null;
-    const lighthouseDef = lighthouseState ? scenarioById.get('lighthouse') : null;
-    const lighthouseMetrics = lighthouseState && lighthouseDef ? getScenarioRenderMetrics(lighthouseState, lighthouseDef, now) : null;
-    const startX = lighthouseMetrics ? (-camera.x + lighthouseMetrics.baseX) : (-camera.x + metrics.baseX);
-    const startY = lighthouseMetrics ? (-camera.y + lighthouseMetrics.baseY - lighthouseMetrics.height * 0.72) : (-camera.y + metrics.baseY + metrics.floatOffset);
+    const startX = gameWidth * 0.5;
+    const startY = gameHeight * 0.54;
     state.hidden = true;
     localStorage.setItem(BOAT_REPAIRED_KEY, '1');
     persistScenarioState();
@@ -3628,7 +3713,23 @@
   }
 
   function isBiomeOnlyResource(def) {
-    return Boolean(isExtractable(def) && getAllowedResourceSurfaceTypes(def));
+    return Boolean(
+      (getIslandRun() === 2 && def && def.id === 'pine')
+      || (isExtractable(def) && getAllowedResourceSurfaceTypes(def))
+    );
+  }
+
+  function getSecondIslandPineClusterCenters() {
+    if (getIslandRun() !== 2 || !campfireCenter) return [];
+    return [
+      { x: Math.round(campfireCenter.x - 8), y: Math.round(campfireCenter.y - 6) },
+      { x: Math.round(campfireCenter.x + 8), y: Math.round(campfireCenter.y - 5) },
+      { x: Math.round(campfireCenter.x - 1), y: Math.round(campfireCenter.y + 8) },
+    ];
+  }
+
+  function isSecondIslandPineClusterCell(x, y) {
+    return getSecondIslandPineClusterCenters().some((cluster) => Math.hypot(x - cluster.x, y - cluster.y) <= 4.25);
   }
 
   function getExtractStages(def) {
@@ -3831,6 +3932,9 @@
 
   function canSpawnResourceOnCell(def, x, y) {
     const surfaceType = getCellSurfaceType(x, y);
+    if (getIslandRun() === 2 && def && def.id === 'pine') {
+      return surfaceType !== 'sand' && surfaceType !== 'dead' && surfaceType !== 'snow' && isSecondIslandPineClusterCell(x, y);
+    }
     const allowed = getAllowedResourceSurfaceTypes(def);
     if (allowed) return allowed.has(surfaceType);
     return surfaceType !== 'dead' && surfaceType !== 'snow';
@@ -6211,7 +6315,7 @@
     const startedAt = Number(localStorage.getItem('islandExpansionAt') || 0);
     if (!startedAt) return;
     const active = Date.now() - startedAt < EXPANSION_ANIMATION_MS;
-    if (active && now - lastExpansionIslandRedraw >= 45) {
+    if (active && now - lastExpansionIslandRedraw >= 90) {
       lastExpansionIslandRedraw = now;
       redrawIsland();
       renderHorizon();
@@ -6410,6 +6514,6 @@
   startGame().catch((err) => {
     const message = err && err.message ? err.message : String(err);
     showError(message);
-    if (loadingText) loadingText.textContent = 'Ошибка загрузки';
+    if (loadingText) loadingText.textContent = `Ошибка загрузки: ${message}`;
   });
 })();

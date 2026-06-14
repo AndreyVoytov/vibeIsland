@@ -942,6 +942,11 @@
       background:url("./img/ui/coin.png") center/contain no-repeat;
       flex-shrink:0;
     }
+    .farm-resource-price.compact-price{
+      gap:2px;
+      font-size:9px;
+    }
+    .farm-resource-price.compact-price::before{width:14px;height:14px;}
     .farm-resource-stars{
       position:absolute;
       left:50%;
@@ -970,7 +975,7 @@
       -webkit-text-stroke:1px rgba(12,77,126,0.95);
     }
     .farm-resource-stars.compact span + span{
-      margin-left:-3px;
+      margin-left:-5px;
     }
     .farm-resource-progress{
       position:absolute;
@@ -994,6 +999,29 @@
       background:#67e5ff;
       display:block;
     }
+    .farm-resource-max{
+      position:absolute;
+      left:-2px;
+      right:-2px;
+      bottom:-5px;
+      height:10px;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      border:2px solid #0c4d7e;
+      border-top:0;
+      border-radius:0 0 9px 9px;
+      background:#0c4d7e;
+      color:#aeeaff;
+      font-size:7px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:0.08em;
+      text-transform:lowercase;
+      box-sizing:border-box;
+    }
+    .farm-resource-card.at-max .farm-resource-progress{display:none;}
+    .farm-resource-card.at-max .farm-resource-max{display:flex;}
     .farm-resource-card.can-upgrade .farm-resource-progress{
       border-color:#176f31;
       background:#176f31;
@@ -1275,6 +1303,12 @@
       cursor:default;
     }
     .resource-upgrade-button img{width:17px;height:17px;object-fit:contain;}
+    .resource-upgrade-button.compact-price{
+      gap:2px;
+      padding:0 5px;
+      font-size:10px;
+    }
+    .resource-upgrade-button.compact-price img{width:15px;height:15px;}
     .panel-header{
       display:flex;
       align-items:center;
@@ -2248,11 +2282,11 @@
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
   <script src="./berries-config.js?v=20260605-strawberry-outline4"></script>
   <script src="./buildings-config.js?v=20260614-day-balance"></script>
-  <script src="./scenario-objects-config.js?v=20260608-day-one-scenery"></script>
+  <script src="./scenario-objects-config.js?v=20260614-second-island"></script>
   <script src="./ui-config.js?v=20260609-day-one-campfire"></script>
   <script src="./enlarge-config.js?v=20260607-island-polish"></script>
   <script src="./audio-manager.js?v=20260609-no-intro-audio"></script>
-  <script src="./pixi-game.js?v=20260614-day-balance"></script>
-  <script src="./pixi-ui.js?v=20260614-day-balance"></script>
+  <script src="./pixi-game.js?v=20260614-full-preload"></script>
+  <script src="./pixi-ui.js?v=20260614-full-preload"></script>
 </body>
 </html>

@@ -815,6 +815,13 @@
     return Math.max(1, landCount / base);
   }
 
+  function countLandCells(map) {
+    return (Array.isArray(map) ? map : []).reduce(
+      (sum, row) => sum + (Array.isArray(row) ? row.filter(Boolean).length : 0),
+      0
+    );
+  }
+
   function getResourceUpgradeBonusPercent(user, resourceId) {
     return Math.min(200, getResourceUpgradeLevel(user, resourceId) * 10);
   }
@@ -1007,9 +1014,10 @@
     title: def.titleRu || def.id,
     assetUrl: knownAssetUrl(def.assetUrl),
     unlockCost: typeof def.unlockCost === 'number' ? def.unlockCost : 0,
-    detail: 'Расширение острова +1',
+    detail: 'Скорость спавна увеличится',
     fallbackUrl: buildExpandFallback(def),
     category: 'expansion',
+    expansionDef: def,
     onUnlock: () => {
       const current = loadMap();
       if (!Number(localStorage.getItem(BASE_LAND_CELLS_KEY))) {
@@ -1066,6 +1074,29 @@
     if (diff !== 0) return diff;
     return String(a.title).localeCompare(String(b.title));
   });
+
+  function getExpansionSpawnBonusPercent(resource, user) {
+    let simulatedMap = loadMap();
+    if (!simulatedMap.length) return 0;
+    for (const expansion of expansionResources) {
+      if (user.unlockedResources[expansion.id]) continue;
+      const before = Math.max(1, countLandCells(simulatedMap));
+      const result = expandIsland(simulatedMap, getExpansionSurfaceValue(expansion.expansionDef));
+      simulatedMap = result.map;
+      if (expansion.id === resource.id) {
+        const after = countLandCells(simulatedMap);
+        return Math.max(1, Math.round(((after / before) - 1) * 100));
+      }
+    }
+    return 0;
+  }
+
+  function getResourceDetail(res, user) {
+    if (res && res.category === 'expansion') {
+      return `Скорость спавна +${getExpansionSpawnBonusPercent(res, user)}%`;
+    }
+    return res && res.detail ? res.detail : '';
+  }
   function isResourceVisibleForCurrentDay(resource) {
     if (resource && resource.category === 'boatRepair' && getIslandRun() >= 4) return false;
     if (!isFirstGameDay()) return true;
@@ -1164,17 +1195,28 @@
   const EXPANSION_DELAY_MS = 900;
   const PENDING_FOUND_ITEM_KEY = 'pendingFoundItem';
 
+  function setStableImageSource(img, url, title = '') {
+    if (!img) return;
+    if (!url) {
+      img.style.visibility = 'hidden';
+      return;
+    }
+    img.style.visibility = '';
+    img.onerror = () => {
+      img.style.visibility = 'hidden';
+      if (!window.VibeAssetsReady) {
+        window.addEventListener('vibe-game-ready', () => setStableImageSource(img, url, title), { once: true });
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('vibe-asset-error', { detail: { url, title } }));
+    };
+    img.src = url;
+  }
+
   function setImageWithFallback(img, key) {
     if (!img) return;
     const asset = uiConfig.uiAssets[key] || {};
-    if (knownAssetUrl(asset.url)) {
-      img.src = asset.url;
-      img.onerror = () => {
-        if (asset.fallback) img.src = asset.fallback;
-      };
-    } else if (asset.fallback) {
-      img.src = asset.fallback;
-    }
+    setStableImageSource(img, knownAssetUrl(asset.url) || asset.fallback || '', key);
   }
 
   setImageWithFallback(document.getElementById('coinIcon'), 'coin');
@@ -1209,6 +1251,7 @@
     const defaultUnlocks = [];
     const campfire = buildingResources.find((item) => item.id === 'campfire');
     if (campfire) defaultUnlocks.push(campfire.id);
+    if (getIslandRun() >= 2) defaultUnlocks.push('campfire-upgrade-1');
     if (berryResources[0]) defaultUnlocks.push(berryResources[0].id);
     defaultUnlocks.forEach((id) => { user.unlockedResources[id] = true; });
     const normalizedUser = JSON.stringify(user);
@@ -1519,20 +1562,7 @@
     icon.className = 'resource-icon';
     const img = document.createElement('img');
     img.alt = res.title;
-    img.src = res.assetUrl || res.fallbackUrl || '';
-    img.onerror = () => {
-      if (res.fallbackUrl && img.src !== res.fallbackUrl) {
-        img.src = res.fallbackUrl;
-        return;
-      }
-      const fallbackAsset = uiConfig.uiAssets.resourceFallback || {};
-      const fallbackUrl = fallbackAsset.url || fallbackAsset.fallback;
-      if (fallbackUrl && img.src !== fallbackUrl) {
-        img.src = fallbackUrl;
-        return;
-      }
-      icon.innerHTML = '';
-    };
+    setStableImageSource(img, res.assetUrl || res.fallbackUrl || '', res.title);
     icon.appendChild(img);
 
     const info = document.createElement('div');
@@ -1573,14 +1603,7 @@
     if (!img || !resource) return;
     img.style.visibility = '';
     img.alt = resource.title;
-    img.src = resource.assetUrl || resource.fallbackUrl || '';
-    img.onerror = () => {
-      if (resource.fallbackUrl && img.src !== resource.fallbackUrl) {
-        img.src = resource.fallbackUrl;
-        return;
-      }
-      img.style.visibility = 'hidden';
-    };
+    setStableImageSource(img, resource.assetUrl || resource.fallbackUrl || '', resource.title);
   }
 
   function createFarmResourceCard(resource) {
@@ -1604,6 +1627,9 @@
     const progressFill = document.createElement('span');
     progressFill.className = 'farm-resource-progress-fill';
     progress.appendChild(progressFill);
+    const maxLabel = document.createElement('span');
+    maxLabel.className = 'farm-resource-max';
+    maxLabel.textContent = 'max';
     const marker = document.createElement('span');
     marker.className = 'upgrade-marker hidden';
     marker.setAttribute('aria-hidden', 'true');
@@ -1612,13 +1638,14 @@
     card.appendChild(price);
     card.appendChild(stars);
     card.appendChild(progress);
+    card.appendChild(maxLabel);
     card.appendChild(marker);
     card.addEventListener('click', () => {
       if (resource.id === 'strawberry') dismissStrawberryUpgradeHint();
       toggleResourceUpgrade(true, resource.id);
     });
     farmResourceStrip.appendChild(card);
-    return { card, price, stars, progressFill, marker };
+    return { card, price, stars, progressFill, maxLabel, marker };
   }
 
   function renderFarmResourceStrip(user = getUserState()) {
@@ -1645,7 +1672,9 @@
         entry = createFarmResourceCard(resource);
         farmResourceCards.set(resource.id, entry);
       }
-      entry.price.textContent = formatCompactNumber(applyProfitBonus(resource.profit, user, resource.id));
+      const formattedPrice = formatCompactNumber(applyProfitBonus(resource.profit, user, resource.id));
+      entry.price.textContent = formattedPrice;
+      entry.price.classList.toggle('compact-price', formattedPrice.length >= 3);
       const level = getResourceUpgradeLevel(user, resource.id);
       const stars = getResourceUpgradeStars(user, resource.id);
       const maxStars = getResourceMaxStars(resource.id);
@@ -1653,12 +1682,14 @@
         star.hidden = index >= maxStars;
         star.classList.toggle('filled', index < stars);
       });
-      entry.stars.classList.toggle('compact', stars >= 4);
+      entry.stars.classList.toggle('compact', stars >= 3);
       const maxLevel = getResourceMaxLevel(resource.id);
+      const atMax = hasReachedFinalResourceStar(user, resource.id);
       entry.progressFill.style.width = level >= maxLevel
         ? '100%'
         : `${((level % RESOURCE_UPGRADE_LEVELS_PER_STAR) / RESOURCE_UPGRADE_LEVELS_PER_STAR) * 100}%`;
-      const canUpgrade = !hasReachedFinalResourceStar(user, resource.id) && user.money >= getResourceUpgradeCost(resource, user);
+      const canUpgrade = !atMax && user.money >= getResourceUpgradeCost(resource, user);
+      entry.card.classList.toggle('at-max', atMax);
       entry.card.classList.toggle('can-upgrade', canUpgrade);
       entry.card.classList.toggle('cannot-upgrade', !canUpgrade);
       entry.marker.classList.toggle('hidden', !canUpgrade);
@@ -1696,7 +1727,9 @@
     if (resourceUpgradeYield) resourceUpgradeYield.textContent = `Урожай x${getResourceYieldMultiplier(user, resource.id).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
     if (resourceUpgradeSpawn) resourceUpgradeSpawn.textContent = `Спавн x${getTerritorySpawnMultiplier().toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
     resourceUpgradeButton.disabled = atMax || user.money < getResourceUpgradeCost(resource, user);
-    resourceUpgradeCost.textContent = atMax ? 'MAX' : formatCompactNumber(getResourceUpgradeCost(resource, user));
+    const formattedCost = atMax ? 'MAX' : formatCompactNumber(getResourceUpgradeCost(resource, user));
+    resourceUpgradeCost.textContent = formattedCost;
+    resourceUpgradeButton.classList.toggle('compact-price', !atMax && formattedCost.length >= 3);
     resourceUpgradeCoin.style.display = atMax ? 'none' : '';
     if (resourceUpgradePanel.classList.contains('open')) {
       requestAnimationFrame(() => {
@@ -1897,23 +1930,10 @@
 
   function setUiAssetImage(img, asset) {
     if (!img) return;
-    if (asset && asset.url && knownAssetUrl(asset.url)) {
-      img.src = asset.url;
-      img.onerror = () => {
-        if (asset.fallback) img.src = asset.fallback;
-      };
-      return;
-    }
-    if (asset && asset.fallback) {
-      img.src = asset.fallback;
-      return;
-    }
-    if (asset && asset.url) {
-      img.src = asset.url;
-      img.onerror = () => { img.style.visibility = 'hidden'; };
-      return;
-    }
-    img.style.visibility = 'hidden';
+    const url = asset && asset.url && knownAssetUrl(asset.url)
+      ? asset.url
+      : (asset && (asset.fallback || asset.url)) || '';
+    setStableImageSource(img, url);
   }
 
   function buildQuestMilestones() {
@@ -2435,8 +2455,10 @@
           ? 'resource-card available clickable'
           : (lockInfo.expansionLocked ? 'resource-card expansion-locked' : 'resource-card locked');
         entry.card.className = className;
-        if (entry.detail && res.category === 'boatRepair') {
-          entry.detail.textContent = lockInfo.expansionLocked ? 'И уплыть с острова' : getDepartureConfig().detail;
+        if (entry.detail) {
+          entry.detail.textContent = res.category === 'boatRepair'
+            ? (lockInfo.expansionLocked ? 'И уплыть с острова' : getDepartureConfig().detail)
+            : getResourceDetail(res, user);
         }
         entry.label.textContent = lockInfo.woodCost > 0
           ? `${formatCompactNumber(lockInfo.cost)} + ${formatCompactNumber(lockInfo.woodCost)} дерева`
