@@ -74,7 +74,7 @@
   const ISLAND_OUTLINE_COLOR = 0x0092dc;
   const WORLD_ZOOM = 1.15;
   const BASE_CELL_PX = 28;
-  const EXPANSION_ANIMATION_MS = 3800;
+  const EXPANSION_ANIMATION_MS = 7600;
   const LEAF_PARTICLE_ASSET = './img/fx/lime-leaf-particle.png';
   const RESOURCE_UPGRADE_LEVELS_PER_STAR = 4;
   const RESOURCE_UPGRADE_MAX_STARS = 5;
@@ -168,7 +168,7 @@
   const BASE_LAND_CELLS_KEY = 'baseLandCellCount';
   const BOAT_REPAIRED_KEY = 'boatRepaired';
   const BOAT_REPAIR_REQUEST_KEY = 'boatRepairRequestedAt';
-  const BOAT_REPAIR_COST = 20000;
+  const BOAT_REPAIR_COST = 2000000;
   const LIGHTHOUSE_REQUIRED_METERS = DEFAULT_ISLAND_SIZE + 22;
   const TENT_UPGRADE_IDS = ['campfire-upgrade-1', 'campfire-upgrade-2', 'campfire-upgrade-3'];
   const SPECIAL_PROFIT_UPGRADES = [
@@ -215,6 +215,16 @@
   const HORIZON_TOP_OVERSCAN_PX = 2;
   const CAMPFIRE_DISPLAY_SCALE = 1.4;
   const SECOND_ISLAND_CAMPFIRE_RAISE_CELLS = 0.32;
+  const SAWMILL_COST = 50000;
+  const SAWMILL_BUILT_KEY = 'secondIslandSawmillBuilt';
+  const SAWMILL_HINT_AT_KEY = 'secondIslandSawmillHintAt';
+  const SAWMILL_LAST_HIT_KEY = 'secondIslandSawmillLastHitAt';
+  const SAWMILL_BODY_ASSET = './images/scenario/sawmill.png';
+  const SAWMILL_BLADE_ASSET = './images/scenario/sawmill-blade.png';
+  const SAWMILL_HIT_INTERVAL_MS = 650;
+  const SAWMILL_AVAILABLE_PROGRESS = 0.5;
+  const SECOND_ISLAND_WOOD_TALK_FLAG = 'secondIslandWoodTalk';
+  const SECOND_ISLAND_SAWMILL_TALK_FLAG = 'secondIslandSawmillTalk';
   let dayOneCampfireBuiltAt = Math.max(0, Number(localStorage.getItem('dayOneCampfireBuiltAt') || 0));
   const RESOURCE_AURA_PERIOD_MS = 1900;
   const RESOURCE_AURA_PARTICLES = IS_MOBILE_DEVICE ? 2 : 4;
@@ -329,6 +339,8 @@
     './images/scenario/boat-repaired.png',
     './images/scenario/blanket-survivor-beanie.png',
     './images/scenario/raft.png',
+    SAWMILL_BODY_ASSET,
+    SAWMILL_BLADE_ASSET,
   ];
 
   const SCENARIO_DROP_IMAGE_ASSETS = [
@@ -718,6 +730,8 @@
   scenarioGraphics.zIndex = 2.8;
   const scenarioFxGraphics = new PIXI.Graphics();
   scenarioFxGraphics.zIndex = 3.2;
+  const sawmillGraphics = new PIXI.Graphics();
+  sawmillGraphics.zIndex = 4.7;
   const buildingGlowGraphics = new PIXI.Graphics();
   buildingGlowGraphics.zIndex = 4.8;
   const buildingsGraphics = new PIXI.Graphics();
@@ -755,6 +769,7 @@
     scenarioSpriteLayer,
     scenarioGraphics,
     scenarioFxGraphics,
+    sawmillGraphics,
     buildingGlowGraphics,
     buildingsGraphics,
     buildingSpriteLayer,
@@ -1981,6 +1996,12 @@
   let lastDialogueSpeakerId = '';
   const scenarioSprites = new Map();
   const scenarioTextLabels = new Map();
+  let sawmillBodySprite = null;
+  let sawmillBladeSprite = null;
+  let sawmillPlotLabel = null;
+  let sawmillBladeRotation = 0;
+  let sawmillBladeActive = false;
+  let lastSawmillHitAt = 0;
 
   function loadOpenedIds() {
     const stored = safeJson(SCENARIO_OPENED_KEY, []);
@@ -2261,6 +2282,7 @@
     if (isFirstGameDay() && state.id !== 'lighthouse' && state.id !== 'broken-boat') return false;
     if (!scenarioRequirementMet(def)) return false;
     if (def.hideWhenStoryFlag && hasStoryFlag(def.hideWhenStoryFlag)) return false;
+    if (def.hideUntilRepaired && !state.repaired) return false;
     if (state.hidden) return false;
     return !state.triggered || def.persistentAfterTrigger;
   }
@@ -3205,6 +3227,233 @@
     });
   }
 
+  function getQuestProgressRatio() {
+    const value = Number(localStorage.getItem('questProgressRatio') || 0);
+    return Number.isFinite(value) ? clamp(value, 0, 1) : 0;
+  }
+
+  function isSecondIslandSawmillBuilt() {
+    return localStorage.getItem(SAWMILL_BUILT_KEY) === '1';
+  }
+
+  function isSecondIslandSawmillAvailable() {
+    return getIslandRun() === 2 && getQuestProgressRatio() >= SAWMILL_AVAILABLE_PROGRESS;
+  }
+
+  function getSawmillPlot() {
+    if (getIslandRun() !== 2 || !GRID_W || !cellPct) return null;
+    const bounds = getIslandBoundsGrid();
+    if (!bounds) return null;
+    const gridX = Math.round((bounds.minX + bounds.maxX) / 2);
+    const gridY = clamp(bounds.maxY - 4, bounds.minY + 4, bounds.maxY - 2);
+    const sizeCells = 4.9;
+    const size = pct2px(cellPct * sizeCells);
+    const x = pct2px((gridX + 0.5) * cellPct);
+    const y = pct2px((gridY + 0.5) * cellPct);
+    return { gridX, gridY, x, y, size, radius: size * 0.18 };
+  }
+
+  function drawDottedRoundedRect(g, x, y, w, h, r, color, alpha = 1) {
+    const dotR = Math.max(1.5, Math.min(w, h) * 0.025);
+    const gap = Math.max(dotR * 3.2, Math.min(w, h) * 0.095);
+    const x0 = x;
+    const x1 = x + w;
+    const y0 = y;
+    const y1 = y + h;
+    const rr = Math.min(r, w * 0.45, h * 0.45);
+    const dot = (dx, dy) => g.drawCircle(dx, dy, dotR);
+    const dotsOnLine = (sx, sy, ex, ey) => {
+      const len = Math.hypot(ex - sx, ey - sy);
+      const count = Math.max(1, Math.floor(len / gap));
+      for (let i = 0; i <= count; i += 1) {
+        const t = i / count;
+        dot(lerp(sx, ex, t), lerp(sy, ey, t));
+      }
+    };
+    const dotsOnArc = (cx, cy, a0, a1) => {
+      const len = Math.abs(a1 - a0) * rr;
+      const count = Math.max(3, Math.floor(len / gap));
+      for (let i = 0; i <= count; i += 1) {
+        const t = i / count;
+        const a = lerp(a0, a1, t);
+        dot(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+    };
+    g.beginFill(color, alpha);
+    dotsOnLine(x0 + rr, y0, x1 - rr, y0);
+    dotsOnArc(x1 - rr, y0 + rr, -Math.PI / 2, 0);
+    dotsOnLine(x1, y0 + rr, x1, y1 - rr);
+    dotsOnArc(x1 - rr, y1 - rr, 0, Math.PI / 2);
+    dotsOnLine(x1 - rr, y1, x0 + rr, y1);
+    dotsOnArc(x0 + rr, y1 - rr, Math.PI / 2, Math.PI);
+    dotsOnLine(x0, y1 - rr, x0, y0 + rr);
+    dotsOnArc(x0 + rr, y0 + rr, Math.PI, Math.PI * 1.5);
+    g.endFill();
+  }
+
+  function ensureSawmillSprites() {
+    if (!sawmillBodySprite) {
+      sawmillBodySprite = new PIXI.Sprite(getTexture(SAWMILL_BODY_ASSET) || PIXI.Texture.WHITE);
+      sawmillBodySprite.anchor.set(0.5, 0.72);
+      buildingSpriteLayer.addChild(sawmillBodySprite);
+    }
+    if (!sawmillBladeSprite) {
+      sawmillBladeSprite = new PIXI.Sprite(getTexture(SAWMILL_BLADE_ASSET) || PIXI.Texture.WHITE);
+      sawmillBladeSprite.anchor.set(0.5);
+      buildingSpriteLayer.addChild(sawmillBladeSprite);
+    }
+    if (!sawmillPlotLabel) {
+      sawmillPlotLabel = new PIXI.Text('', new PIXI.TextStyle({
+        fontFamily: 'Segoe UI, system-ui, sans-serif',
+        fontSize: 14,
+        fontWeight: '900',
+        fill: 0xffffff,
+        align: 'center',
+        stroke: 0x2f2519,
+        strokeThickness: 4,
+      }));
+      sawmillPlotLabel.anchor.set(0.5);
+      sawmillPlotLabel.zIndex = 99999;
+      buildingSpriteLayer.addChild(sawmillPlotLabel);
+    }
+  }
+
+  function hideSawmillVisuals() {
+    sawmillGraphics.clear();
+    if (sawmillBodySprite) sawmillBodySprite.visible = false;
+    if (sawmillBladeSprite) sawmillBladeSprite.visible = false;
+    if (sawmillPlotLabel) sawmillPlotLabel.visible = false;
+  }
+
+  function renderSawmill(now, user = getUserState()) {
+    sawmillGraphics.clear();
+    const plot = getSawmillPlot();
+    const built = isSecondIslandSawmillBuilt();
+    const available = built || isSecondIslandSawmillAvailable();
+    if (!plot || !available) {
+      hideSawmillVisuals();
+      return;
+    }
+    ensureSawmillSprites();
+    const x = plot.x - plot.size / 2;
+    const y = plot.y - plot.size / 2;
+    if (!built) {
+      const enoughMoney = Math.max(0, Math.floor(Number(user && user.money) || 0)) >= SAWMILL_COST;
+      const border = enoughMoney ? 0xffd85a : 0x9ca3ad;
+      sawmillGraphics.beginFill(enoughMoney ? 0xffd85a : 0x6f7681, enoughMoney ? 0.1 : 0.08);
+      drawRoundedRect(sawmillGraphics, x, y, plot.size, plot.size, plot.radius);
+      sawmillGraphics.endFill();
+      drawDottedRoundedRect(sawmillGraphics, x, y, plot.size, plot.size, plot.radius, border, enoughMoney ? 0.95 : 0.72);
+      sawmillPlotLabel.visible = true;
+      sawmillPlotLabel.text = '50k монет';
+      sawmillPlotLabel.style.fill = enoughMoney ? '#fff0a8' : '#b8c0cc';
+      sawmillPlotLabel.x = plot.x;
+      sawmillPlotLabel.y = plot.y;
+      sawmillBodySprite.visible = false;
+      sawmillBladeSprite.visible = false;
+      return;
+    }
+
+    sawmillPlotLabel.visible = false;
+    sawmillGraphics.beginFill(0x000000, 0.22);
+    sawmillGraphics.drawEllipse(plot.x, plot.y + plot.size * 0.28, plot.size * 0.72, plot.size * 0.22);
+    sawmillGraphics.endFill();
+
+    const bodyTexture = getTexture(SAWMILL_BODY_ASSET) || sawmillBodySprite.texture;
+    sawmillBodySprite.texture = bodyTexture;
+    sawmillBodySprite.visible = true;
+    const bodyWidth = plot.size * 1.85;
+    const bodyHeight = bodyWidth * (bodyTexture.height || 1) / Math.max(1, bodyTexture.width || 1);
+    sawmillBodySprite.x = plot.x;
+    sawmillBodySprite.y = plot.y + plot.size * 0.18;
+    sawmillBodySprite.width = bodyWidth;
+    sawmillBodySprite.height = bodyHeight;
+    sawmillBodySprite.zIndex = sawmillBodySprite.y;
+
+    const bladeTexture = getTexture(SAWMILL_BLADE_ASSET) || sawmillBladeSprite.texture;
+    sawmillBladeSprite.texture = bladeTexture;
+    sawmillBladeSprite.visible = true;
+    if (sawmillBladeActive) sawmillBladeRotation += 0.022 * (now - (sawmillBladeSprite._lastT || now));
+    sawmillBladeSprite._lastT = now;
+    sawmillBladeSprite.rotation = sawmillBladeRotation;
+    const bladeWidth = plot.size * 0.44;
+    sawmillBladeSprite.x = plot.x - bodyWidth * 0.09;
+    sawmillBladeSprite.y = plot.y + plot.size * 0.09;
+    sawmillBladeSprite.width = bladeWidth;
+    sawmillBladeSprite.height = bladeWidth * 0.72;
+    sawmillBladeSprite.zIndex = sawmillBodySprite.zIndex + 1;
+  }
+
+  function heroInSawmillPlot(plot) {
+    const hero = getHeroGridPosition();
+    if (!hero || !plot) return false;
+    return Math.abs(hero.gridX - plot.gridX) <= 2 && Math.abs(hero.gridY - plot.gridY) <= 2;
+  }
+
+  function findNearestSawmillTree(plot) {
+    let best = null;
+    let bestDist = Infinity;
+    bushes.forEach((b) => {
+      if (!b || b.stage !== 'ripe' || !isExtractable(b.berryDef) || !isTreeDef(b.berryDef)) return;
+      const dist = Math.hypot(b.gridX - plot.gridX, b.gridY - plot.gridY);
+      if (dist < bestDist) {
+        best = b;
+        bestDist = dist;
+      }
+    });
+    return best;
+  }
+
+  function maybeStartSecondIslandProgressDialogue() {
+    if (getIslandRun() !== 2 || activeDialogue) return;
+    const ratio = getQuestProgressRatio();
+    if (ratio >= 0.25 && !hasStoryFlag(SECOND_ISLAND_WOOD_TALK_FLAG)) {
+      setStoryFlag(SECOND_ISLAND_WOOD_TALK_FLAG);
+      startDialogue(['Тут много дерева', 'Мы можем построить плот'], 'blanket-survivor');
+      return;
+    }
+    if (ratio >= SAWMILL_AVAILABLE_PROGRESS && !hasStoryFlag(SECOND_ISLAND_SAWMILL_TALK_FLAG)) {
+      setStoryFlag(SECOND_ISLAND_SAWMILL_TALK_FLAG);
+      startDialogue(['Раньше тут была лесопилка'], 'blanket-survivor');
+    }
+  }
+
+  function updateSawmill(now, user = getUserState()) {
+    sawmillBladeActive = false;
+    if (getIslandRun() !== 2 || boatCutscene) return;
+    maybeStartSecondIslandProgressDialogue();
+    const plot = getSawmillPlot();
+    if (!plot || !isSecondIslandSawmillAvailable()) return;
+
+    if (!isSecondIslandSawmillBuilt()) {
+      if (!heroInSawmillPlot(plot)) return;
+      const money = Math.max(0, Math.floor(Number(user && user.money) || 0));
+      if (money < SAWMILL_COST) {
+        const lastHintAt = Number(localStorage.getItem(SAWMILL_HINT_AT_KEY) || 0);
+        if (!activeDialogue && Date.now() - lastHintAt > 4500) {
+          localStorage.setItem(SAWMILL_HINT_AT_KEY, String(Date.now()));
+          startDialogue(['Пока рано']);
+        }
+        return;
+      }
+      if (activeDialogue) return;
+      user.money = money - SAWMILL_COST;
+      setUserState(user);
+      localStorage.setItem(SAWMILL_BUILT_KEY, '1');
+      localStorage.setItem(SAWMILL_HINT_AT_KEY, String(Date.now()));
+      startDialogue(['Лесопилка готова', 'Теперь дерево пойдёт быстрее']);
+      return;
+    }
+
+    const target = findNearestSawmillTree(plot);
+    if (!target) return;
+    sawmillBladeActive = true;
+    if (now - lastSawmillHitAt < SAWMILL_HIT_INTERVAL_MS) return;
+    lastSawmillHitAt = now;
+    localStorage.setItem(SAWMILL_LAST_HIT_KEY, String(Date.now()));
+    applyResourceChop(target, now);
+  }
+
   function createSmallIslandMap() {
     return createIslandMap(getIslandRun());
   }
@@ -3320,6 +3569,12 @@
     localStorage.removeItem(SCENARIO_COLLIDER_CELLS_KEY);
     localStorage.removeItem(BOAT_REPAIRED_KEY);
     localStorage.removeItem(BOAT_REPAIR_REQUEST_KEY);
+    localStorage.removeItem(SAWMILL_BUILT_KEY);
+    localStorage.removeItem(SAWMILL_HINT_AT_KEY);
+    localStorage.removeItem(SAWMILL_LAST_HIT_KEY);
+    localStorage.setItem('questProgressRatio', '0');
+    localStorage.setItem('questProgressIndex', '0');
+    localStorage.setItem('questProgressTotal', '0');
     localStorage.removeItem(STORY_ACTION_REQUEST_KEY);
     localStorage.removeItem(STORY_DEPARTURE_KEY);
     localStorage.removeItem(COMBAT_STATS_KEY);
@@ -3385,6 +3640,15 @@
     return scenarioState.find((state) => state.id === config.stateId) || null;
   }
 
+  function focusCameraOnWorldPoint(worldX, worldY, screenYRatio = 0.54) {
+    camera = {
+      x: worldX - gameWidth * 0.5,
+      y: worldY - gameHeight * screenYRatio,
+    };
+    worldRoot.x = -camera.x;
+    worldRoot.y = -camera.y;
+  }
+
   function startBoatCutscene() {
     if (boatCutscene) return;
     const departureConfig = getDepartureConfig();
@@ -3393,14 +3657,15 @@
     if (!state || !def) return;
     state.repaired = true;
     state.opened = true;
-    updateCameraToHero();
     const now = performance.now();
     const metrics = getScenarioRenderMetrics(state, def, now);
-    const startX = gameWidth * 0.5;
-    const startY = gameHeight * 0.54;
+    focusCameraOnWorldPoint(metrics.baseX, metrics.baseY + metrics.floatOffset, 0.54);
+    const startX = metrics.baseX - camera.x;
+    const startY = metrics.baseY + metrics.floatOffset - camera.y;
     state.hidden = true;
     localStorage.setItem(BOAT_REPAIRED_KEY, '1');
     persistScenarioState();
+    if (shell) shell.classList.add('cutscene-transitioning');
     boatCutscene = {
       phase: 'depart',
       t0: performance.now(),
@@ -3517,6 +3782,7 @@
     if (boatCutscene.phase === 'fadeIn' && elapsed >= 1200) {
       const lines = boatCutscene.completeDialogue || getCurrentIslandProfile().arrival || [];
       boatCutscene = null;
+      if (shell) shell.classList.remove('cutscene-transitioning');
       startDialogue(lines);
     }
   }
@@ -5427,7 +5693,6 @@
   function updateHeroLogic(dtMs, user) {
     if (boatCutscene) {
       controllerState.isMoving = false;
-      updateCameraToHero();
       persistRuntimeState(performance.now());
       return;
     }
@@ -6448,6 +6713,7 @@
       bushes.forEach((b) => {
         if (b.stage !== 'dead') updateBush(b, frameUser);
       });
+      updateSawmill(now, frameUser);
       for (let i = bushes.length - 1; i >= 0; i -= 1) {
         if (bushes[i].stage !== 'dead') continue;
         unregisterResourceCollider(bushes[i]);
@@ -6464,6 +6730,7 @@
     updateWaterBursts(now, deltaMS);
     updateAndRenderSharks(deltaMS);
     renderScenarioObjects(now);
+    renderSawmill(now, frameUser);
     renderBuildings(now, frameUser);
     renderResources(now);
     renderResourceMotion(now);

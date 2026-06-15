@@ -299,6 +299,12 @@
       pointer-events:none;
       z-index:2;
     }
+    #gameShell.cutscene-transitioning #uiRoot{
+      visibility:hidden;
+    }
+    #gameShell.cutscene-transitioning .fps-counter{
+      visibility:hidden;
+    }
     .fps-counter{
       position:absolute;
       left:4px;
@@ -1001,27 +1007,27 @@
     }
     .farm-resource-max{
       position:absolute;
-      left:-2px;
-      right:-2px;
-      bottom:-5px;
-      height:10px;
+      left:50%;
+      bottom:5px;
+      height:auto;
       display:none;
       align-items:center;
       justify-content:center;
-      border:2px solid #0c4d7e;
-      border-top:0;
-      border-radius:0 0 9px 9px;
-      background:#0c4d7e;
-      color:#aeeaff;
-      font-size:7px;
+      border:0;
+      background:transparent;
+      color:#d9f8ff;
+      font-size:11px;
       line-height:1;
       font-weight:900;
-      letter-spacing:0.08em;
+      letter-spacing:0.04em;
       text-transform:lowercase;
+      text-shadow:0 1px 1px rgba(0,0,0,0.65),0 0 4px rgba(255,255,255,0.36);
+      transform:translateX(-50%);
       box-sizing:border-box;
     }
     .farm-resource-card.at-max .farm-resource-progress{display:none;}
     .farm-resource-card.at-max .farm-resource-max{display:flex;}
+    .farm-resource-card.at-max .farm-resource-price{visibility:hidden;}
     .farm-resource-card.can-upgrade .farm-resource-progress{
       border-color:#176f31;
       background:#176f31;

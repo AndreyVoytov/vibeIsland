@@ -25,12 +25,12 @@
   const FIRST_DAY_ALLOWED_UPGRADES = new Set(['upgrade-strawberry-fertilizer', 'upgrade-sharp-sight', 'expand-1', 'campfire-upgrade-1']);
   const LATER_DAY_RESOURCE_UNLOCK_COSTS = new Map([
     ['blueberry', 3000],
-    ['raspberry', 40000],
-    ['champignon', 120000],
-    ['beet', 350000],
-    ['radish', 800000],
-    ['potato', 1500000],
-    ['tomato', 3000000],
+    ['raspberry', 30000],
+    ['champignon', 140000],
+    ['beet', 240000],
+    ['radish', 380000],
+    ['potato', 500000],
+    ['tomato', 670000],
   ]);
   const LATER_DAY_RESOURCE_UPGRADE_BASE_COSTS = new Map([
     ['blueberry', 100],
@@ -40,6 +40,18 @@
     ['radish', 3000],
     ['potato', 5000],
     ['tomato', 8000],
+  ]);
+  const LATER_DAY_DIRECT_UNLOCK_COSTS = new Map([
+    ['expand-1', 80000],
+    ['expand-2', 240000],
+    ['expand-3', 400000],
+    ['expand-4', 560000],
+    ['campfire-upgrade-2', 220000],
+    ['campfire-upgrade-3', 520000],
+    ['upgrade-mushroom-sense', 180000],
+    ['upgrade-root-care', 440000],
+    ['upgrade-digging-technique', 560000],
+    ['upgrade-tomato-watering', 720000],
   ]);
   function getGameDay() {
     const stored = Math.floor(Number(localStorage.getItem(GAME_DAY_KEY) || 0));
@@ -58,11 +70,11 @@
   const scenarioById = new Map((scenarioConfig.objects || []).map((obj) => [obj.id, obj]));
   const inventoryItems = Array.isArray(berryConfig.inventoryItems) ? berryConfig.inventoryItems : [];
   const DEFAULT_ISLAND_METERS = 18;
-  const BOAT_REPAIR_COST = 20000;
-  const RAFT_REPAIR_COST = 400000;
-  const RAFT_WOOD_COST = 5000;
-  const FISHING_BOAT_REPAIR_COST = 250000;
-  const FISHING_BOAT_WOOD_COST = 3000;
+  const BOAT_REPAIR_COST = 2000000;
+  const RAFT_REPAIR_COST = 2400000;
+  const RAFT_WOOD_COST = 18000;
+  const FISHING_BOAT_REPAIR_COST = 6000000;
+  const FISHING_BOAT_WOOD_COST = 35000;
   const LIGHTHOUSE_REQUIRED_METERS = getScenarioRequiredMeters('lighthouse');
   const CROPS_PER_TWO_EXPANSIONS = 5;
   const METERS_PER_TWO_EXPANSIONS = 4;
@@ -95,7 +107,7 @@
       id: 'upgrade-mushroom-sense',
       title: 'Грибное чутьё',
       assetUrl: './img/upgrade/mushroom-sense.png',
-      unlockCost: 1600,
+      unlockCost: 180000,
       requiredMeters: 18,
       resourceIds: ['champignon'],
       bonusPercent: 200,
@@ -105,7 +117,7 @@
       id: 'upgrade-digging-technique',
       title: 'Техника копания',
       assetUrl: './img/upgrade/digging-technique.png',
-      unlockCost: 3800,
+      unlockCost: 560000,
       requiredMeters: 22,
       resourceIds: ['potato'],
       bonusPercent: 200,
@@ -115,7 +127,7 @@
       id: 'upgrade-root-care',
       title: 'Корнеплодный уход',
       assetUrl: './img/upgrade/root-care.png',
-      unlockCost: 5200,
+      unlockCost: 440000,
       requiredMeters: 22,
       resourceIds: ['beet', 'radish'],
       bonusPercent: 150,
@@ -125,7 +137,7 @@
       id: 'upgrade-tomato-watering',
       title: 'Томатный полив',
       assetUrl: './img/upgrade/tomato-watering.png',
-      unlockCost: 6500,
+      unlockCost: 720000,
       requiredMeters: 22,
       resourceIds: ['tomato'],
       bonusPercent: 200,
@@ -209,68 +221,76 @@
   ];
   const DAY_TWO_QUESTS = [
     {
-      id: 'day-2-earn-25',
+      id: 'day-2-earn-50k',
       type: 'moneyEarned',
       progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 250',
-      target: 250,
+      title: 'Заработай 50k',
+      target: 50000,
       reward: { type: 'rainbowStones', amount: 1 },
     },
     {
-      id: 'day-2-collect-8',
+      id: 'day-2-collect-160',
       type: 'itemsCollected',
       progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 15 предметов',
-      target: 15,
-      reward: { type: 'money', amount: 300 },
-    },
-    {
-      id: 'day-2-earn-150',
-      type: 'moneyEarned',
-      progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 1.5k',
-      target: 1500,
-      reward: { type: 'rainbowStones', amount: 2 },
-    },
-    {
-      id: 'day-2-collect-25',
-      type: 'itemsCollected',
-      progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 50 предметов',
-      target: 50,
-      reward: { type: 'money', amount: 1500 },
-    },
-    {
-      id: 'day-2-earn-500',
-      type: 'moneyEarned',
-      progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 5k',
-      target: 5000,
-      reward: { type: 'rainbowStones', amount: 3 },
-    },
-    {
-      id: 'day-2-collect-60',
-      type: 'itemsCollected',
-      progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 130 предметов',
-      target: 130,
+      title: 'Собери 160 предметов',
+      target: 160,
       reward: { type: 'money', amount: 5000 },
     },
     {
-      id: 'day-2-earn-1500',
+      id: 'day-2-earn-320k',
       type: 'moneyEarned',
       progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 15k',
-      target: 15000,
+      title: 'Заработай 320k',
+      target: 320000,
+      reward: { type: 'rainbowStones', amount: 2 },
+    },
+    {
+      id: 'day-2-collect-350',
+      type: 'itemsCollected',
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 350 предметов',
+      target: 350,
+      reward: { type: 'money', amount: 20000 },
+    },
+    {
+      id: 'day-2-earn-700k',
+      type: 'moneyEarned',
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 700k',
+      target: 700000,
+      reward: { type: 'rainbowStones', amount: 3 },
+    },
+    {
+      id: 'day-2-collect-550',
+      type: 'itemsCollected',
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 550 предметов',
+      target: 550,
+      reward: { type: 'money', amount: 60000 },
+    },
+    {
+      id: 'day-2-earn-1-15m',
+      type: 'moneyEarned',
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 1.15M',
+      target: 1150000,
       reward: { type: 'rainbowStones', amount: 5 },
     },
     {
-      id: 'day-2-collect-150',
+      id: 'day-2-collect-800',
       type: 'itemsCollected',
       progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 300 предметов',
-      target: 300,
-      reward: { type: 'money', amount: 12000 },
+      title: 'Собери 800 предметов',
+      target: 800,
+      reward: { type: 'money', amount: 120000 },
+    },
+    {
+      id: 'day-2-earn-1-65m',
+      type: 'moneyEarned',
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 1.65M',
+      target: 1650000,
+      reward: { type: 'rainbowStones', amount: 8 },
     },
     {
       id: 'day-2-repair-boat',
@@ -282,18 +302,60 @@
   ];
   const DAY_THREE_QUESTS = [
     {
-      id: 'day-3-earn-60k',
+      id: 'day-3-earn-150k',
       type: 'moneyEarned',
       title: 'Собрать припасы для плота',
-      target: 60000,
+      target: 150000,
       reward: { type: 'rainbowStones', amount: 8 },
     },
     {
-      id: 'day-3-collect-500',
+      id: 'day-3-collect-2200',
       type: 'itemsCollected',
-      title: 'Собери 500 предметов',
-      target: 500,
-      reward: { type: 'money', amount: 25000 },
+      title: 'Собери 2.2k предметов',
+      target: 2200,
+      reward: { type: 'money', amount: 50000 },
+    },
+    {
+      id: 'day-3-earn-600k',
+      type: 'moneyEarned',
+      title: 'Заработай 600k',
+      target: 600000,
+      reward: { type: 'rainbowStones', amount: 10 },
+    },
+    {
+      id: 'day-3-collect-4800',
+      type: 'itemsCollected',
+      title: 'Собери 4.8k предметов',
+      target: 4800,
+      reward: { type: 'money', amount: 150000 },
+    },
+    {
+      id: 'day-3-earn-1-2m',
+      type: 'moneyEarned',
+      title: 'Заработай 1.2M',
+      target: 1200000,
+      reward: { type: 'rainbowStones', amount: 12 },
+    },
+    {
+      id: 'day-3-collect-7200',
+      type: 'itemsCollected',
+      title: 'Собери 7.2k предметов',
+      target: 7200,
+      reward: { type: 'money', amount: 300000 },
+    },
+    {
+      id: 'day-3-earn-1-9m',
+      type: 'moneyEarned',
+      title: 'Заработай 1.9M',
+      target: 1900000,
+      reward: { type: 'rainbowStones', amount: 14 },
+    },
+    {
+      id: 'day-3-collect-10000',
+      type: 'itemsCollected',
+      title: 'Собери 10k предметов',
+      target: 10000,
+      reward: { type: 'money', amount: 500000 },
     },
     {
       id: 'day-3-build-raft',
@@ -308,8 +370,8 @@
       id: 'day-4-kill-wolves',
       type: 'killEnemy',
       enemyStat: 'wolf',
-      title: 'Одолеть 50 волков',
-      target: 50,
+      title: 'Одолеть 450 волков',
+      target: 450,
       reward: { type: 'rainbowStones', amount: 12 },
     },
     {
@@ -675,7 +737,7 @@
         assetUrl: './images/scenario/raft.png',
         moneyCost: RAFT_REPAIR_COST,
         woodCost: RAFT_WOOD_COST,
-        detail: '400k монет и 5k дерева',
+        detail: '2.4M монет и 18k дерева',
       };
     }
     if (islandRun === 3) {
@@ -684,7 +746,7 @@
         assetUrl: './images/scenario/boat-repaired.png',
         moneyCost: FISHING_BOAT_REPAIR_COST,
         woodCost: FISHING_BOAT_WOOD_COST,
-        detail: 'Починить корпус и уплыть всем лагерем',
+        detail: '6M монет и 35k дерева',
       };
     }
     return {
@@ -1111,6 +1173,9 @@
     if (resource.category === 'resource' && LATER_DAY_RESOURCE_UNLOCK_COSTS.has(resource.id)) {
       return LATER_DAY_RESOURCE_UNLOCK_COSTS.get(resource.id);
     }
+    if (LATER_DAY_DIRECT_UNLOCK_COSTS.has(resource.id)) {
+      return LATER_DAY_DIRECT_UNLOCK_COSTS.get(resource.id);
+    }
     if (resource.category === 'boatRepair') return getDepartureConfig().moneyCost;
     return Math.ceil(baseCost * (isSecondGameDay() ? 12.5 : 50));
   }
@@ -1339,6 +1404,9 @@
       itemsBaseline: ensureUserStats(user).itemsCollected,
       updatedAt: Date.now(),
     };
+    localStorage.setItem('questProgressRatio', '0');
+    localStorage.setItem('questProgressIndex', '0');
+    localStorage.setItem('questProgressTotal', '0');
     return user.questLine;
   }
 
@@ -2094,6 +2162,12 @@
     const target = quest ? getQuestTarget(quest) : 1;
     const current = quest ? getQuestCurrent(quest, user) : target;
     const progress = done ? 1 : Math.min(1, current / target);
+    const questRatio = activeQuests.length
+      ? (Math.min(index, activeQuests.length) + progress) / activeQuests.length
+      : 1;
+    localStorage.setItem('questProgressRatio', String(Math.min(1, Math.max(0, questRatio))));
+    localStorage.setItem('questProgressIndex', String(index));
+    localStorage.setItem('questProgressTotal', String(activeQuests.length));
     const claimReady = !done && !repairLocked && isQuestRequirementComplete(quest, user, current, target);
     const firstDayCampfireReady = isFirstGameDay() && quest?.id === 'day-1-build-campfire' && claimReady;
     const totalProgress = activeQuests.length ? ((Math.min(index, activeQuests.length) + progress) / activeQuests.length) * 100 : 100;
@@ -2387,14 +2461,15 @@
     togglePanel(false);
     toggleInventory(false);
     toggleResourceUpgrade(false);
+    showDayTitle(2);
     dayOneCampfireTransitionTimer = window.setTimeout(() => {
       if (!isFirstGameDay()) return;
       const user = getUserState();
       localStorage.setItem(GAME_DAY_KEY, '2');
       resetQuestLineForDay(user, 2);
       setUserState(user);
-      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
-    }, 6700);
+      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2, skipTitle: true } }));
+    }, 650);
   }
 
   function renderResources() {
@@ -2899,7 +2974,9 @@
     toggleInventory(false);
     toggleResourceUpgrade(false);
     if (day > 1) setQuestCardOpen(true);
-    showDayTitle(day, event.detail && event.detail.subtitle ? event.detail.subtitle : '');
+    if (!(event.detail && event.detail.skipTitle)) {
+      showDayTitle(day, event.detail && event.detail.subtitle ? event.detail.subtitle : '');
+    }
     renderResources();
     renderQuestLine();
   });
