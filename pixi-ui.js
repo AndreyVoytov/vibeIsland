@@ -8,6 +8,7 @@
     if (window.VibeAudio) return window.VibeAudio.play(key, options);
     return null;
   };
+  if (window.__VIBE_URL_COMMAND_REDIRECTING) return;
   const GAME_DAY_KEY = 'gameDay';
   const BASE_LAND_CELLS_KEY = 'baseLandCellCount';
   const MOVEMENT_HINT_SEEN_KEY = 'movementHintSeen';
@@ -240,56 +241,56 @@
       id: 'day-2-earn-320k',
       type: 'moneyEarned',
       progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 320k',
-      target: 320000,
+      title: 'Заработай 270k',
+      target: 270000,
       reward: { type: 'rainbowStones', amount: 2 },
     },
     {
       id: 'day-2-collect-350',
       type: 'itemsCollected',
       progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 350 предметов',
-      target: 350,
+      title: 'Собери 190 предметов',
+      target: 190,
       reward: { type: 'money', amount: 20000 },
     },
     {
       id: 'day-2-earn-700k',
       type: 'moneyEarned',
       progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 700k',
-      target: 700000,
+      title: 'Заработай 380k',
+      target: 380000,
       reward: { type: 'rainbowStones', amount: 3 },
     },
     {
       id: 'day-2-collect-550',
       type: 'itemsCollected',
       progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 550 предметов',
-      target: 550,
+      title: 'Собери 200 предметов',
+      target: 200,
       reward: { type: 'money', amount: 60000 },
     },
     {
       id: 'day-2-earn-1-15m',
       type: 'moneyEarned',
       progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 1.15M',
-      target: 1150000,
+      title: 'Заработай 450k',
+      target: 450000,
       reward: { type: 'rainbowStones', amount: 5 },
     },
     {
       id: 'day-2-collect-800',
       type: 'itemsCollected',
       progressType: 'itemsCollectedSinceStart',
-      title: 'Собери 800 предметов',
-      target: 800,
+      title: 'Собери 250 предметов',
+      target: 250,
       reward: { type: 'money', amount: 120000 },
     },
     {
       id: 'day-2-earn-1-65m',
       type: 'moneyEarned',
       progressType: 'moneyEarnedSinceStart',
-      title: 'Заработай 1.65M',
-      target: 1650000,
+      title: 'Заработай 500k',
+      target: 500000,
       reward: { type: 'rainbowStones', amount: 8 },
     },
     {
@@ -304,6 +305,7 @@
     {
       id: 'day-3-earn-150k',
       type: 'moneyEarned',
+      progressType: 'moneyEarnedSinceStart',
       title: 'Собрать припасы для плота',
       target: 150000,
       reward: { type: 'rainbowStones', amount: 8 },
@@ -311,6 +313,7 @@
     {
       id: 'day-3-collect-2200',
       type: 'itemsCollected',
+      progressType: 'itemsCollectedSinceStart',
       title: 'Собери 2.2k предметов',
       target: 2200,
       reward: { type: 'money', amount: 50000 },
@@ -318,43 +321,49 @@
     {
       id: 'day-3-earn-600k',
       type: 'moneyEarned',
-      title: 'Заработай 600k',
-      target: 600000,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 450k',
+      target: 450000,
       reward: { type: 'rainbowStones', amount: 10 },
     },
     {
       id: 'day-3-collect-4800',
       type: 'itemsCollected',
-      title: 'Собери 4.8k предметов',
-      target: 4800,
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 2.4k предметов',
+      target: 2400,
       reward: { type: 'money', amount: 150000 },
     },
     {
       id: 'day-3-earn-1-2m',
       type: 'moneyEarned',
-      title: 'Заработай 1.2M',
-      target: 1200000,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 600k',
+      target: 600000,
       reward: { type: 'rainbowStones', amount: 12 },
     },
     {
       id: 'day-3-collect-7200',
       type: 'itemsCollected',
-      title: 'Собери 7.2k предметов',
-      target: 7200,
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 2.6k предметов',
+      target: 2600,
       reward: { type: 'money', amount: 300000 },
     },
     {
       id: 'day-3-earn-1-9m',
       type: 'moneyEarned',
-      title: 'Заработай 1.9M',
-      target: 1900000,
+      progressType: 'moneyEarnedSinceStart',
+      title: 'Заработай 700k',
+      target: 700000,
       reward: { type: 'rainbowStones', amount: 14 },
     },
     {
       id: 'day-3-collect-10000',
       type: 'itemsCollected',
-      title: 'Собери 10k предметов',
-      target: 10000,
+      progressType: 'itemsCollectedSinceStart',
+      title: 'Собери 2.8k предметов',
+      target: 2800,
       reward: { type: 'money', amount: 500000 },
     },
     {
@@ -637,9 +646,8 @@
   }
 
   function getIslandSizeMeters() {
-    const bounds = getIslandBounds(loadMap());
-    if (!bounds) return DEFAULT_ISLAND_METERS;
-    return Math.max(bounds.maxX - bounds.minX + 1, bounds.maxY - bounds.minY + 1);
+    const expansionLevel = Math.max(0, Math.floor(Number(localStorage.getItem('islandExpansionLevel') || '0') || 0));
+    return DEFAULT_ISLAND_METERS + expansionLevel * 2;
   }
 
   function renderIslandSizeMeters() {
@@ -1381,18 +1389,23 @@
         mode,
         earnedBaseline: ensureUserStats(user).moneyEarned,
         itemsBaseline: ensureUserStats(user).itemsCollected,
+        baselineIndex: 0,
         updatedAt: Date.now(),
       };
     }
-    if (mode === 'day-2' && !Number.isFinite(Number(user.questLine.earnedBaseline))) {
+    if (!Number.isFinite(Number(user.questLine.earnedBaseline))) {
       user.questLine.earnedBaseline = ensureUserStats(user).moneyEarned;
     }
-    if (mode === 'day-2' && !Number.isFinite(Number(user.questLine.itemsBaseline))) {
+    if (!Number.isFinite(Number(user.questLine.itemsBaseline))) {
       user.questLine.itemsBaseline = ensureUserStats(user).itemsCollected;
     }
     const activeQuests = getActiveQuests();
     const index = Math.floor(Number(user.questLine.index) || 0);
     user.questLine.index = Math.min(Math.max(0, index), activeQuests.length);
+    const baselineIndex = Math.floor(Number(user.questLine.baselineIndex));
+    if ((mode === 'day-2' || mode === 'day-3') && user.questLine.index > 0 && baselineIndex !== user.questLine.index) {
+      resetQuestProgressBaseline(user, user.questLine);
+    }
     return user.questLine;
   }
 
@@ -1402,12 +1415,21 @@
       mode: `day-${Math.max(1, Math.floor(Number(day) || 1))}`,
       earnedBaseline: ensureUserStats(user).moneyEarned,
       itemsBaseline: ensureUserStats(user).itemsCollected,
+      baselineIndex: 0,
       updatedAt: Date.now(),
     };
     localStorage.setItem('questProgressRatio', '0');
     localStorage.setItem('questProgressIndex', '0');
     localStorage.setItem('questProgressTotal', '0');
     return user.questLine;
+  }
+
+  function resetQuestProgressBaseline(user, questState = ensureQuestState(user)) {
+    const stats = ensureUserStats(user);
+    questState.earnedBaseline = Math.max(0, Math.floor(Number(stats.moneyEarned) || 0));
+    questState.itemsBaseline = Math.max(0, Math.floor(Number(stats.itemsCollected) || 0));
+    questState.baselineIndex = Math.max(0, Math.floor(Number(questState.index) || 0));
+    questState.updatedAt = Date.now();
   }
 
   function getXpNeededForLevel(level) {
@@ -1936,14 +1958,15 @@
 
   function getQuestCurrent(quest, user) {
     const stats = ensureUserStats(user);
+    const baselineQuestDay = getGameDay() === 2 || getGameDay() === 3;
     if (quest.progressType === 'dayOneCampfireSavings') {
       return getDayOneCampfireProgress(user, Math.max(1, Math.floor(Number(quest.target) || 1)));
     }
-    if (quest.progressType === 'moneyEarnedSinceStart') {
+    if (quest.progressType === 'moneyEarnedSinceStart' || (baselineQuestDay && quest.type === 'moneyEarned')) {
       const questState = ensureQuestState(user);
       return Math.max(0, Math.floor(Number(stats.moneyEarned) || 0) - Math.floor(Number(questState.earnedBaseline) || 0));
     }
-    if (quest.progressType === 'itemsCollectedSinceStart') {
+    if (quest.progressType === 'itemsCollectedSinceStart' || (baselineQuestDay && quest.type === 'itemsCollected')) {
       const questState = ensureQuestState(user);
       return Math.max(0, Math.floor(Number(stats.itemsCollected) || 0) - Math.floor(Number(questState.itemsBaseline) || 0));
     }
@@ -2089,7 +2112,7 @@
       addInventoryItemToUser(user, 'bunker-valve', 1);
       const questState = ensureQuestState(user);
       questState.index = Math.min(index + 1, activeQuests.length);
-      questState.updatedAt = Date.now();
+      resetQuestProgressBaseline(user, questState);
       setUserState(user);
       dispatchStoryAction(action, [
         'Старейшина выходит из бункера.',
@@ -2121,7 +2144,7 @@
       if (config.woodCost > 0) spendWood(user, config.woodCost);
       user.unlockedResources['repair-boat-upgrade'] = true;
       questState.index = Math.min(index + 1, activeQuests.length);
-      questState.updatedAt = Date.now();
+      resetQuestProgressBaseline(user, questState);
       setUserState(user);
       localStorage.setItem(BOAT_REPAIR_REQUEST_KEY, String(Date.now()));
       window.dispatchEvent(new CustomEvent('vibe-boat-repair'));
@@ -2141,7 +2164,7 @@
     }
     applyQuestReward(user, quest.reward);
     questState.index = Math.min(index + 1, activeQuests.length);
-    questState.updatedAt = Date.now();
+    resetQuestProgressBaseline(user, questState);
     setUserState(user);
     renderResources();
     renderInventory();
@@ -2456,20 +2479,20 @@
   }
 
   let dayOneCampfireTransitionTimer = 0;
+  const DAY_ONE_FINAL_DIALOGUE_DELAY_MS = 8200;
   function handleDayOneCampfireBuilt() {
     window.clearTimeout(dayOneCampfireTransitionTimer);
     togglePanel(false);
     toggleInventory(false);
     toggleResourceUpgrade(false);
-    showDayTitle(2);
     dayOneCampfireTransitionTimer = window.setTimeout(() => {
       if (!isFirstGameDay()) return;
       const user = getUserState();
       localStorage.setItem(GAME_DAY_KEY, '2');
       resetQuestLineForDay(user, 2);
       setUserState(user);
-      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2, skipTitle: true } }));
-    }, 650);
+      window.dispatchEvent(new CustomEvent('vibe-day-changed', { detail: { day: 2 } }));
+    }, DAY_ONE_FINAL_DIALOGUE_DELAY_MS);
   }
 
   function renderResources() {

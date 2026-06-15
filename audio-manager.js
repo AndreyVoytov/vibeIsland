@@ -128,10 +128,19 @@
     return isMusicKey(key) ? musicMuted : effectsMuted;
   }
 
+  function volumeMultiplierFor(key) {
+    if (key === 'player.pickup' || key === 'player.pickupRare') return 0.5;
+    if (key === 'ambience.ocean') return 1 / 3;
+    if (key === 'ui.questComplete') return 1 / 1.35;
+    if (key === 'music.discovery') return 1;
+    if (isMusicKey(key)) return 1.5;
+    return 1;
+  }
+
   function volumeFor(key, volume) {
     if (isKeyMuted(key)) return 0;
-    if (Number.isFinite(volume)) return Math.max(0, Math.min(1, volume));
-    return defaultVolumes[key] ?? 0.32;
+    const baseVolume = Number.isFinite(volume) ? volume : (defaultVolumes[key] ?? 0.32);
+    return Math.max(0, Math.min(1, baseVolume * volumeMultiplierFor(key)));
   }
 
   function play(key, options = {}) {

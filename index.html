@@ -1007,27 +1007,30 @@
     }
     .farm-resource-max{
       position:absolute;
-      left:50%;
-      bottom:5px;
+      right:4px;
+      top:4px;
       height:auto;
       display:none;
       align-items:center;
       justify-content:center;
-      border:0;
-      background:transparent;
+      padding:1px 3px;
+      border:1px solid rgba(255,255,255,0.32);
+      border-radius:4px;
+      background:rgba(12,77,126,0.68);
       color:#d9f8ff;
-      font-size:11px;
+      font-size:9px;
       line-height:1;
       font-weight:900;
       letter-spacing:0.04em;
       text-transform:lowercase;
       text-shadow:0 1px 1px rgba(0,0,0,0.65),0 0 4px rgba(255,255,255,0.36);
-      transform:translateX(-50%);
+      transform:none;
       box-sizing:border-box;
+      z-index:2;
     }
     .farm-resource-card.at-max .farm-resource-progress{display:none;}
     .farm-resource-card.at-max .farm-resource-max{display:flex;}
-    .farm-resource-card.at-max .farm-resource-price{visibility:hidden;}
+    .farm-resource-card.at-max .farm-resource-price{visibility:visible;}
     .farm-resource-card.can-upgrade .farm-resource-progress{
       border-color:#176f31;
       background:#176f31;

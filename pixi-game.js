@@ -6,6 +6,50 @@
     errorBox.classList.add('open');
   };
 
+  function handleUrlCommands() {
+    const url = new URL(window.location.href);
+    const commands = ['reset', '1m', '50к', '50k'];
+    const hasCommand = commands.some((command) => url.searchParams.has(command));
+    if (!hasCommand) return false;
+
+    window.__VIBE_URL_COMMAND_REDIRECTING = true;
+    if (url.searchParams.has('reset')) {
+      const musicMuted = localStorage.getItem('musicMuted');
+      const effectsMuted = localStorage.getItem('effectsMuted');
+      localStorage.clear();
+      if (musicMuted != null) localStorage.setItem('musicMuted', musicMuted);
+      if (effectsMuted != null) localStorage.setItem('effectsMuted', effectsMuted);
+    } else {
+      let user = {};
+      try {
+        user = JSON.parse(localStorage.getItem('user') || '{}') || {};
+      } catch (err) {
+        user = {};
+      }
+      if (!user.inventory || typeof user.inventory !== 'object' || Array.isArray(user.inventory)) user.inventory = {};
+      if (!user.stats || typeof user.stats !== 'object' || Array.isArray(user.stats)) user.stats = {};
+      if (!user.stats.itemsCollectedById || typeof user.stats.itemsCollectedById !== 'object' || Array.isArray(user.stats.itemsCollectedById)) {
+        user.stats.itemsCollectedById = {};
+      }
+      if (url.searchParams.has('1m')) {
+        user.money = Math.max(0, Math.floor(Number(user.money) || 0)) + 1000000;
+        user.stats.moneyEarned = Math.max(0, Math.floor(Number(user.stats.moneyEarned) || 0)) + 1000000;
+      }
+      if (url.searchParams.has('50к') || url.searchParams.has('50k')) {
+        user.inventory['pine-log'] = Math.max(0, Math.floor(Number(user.inventory['pine-log']) || 0)) + 50000;
+        user.stats.itemsCollected = Math.max(0, Math.floor(Number(user.stats.itemsCollected) || 0)) + 50000;
+        user.stats.itemsCollectedById['pine-log'] = Math.max(0, Math.floor(Number(user.stats.itemsCollectedById['pine-log']) || 0)) + 50000;
+      }
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    commands.forEach((command) => url.searchParams.delete(command));
+    window.location.replace(url.toString());
+    return true;
+  }
+
+  if (handleUrlCommands()) return;
+
   if (!window.PIXI) {
     showError('PixiJS did not load. Check the network connection or bundle pixi locally.');
     return;
