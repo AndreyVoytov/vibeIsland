@@ -8,7 +8,7 @@
 
   function handleUrlCommands() {
     const url = new URL(window.location.href);
-    const commands = ['reset', '1m', '50к', '50k'];
+    const commands = ['reset', '1m', '10m', '50к', '50k'];
     const hasCommand = commands.some((command) => url.searchParams.has(command));
     if (!hasCommand) return false;
 
@@ -34,6 +34,10 @@
       if (url.searchParams.has('1m')) {
         user.money = Math.max(0, Math.floor(Number(user.money) || 0)) + 1000000;
         user.stats.moneyEarned = Math.max(0, Math.floor(Number(user.stats.moneyEarned) || 0)) + 1000000;
+      }
+      if (url.searchParams.has('10m')) {
+        user.money = Math.max(0, Math.floor(Number(user.money) || 0)) + 10000000;
+        user.stats.moneyEarned = Math.max(0, Math.floor(Number(user.stats.moneyEarned) || 0)) + 10000000;
       }
       if (url.searchParams.has('50к') || url.searchParams.has('50k')) {
         user.inventory['pine-log'] = Math.max(0, Math.floor(Number(user.inventory['pine-log']) || 0)) + 50000;
@@ -265,6 +269,7 @@
   const SAWMILL_LAST_HIT_KEY = 'secondIslandSawmillLastHitAt';
   const SAWMILL_BODY_ASSET = './images/scenario/sawmill.png';
   const SAWMILL_BLADE_ASSET = './images/scenario/sawmill-blade.png';
+  const BLANKET_SURVIVOR_ASSET = './images/scenario/blanket-survivor-beanie.png';
   const SAWMILL_HIT_INTERVAL_MS = 650;
   const SAWMILL_AVAILABLE_PROGRESS = 0.5;
   const SECOND_ISLAND_WOOD_TALK_FLAG = 'secondIslandWoodTalk';
@@ -381,8 +386,19 @@
     './images/scenario/lifebuoy.png',
     './images/scenario/boat-broken.png',
     './images/scenario/boat-repaired.png',
-    './images/scenario/blanket-survivor-beanie.png',
+    BLANKET_SURVIVOR_ASSET,
     './images/scenario/raft.png',
+    './images/scenario/island-3/campfire.png',
+    './images/scenario/island-3/tent-blue.png',
+    './images/scenario/island-3/tent-brown.png',
+    './images/scenario/island-3/tent-gray.png',
+    './images/scenario/island-3/fence.png',
+    './images/scenario/island-3/survivor-blue.png',
+    './images/scenario/island-3/survivor-burgundy.png',
+    './images/scenario/island-3/survivor-green.png',
+    './images/scenario/island-3/sleeping-bag.png',
+    './images/scenario/island-3/hatch.png',
+    './images/scenario/island-3/fishing-boat.png',
     SAWMILL_BODY_ASSET,
     SAWMILL_BLADE_ASSET,
   ];
@@ -862,7 +878,11 @@
   cutsceneBoatSprite.anchor.set(0.5);
   cutsceneBoatSprite.zIndex = 29.1;
   cutsceneBoatSprite.visible = false;
-  screenLayer.addChild(cutsceneGraphics, cutsceneHeroContainer, cutsceneBoatSprite, transitionGraphics, transitionSubtitleText, transitionText);
+  const cutscenePassengerSprite = new PIXI.Sprite();
+  cutscenePassengerSprite.anchor.set(0.5);
+  cutscenePassengerSprite.zIndex = 29.2;
+  cutscenePassengerSprite.visible = false;
+  screenLayer.addChild(cutsceneGraphics, cutsceneHeroContainer, cutsceneBoatSprite, cutscenePassengerSprite, transitionGraphics, transitionSubtitleText, transitionText);
 
   let gameWidth = mount.clientWidth || window.innerWidth;
   let gameHeight = mount.clientHeight || window.innerHeight;
@@ -2046,6 +2066,8 @@
   let sawmillBladeRotation = 0;
   let sawmillBladeActive = false;
   let lastSawmillHitAt = 0;
+  let sawmillConfirmationPending = false;
+  let sawmillConfirmationDismissed = false;
 
   function loadOpenedIds() {
     const stored = safeJson(SCENARIO_OPENED_KEY, []);
@@ -2323,6 +2345,7 @@
 
   function shouldRenderScenarioState(state, def) {
     if (!state || !def) return false;
+    if (state.id === 'rescued-blanket-survivor' && boatCutscene && boatCutscene.vehicle === 'raft') return false;
     if (isFirstGameDay() && state.id !== 'lighthouse' && state.id !== 'broken-boat') return false;
     if (!scenarioRequirementMet(def)) return false;
     if (def.hideWhenStoryFlag && hasStoryFlag(def.hideWhenStoryFlag)) return false;
@@ -3240,7 +3263,7 @@
           sprite = new PIXI.Sprite(texture);
           sprite.anchor.set(0.5);
           scenarioSprites.set(state.id, sprite);
-          (def.id === 'blanket-survivor' ? foregroundScenarioSpriteLayer : scenarioSpriteLayer).addChild(sprite);
+          (def.foreground || def.id === 'blanket-survivor' ? foregroundScenarioSpriteLayer : scenarioSpriteLayer).addChild(sprite);
         } else if (sprite.texture !== texture) {
           sprite.texture = texture;
         }
@@ -3383,11 +3406,10 @@
     const y = plot.y - plot.size / 2;
     if (!built) {
       const enoughMoney = Math.max(0, Math.floor(Number(user && user.money) || 0)) >= SAWMILL_COST;
-      const border = enoughMoney ? 0xffd85a : 0x9ca3ad;
       sawmillGraphics.beginFill(enoughMoney ? 0xffd85a : 0x6f7681, enoughMoney ? 0.1 : 0.08);
       drawRoundedRect(sawmillGraphics, x, y, plot.size, plot.size, plot.radius);
       sawmillGraphics.endFill();
-      drawDottedRoundedRect(sawmillGraphics, x, y, plot.size, plot.size, plot.radius, border, enoughMoney ? 0.95 : 0.72);
+      drawDottedRoundedRect(sawmillGraphics, x, y, plot.size, plot.size, plot.radius, 0xffffff, enoughMoney ? 1 : 0.82);
       sawmillPlotLabel.visible = true;
       sawmillPlotLabel.text = '50k монет';
       sawmillPlotLabel.style.fill = enoughMoney ? '#fff0a8' : '#b8c0cc';
@@ -3470,7 +3492,12 @@
     if (!plot || !isSecondIslandSawmillAvailable()) return;
 
     if (!isSecondIslandSawmillBuilt()) {
-      if (!heroInSawmillPlot(plot)) return;
+      if (!heroInSawmillPlot(plot)) {
+        if (sawmillConfirmationPending) window.dispatchEvent(new CustomEvent('vibe-sawmill-confirm-hide'));
+        sawmillConfirmationPending = false;
+        sawmillConfirmationDismissed = false;
+        return;
+      }
       const money = Math.max(0, Math.floor(Number(user && user.money) || 0));
       if (money < SAWMILL_COST) {
         const lastHintAt = Number(localStorage.getItem(SAWMILL_HINT_AT_KEY) || 0);
@@ -3480,12 +3507,9 @@
         }
         return;
       }
-      if (activeDialogue) return;
-      user.money = money - SAWMILL_COST;
-      setUserState(user);
-      localStorage.setItem(SAWMILL_BUILT_KEY, '1');
-      localStorage.setItem(SAWMILL_HINT_AT_KEY, String(Date.now()));
-      startDialogue(['Лесопилка готова', 'Теперь дерево пойдёт быстрее']);
+      if (activeDialogue || sawmillConfirmationPending || sawmillConfirmationDismissed) return;
+      sawmillConfirmationPending = true;
+      window.dispatchEvent(new CustomEvent('vibe-sawmill-confirm', { detail: { cost: SAWMILL_COST } }));
       return;
     }
 
@@ -3496,6 +3520,25 @@
     lastSawmillHitAt = now;
     localStorage.setItem(SAWMILL_LAST_HIT_KEY, String(Date.now()));
     applyResourceChop(target, now);
+  }
+
+  function confirmSawmillBuild() {
+    sawmillConfirmationPending = false;
+    sawmillConfirmationDismissed = true;
+    if (getIslandRun() !== 2 || isSecondIslandSawmillBuilt() || !isSecondIslandSawmillAvailable()) return;
+    const plot = getSawmillPlot();
+    if (!plot || !heroInSawmillPlot(plot)) return;
+    const user = getUserState();
+    const money = Math.max(0, Math.floor(Number(user && user.money) || 0));
+    if (money < SAWMILL_COST) {
+      startDialogue(['Пока рано']);
+      return;
+    }
+    user.money = money - SAWMILL_COST;
+    setUserState(user);
+    localStorage.setItem(SAWMILL_BUILT_KEY, '1');
+    localStorage.setItem(SAWMILL_HINT_AT_KEY, String(Date.now()));
+    startDialogue(['Лесопилка готова', 'Теперь дерево пойдёт быстрее']);
   }
 
   function createSmallIslandMap() {
@@ -3755,11 +3798,29 @@
     });
   }
 
+  function getCutsceneArrivalTarget() {
+    const bounds = getIslandBoundsGrid();
+    if (!bounds || !cellPct) return { x: gameWidth * 0.2, y: gameHeight * 0.56 };
+    const shoreX = pct2px((bounds.minX - 0.25) * cellPct) - camera.x;
+    const shoreY = pct2px((((bounds.minY + bounds.maxY) / 2) + 0.5) * cellPct) - camera.y;
+    return {
+      x: clamp(shoreX, gameWidth * 0.12, gameWidth * 0.34),
+      y: clamp(shoreY, gameHeight * 0.36, gameHeight * 0.72),
+    };
+  }
+
   function drawCutsceneBoat(now) {
-    if (!boatCutscene || boatCutscene.phase !== 'depart') return;
-    const t = clamp((now - boatCutscene.t0) / 2800, 0, 1);
-    const x = lerp(boatCutscene.startX, gameWidth + boatCutscene.width * 0.9, easeInCubic(t));
-    const y = boatCutscene.startY + Math.sin(now / 260) * 5;
+    if (!boatCutscene) return;
+    const arriving = boatCutscene.phase === 'fadeIn' && boatCutscene.vehicle === 'raft';
+    if (boatCutscene.phase !== 'depart' && !arriving) return;
+    const duration = arriving ? 2200 : 2800;
+    const t = clamp((now - boatCutscene.t0) / duration, 0, 1);
+    const arrivalTarget = arriving ? getCutsceneArrivalTarget() : null;
+    const x = arriving
+      ? lerp(-boatCutscene.width * 0.9, arrivalTarget.x, easeOutQuad(t))
+      : lerp(boatCutscene.startX, gameWidth + boatCutscene.width * 0.9, easeInCubic(t));
+    const baseY = arriving ? arrivalTarget.y : boatCutscene.startY;
+    const y = baseY + Math.sin(now / 260) * 5;
     const rotation = Math.sin(now / 260) * 0.025;
     ensureCutsceneHeroParts();
     const heroScale = (boatCutscene.height * 1.05) / 250;
@@ -3785,7 +3846,16 @@
       drawScenarioBoatPrimitive(cutsceneGraphics, x, y, boatCutscene.width, boatCutscene.height, true, now);
     }
     if (boatCutscene.vehicle === 'raft') {
-      drawBlanketSurvivorPrimitive(cutsceneGraphics, x + boatCutscene.width * 0.22, y + boatCutscene.height * 0.1, boatCutscene.width * 0.26, boatCutscene.height * 0.32);
+      const passengerTexture = getTexture(BLANKET_SURVIVOR_ASSET);
+      if (passengerTexture) {
+        cutscenePassengerSprite.visible = true;
+        cutscenePassengerSprite.texture = passengerTexture;
+        cutscenePassengerSprite.x = x + boatCutscene.width * 0.2;
+        cutscenePassengerSprite.y = y - boatCutscene.height * 0.02;
+        cutscenePassengerSprite.width = boatCutscene.width * 0.28;
+        cutscenePassengerSprite.height = cutscenePassengerSprite.width * passengerTexture.height / Math.max(1, passengerTexture.width);
+        cutscenePassengerSprite.rotation = rotation;
+      }
     }
     if (boatCutscene.vehicle === 'fishing-boat') {
       [-0.14, 0.02, 0.18].forEach((offset, index) => {
@@ -3823,7 +3893,8 @@
       boatCutscene.t0 = now;
       return;
     }
-    if (boatCutscene.phase === 'fadeIn' && elapsed >= 1200) {
+    const fadeInDuration = boatCutscene.vehicle === 'raft' ? 2200 : 1200;
+    if (boatCutscene.phase === 'fadeIn' && elapsed >= fadeInDuration) {
       const lines = boatCutscene.completeDialogue || getCurrentIslandProfile().arrival || [];
       boatCutscene = null;
       if (shell) shell.classList.remove('cutscene-transitioning');
@@ -3838,12 +3909,13 @@
     transitionSubtitleText.text = '';
     cutsceneHeroContainer.visible = false;
     cutsceneBoatSprite.visible = false;
+    cutscenePassengerSprite.visible = false;
     if (!boatCutscene) return;
     drawCutsceneBoat(now);
     let alpha = 0;
     if (boatCutscene.phase === 'fadeOut') alpha = clamp((now - boatCutscene.t0) / 1000, 0, 1);
     else if (boatCutscene.phase === 'timeText') alpha = 1;
-    else if (boatCutscene.phase === 'fadeIn') alpha = 1 - clamp((now - boatCutscene.t0) / 1200, 0, 1);
+    else if (boatCutscene.phase === 'fadeIn') alpha = 1 - clamp((now - boatCutscene.t0) / (boatCutscene.vehicle === 'raft' ? 900 : 1200), 0, 1);
     if (alpha > 0) {
       transitionGraphics.beginFill(0x000000, alpha);
       transitionGraphics.drawRect(0, 0, gameWidth, gameHeight);
@@ -5558,7 +5630,7 @@
   }
 
   function isUiOpen() {
-    return Boolean(boatCutscene || document.querySelector('.intro-comic:not([hidden]),.day-title-overlay.open,.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open'));
+    return Boolean(boatCutscene || document.querySelector('.intro-comic:not([hidden]),.day-title-overlay.open,.panel-overlay.open,.shop-panel.open,.idle-panel.open,.finding-overlay.open,.sawmill-confirm-overlay.open'));
   }
 
   function onPointerDown(event) {
@@ -6792,6 +6864,11 @@
   window.addEventListener('vibe-found-item-complete', (event) => completeScenarioFoundItem(event.detail || {}));
   window.addEventListener('vibe-map-changed', onMapChanged);
   window.addEventListener('vibe-boat-repair', consumeBoatRepairRequest);
+  window.addEventListener('vibe-sawmill-build-confirmed', confirmSawmillBuild);
+  window.addEventListener('vibe-sawmill-confirm-closed', () => {
+    sawmillConfirmationPending = false;
+    sawmillConfirmationDismissed = true;
+  });
   window.addEventListener('vibe-story-action', (event) => handleStoryAction(event.detail || {}));
   window.addEventListener('vibe-day-one-campfire-built', () => {
     dayOneCampfireBuiltAt = Date.now();

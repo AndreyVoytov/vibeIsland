@@ -1229,6 +1229,9 @@
   const idlePanel = document.getElementById('idlePanel');
   const idleDetail = document.getElementById('idleDetail');
   const idleClose = document.getElementById('idleClose');
+  const sawmillConfirmOverlay = document.getElementById('sawmillConfirmOverlay');
+  const sawmillConfirmClose = document.getElementById('sawmillConfirmClose');
+  const sawmillConfirmBuild = document.getElementById('sawmillConfirmBuild');
   const resourceList = document.getElementById('resourceList');
   const farmResourceStrip = document.getElementById('farmResourceStrip');
   const resourceUpgradePanel = document.getElementById('resourceUpgradePanel');
@@ -2864,6 +2867,23 @@
     panelOverlay.classList.toggle('open', shopOpen || inventoryOpen);
   }
 
+  function toggleSawmillConfirm(open, notifyClose = false) {
+    if (!sawmillConfirmOverlay) return;
+    const wasOpen = sawmillConfirmOverlay.classList.contains('open');
+    if (wasOpen === open) return;
+    sawmillConfirmOverlay.classList.toggle('open', open);
+    sawmillConfirmOverlay.setAttribute('aria-hidden', String(!open));
+    if (open) {
+      togglePanel(false);
+      toggleInventory(false);
+      toggleResourceUpgrade(false);
+      requestAnimationFrame(() => sawmillConfirmBuild && sawmillConfirmBuild.focus());
+    } else if (notifyClose) {
+      window.dispatchEvent(new CustomEvent('vibe-sawmill-confirm-closed'));
+    }
+    playSound(open ? 'ui.panelOpen' : 'ui.panelClose', { volume: 0.2, cooldownMs: 80 });
+  }
+
   function toggleInventory(forceOpen) {
     if (!inventoryPanel) return;
     const open = typeof forceOpen === 'boolean' ? forceOpen : !inventoryPanel.classList.contains('open');
@@ -2959,6 +2979,13 @@
     });
   }
   if (findingOk) findingOk.addEventListener('click', finishFindingItem);
+  if (sawmillConfirmClose) sawmillConfirmClose.addEventListener('click', () => toggleSawmillConfirm(false, true));
+  if (sawmillConfirmBuild) {
+    sawmillConfirmBuild.addEventListener('click', () => {
+      toggleSawmillConfirm(false);
+      window.dispatchEvent(new CustomEvent('vibe-sawmill-build-confirmed'));
+    });
+  }
   if (questClaim) {
     questClaim.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -2996,6 +3023,7 @@
     togglePanel(false);
     toggleInventory(false);
     toggleResourceUpgrade(false);
+    toggleSawmillConfirm(false);
     if (day > 1) setQuestCardOpen(true);
     if (!(event.detail && event.detail.skipTitle)) {
       showDayTitle(day, event.detail && event.detail.subtitle ? event.detail.subtitle : '');
@@ -3004,6 +3032,8 @@
     renderQuestLine();
   });
   window.addEventListener('vibe-found-item', (event) => showFindingItem(event.detail || {}));
+  window.addEventListener('vibe-sawmill-confirm', () => toggleSawmillConfirm(true));
+  window.addEventListener('vibe-sawmill-confirm-hide', () => toggleSawmillConfirm(false));
   window.addEventListener('vibe-map-changed', () => {
     renderResources();
     renderQuestLine();
